@@ -273,6 +273,12 @@ export default function AdminCommandCenter() {
         >
           All Leads
         </Link>
+        <Link
+          href="/admin/lead-database"
+          className="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Lead Database
+        </Link>
       </div>
 
       {/* Customers Section */}

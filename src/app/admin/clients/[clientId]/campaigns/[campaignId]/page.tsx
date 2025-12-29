@@ -21,7 +21,16 @@ import {
   Check,
   X,
   Download,
+  Eye,
+  Code,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface CampaignAnalytics {
   emails_sent: number;
@@ -95,6 +104,50 @@ export default function CampaignDetailPage() {
   // Sequences sync state
   const [isSyncingSequences, setIsSyncingSequences] = useState(false);
 
+  // Preview mode state
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [previewLeadId, setPreviewLeadId] = useState<string | null>(null);
+
+  // Get the selected preview lead
+  const previewLead = leads.find(l => l.id === previewLeadId) || leads[0];
+
+  // Function to replace template variables with lead data
+  const replaceTemplateVariables = (content: string, lead: Lead | undefined): string => {
+    if (!content || !lead) return content;
+
+    let result = content;
+
+    // Common variable replacements
+    const replacements: Record<string, string> = {
+      '{{firstName}}': lead.first_name || '[First Name]',
+      '{{first_name}}': lead.first_name || '[First Name]',
+      '{{lastName}}': lead.last_name || '[Last Name]',
+      '{{last_name}}': lead.last_name || '[Last Name]',
+      '{{email}}': lead.email || '[Email]',
+      '{{companyName}}': lead.company_name || '[Company]',
+      '{{company_name}}': lead.company_name || '[Company]',
+      '{{company}}': lead.company_name || '[Company]',
+    };
+
+    // Apply replacements
+    Object.entries(replacements).forEach(([variable, value]) => {
+      result = result.replace(new RegExp(variable.replace(/[{}]/g, '\\$&'), 'gi'), value);
+    });
+
+    // Handle RANDOM variables - pick the first option for preview
+    result = result.replace(/\{\{RANDOM\s*\|\s*([^}]+)\}\}/gi, (match, options) => {
+      const firstOption = options.split('|')[0].trim();
+      return firstOption;
+    });
+
+    // Replace remaining unknown variables with placeholder
+    result = result.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
+      return `[${varName.trim()}]`;
+    });
+
+    return result;
+  };
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -160,19 +213,30 @@ export default function CampaignDetailPage() {
   // Sync sequences from Instantly
   const handleSyncSequences = async () => {
     setIsSyncingSequences(true);
+    setError(null);
     try {
       const res = await fetch(`/api/campaigns/${campaignId}/sequences`, {
         method: "POST",
       });
 
-      if (!res.ok) throw new Error("Failed to sync sequences");
-
       const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to sync sequences");
+      }
+
+      // Show message if synced 0 sequences
+      if (data.synced === 0 && data.message) {
+        console.log("Sync result:", data);
+        setError(data.message);
+      }
+
       // Refresh sequences
       const sequencesRes = await fetch(`/api/campaigns/${campaignId}/sequences`);
       const sequencesData = await sequencesRes.json();
       setSequences(sequencesData.sequences || []);
     } catch (err) {
+      console.error("Sync error:", err);
       setError(err instanceof Error ? err.message : "Failed to sync sequences");
     } finally {
       setIsSyncingSequences(false);
@@ -409,20 +473,82 @@ export default function CampaignDetailPage() {
 
       {/* Email Sequences */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-4">
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Email Sequences
-          </CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSyncSequences}
-            disabled={isSyncingSequences}
-          >
-            <Download className={`h-4 w-4 mr-2 ${isSyncingSequences ? "animate-spin" : ""}`} />
-            {isSyncingSequences ? "Syncing..." : "Sync from Instantly"}
-          </Button>
+        <CardHeader className="pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Email Sequences
+            </CardTitle>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Preview Mode Toggle */}
+              {sequences.length > 0 && leads.length > 0 && (
+                <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
+                  <button
+                    onClick={() => setIsPreviewMode(false)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      !isPreviewMode
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Code className="h-4 w-4" />
+                    Variables
+                  </button>
+                  <button
+                    onClick={() => setIsPreviewMode(true)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      isPreviewMode
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Eye className="h-4 w-4" />
+                    Preview
+                  </button>
+                </div>
+              )}
+
+              {/* Lead Selector for Preview */}
+              {isPreviewMode && leads.length > 0 && (
+                <Select
+                  value={previewLeadId || leads[0]?.id}
+                  onValueChange={setPreviewLeadId}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Select a lead" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {leads.slice(0, 20).map((lead) => (
+                      <SelectItem key={lead.id} value={lead.id}>
+                        {lead.first_name || lead.email.split('@')[0]} - {lead.company_name || 'No company'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSyncSequences}
+                disabled={isSyncingSequences}
+              >
+                <Download className={`h-4 w-4 mr-2 ${isSyncingSequences ? "animate-spin" : ""}`} />
+                {isSyncingSequences ? "Syncing..." : "Sync from Instantly"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Preview Lead Info */}
+          {isPreviewMode && previewLead && (
+            <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2">
+              <Eye className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <span>
+                Previewing as: <strong className="text-foreground">{previewLead.first_name} {previewLead.last_name}</strong>
+                {previewLead.company_name && <> from <strong className="text-foreground">{previewLead.company_name}</strong></>}
+              </span>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {sequences.length === 0 ? (
@@ -457,12 +583,19 @@ export default function CampaignDetailPage() {
                             </div>
                             {step.subject && (
                               <p className="font-medium text-sm mb-2">
-                                Subject: {step.subject}
+                                Subject: {isPreviewMode
+                                  ? replaceTemplateVariables(step.subject, previewLead)
+                                  : step.subject}
                               </p>
                             )}
-                            <div className="bg-muted/50 rounded-lg p-3 text-sm whitespace-pre-wrap max-h-48 overflow-y-auto">
-                              {step.body_text || step.body_html || "(No content)"}
-                            </div>
+                            <div
+                              className="bg-muted/50 rounded-lg p-3 text-sm max-h-64 overflow-y-auto [&_div]:mb-1 [&_br]:block [&_a]:text-blue-600 [&_a]:underline"
+                              dangerouslySetInnerHTML={{
+                                __html: isPreviewMode
+                                  ? replaceTemplateVariables(step.body_html || step.body_text || "<p>(No content)</p>", previewLead)
+                                  : (step.body_html || step.body_text || "<p>(No content)</p>")
+                              }}
+                            />
                           </div>
                         ))}
                     </div>

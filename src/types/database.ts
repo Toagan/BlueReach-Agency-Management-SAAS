@@ -68,6 +68,60 @@ export interface ClientUser {
 }
 
 // ============================================
+// LEAD DATABASE TABLES
+// ============================================
+
+export interface LeadSource {
+  id: string;
+  name: string;
+  file_name: string | null;
+  industry: string | null;
+  region: string | null;
+  sub_region: string | null;
+  source_type: string | null;
+  scrape_date: string | null;
+  tags: string[] | null;
+  notes: string | null;
+  custom_fields: Record<string, unknown>;
+  total_records: number;
+  imported_records: number;
+  duplicate_records: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnrichedLead {
+  id: string;
+  source_id: string | null;
+  url: string | null;
+  domain: string | null;
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  full_name: string | null;
+  job_title: string | null;
+  linkedin_url: string | null;
+  phone: string | null;
+  company_name: string | null;
+  company_size: string | null;
+  company_revenue: string | null;
+  company_founded: number | null;
+  company_linkedin: string | null;
+  country: string | null;
+  city: string | null;
+  state: string | null;
+  industry: string | null;
+  sub_industry: string | null;
+  extra_data: Record<string, unknown>;
+  contacted_at: string | null;
+  campaign_id: string | null;
+  lead_id: string | null;
+  scraped_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================
 // PROVIDER & EMAIL TABLES
 // ============================================
 

@@ -18,12 +18,22 @@ export interface InstantlyApiError {
   statusCode?: number;
 }
 
+// Campaign Sequence Variant (A/B testing)
+export interface InstantlySequenceVariant {
+  subject?: string;
+  body?: string;
+  v_disabled?: boolean;
+}
+
 // Campaign Sequence Step (email template)
 export interface InstantlySequenceStep {
-  subject: string;
-  body: string;
+  type?: string; // "email" for now
   delay?: number; // Delay in days before sending
-  variant_id?: string; // For A/B testing
+  variants?: InstantlySequenceVariant[]; // V2 API has variants array
+  // Legacy fields (V1 API)
+  subject?: string;
+  body?: string;
+  variant_id?: string;
 }
 
 // Campaign Sequence

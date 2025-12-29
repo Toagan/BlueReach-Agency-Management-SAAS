@@ -270,7 +270,7 @@ export default function ClientDashboardPage() {
       )}
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
@@ -280,19 +280,6 @@ export default function ClientDashboardPage() {
             <div className="text-2xl font-bold text-foreground">
               {stats.totalEmailsSent.toLocaleString()}
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-muted-foreground">Open Rate</span>
-              <Eye className="h-5 w-5 text-purple-500" />
-            </div>
-            <div className="text-2xl font-bold text-foreground">
-              {stats.openRate.toFixed(1)}%
-            </div>
-            <p className="text-xs text-muted-foreground">{stats.totalOpened.toLocaleString()} opens</p>
           </CardContent>
         </Card>
 
@@ -422,20 +409,11 @@ function CampaignCard({
           </div>
 
           {hasAnalytics ? (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mt-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Sent</p>
                 <p className="text-lg font-semibold text-foreground">
                   {analytics.emails_sent.toLocaleString()}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Opens</p>
-                <p className="text-lg font-semibold text-foreground">
-                  {analytics.emails_opened.toLocaleString()}
-                  <span className="text-sm font-normal text-muted-foreground ml-1">
-                    ({(analytics.open_rate * 100).toFixed(1)}%)
-                  </span>
                 </p>
               </div>
               <div>
