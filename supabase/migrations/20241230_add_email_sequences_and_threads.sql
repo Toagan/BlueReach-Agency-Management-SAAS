@@ -32,6 +32,7 @@ ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS provider_type text DEFAULT 'insta
 ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS provider_campaign_id text; -- Alias for instantly_campaign_id for multi-provider
 ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS original_name text; -- Store original name from provider
 ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS last_synced_at timestamptz;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS copy_body text; -- Store email copy/body for reference
 
 -- Migrate existing data: copy instantly_campaign_id to provider_campaign_id
 UPDATE campaigns
