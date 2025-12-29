@@ -123,7 +123,7 @@ export interface InstantlyLead {
   campaign_id?: string;
   campaign_name?: string;
   status?: string;
-  interest_status?: "interested" | "not_interested" | "neutral" | "wrong_person" | "out_of_office";
+  interest_status?: "interested" | "not_interested" | "neutral" | "wrong_person" | "out_of_office" | "meeting_booked" | "meeting_completed" | "closed";
   lead_data?: Record<string, string>;
   created_at?: string;
   updated_at?: string;

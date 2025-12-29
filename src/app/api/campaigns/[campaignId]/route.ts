@@ -129,7 +129,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
         .update({
           campaign_name: campaign.name,
           client_id: campaign.client_id,
-          client_name: (campaign.clients as { name: string } | null)?.name || null,
+          client_name: (campaign.clients as unknown as { name: string } | null)?.name || null,
         })
         .eq("campaign_id", campaignId);
     }

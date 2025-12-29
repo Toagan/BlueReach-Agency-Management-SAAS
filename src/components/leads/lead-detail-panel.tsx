@@ -206,35 +206,62 @@ export function LeadDetailPanel({
                 <p className="text-xs mt-1">Click "Sync" to fetch from Instantly</p>
               </div>
             ) : (
-              <div className="space-y-3 max-h-64 overflow-y-auto">
-                {emails.map((email) => (
+              <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                {emails.map((email, index) => (
                   <div
                     key={email.id}
-                    className={`p-3 rounded-lg text-sm ${
+                    className={`p-3 rounded-lg text-sm border ${
                       email.direction === "outbound"
-                        ? "bg-blue-50 dark:bg-blue-950 border-l-2 border-blue-500"
-                        : "bg-green-50 dark:bg-green-950 border-l-2 border-green-500"
+                        ? "bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800"
+                        : "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800"
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        {email.direction === "outbound" ? (
-                          <ArrowUpRight className="h-3 w-3 text-blue-500" />
-                        ) : (
-                          <ArrowDownLeft className="h-3 w-3 text-green-500" />
-                        )}
-                        {email.direction === "outbound" ? "Sent" : "Received"}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={
+                            email.direction === "outbound"
+                              ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border-blue-300"
+                              : "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-300"
+                          }
+                        >
+                          {email.direction === "outbound" ? (
+                            <><ArrowUpRight className="h-3 w-3 mr-1" /> Sent</>
+                          ) : (
+                            <><ArrowDownLeft className="h-3 w-3 mr-1" /> Reply</>
+                          )}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          Step {email.sequence_step || index + 1}
+                        </span>
                       </div>
                       <span className="text-xs text-muted-foreground">
-                        {email.sent_at ? new Date(email.sent_at).toLocaleDateString() : ""}
+                        {email.sent_at ? new Date(email.sent_at).toLocaleString() : ""}
                       </span>
                     </div>
                     {email.subject && (
-                      <p className="font-medium text-foreground mb-1">{email.subject}</p>
+                      <p className="font-medium text-foreground mb-2 text-sm">
+                        Subject: {email.subject}
+                      </p>
                     )}
-                    <p className="text-muted-foreground whitespace-pre-wrap line-clamp-3">
-                      {email.body_text || "(No content)"}
-                    </p>
+                    <div className="border-t border-border pt-2 mt-2">
+                      {email.body_html ? (
+                        <div
+                          className="text-foreground text-sm [&_div]:mb-1 [&_br]:block [&_a]:text-blue-600 [&_a]:underline"
+                          dangerouslySetInnerHTML={{ __html: email.body_html }}
+                        />
+                      ) : (
+                        <p className="text-foreground whitespace-pre-wrap text-sm">
+                          {email.body_text || "(No content)"}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border text-xs text-muted-foreground">
+                      <span>From: {email.from_email}</span>
+                      <span>→</span>
+                      <span>To: {email.to_email}</span>
+                    </div>
                   </div>
                 ))}
               </div>

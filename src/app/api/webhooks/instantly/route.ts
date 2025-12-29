@@ -1,6 +1,7 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import type { LeadStatus, EmailEventType } from "@/types/database";
+import { fetchEmailsForLead } from "@/lib/instantly/emails";
 
 // Lazy initialization of Supabase client
 let supabase: SupabaseClient | null = null;
@@ -272,6 +273,42 @@ export async function POST(request: Request) {
           sentiment: payload.reply_sentiment,
         },
       });
+    }
+
+    // If this is a positive reply, sync the email thread from Instantly
+    if (eventMapping.isPositiveReply && leadEmail) {
+      try {
+        console.log(`Syncing emails for positive reply from ${leadEmail}`);
+        const instantlyEmails = await fetchEmailsForLead(leadEmail);
+
+        if (instantlyEmails && instantlyEmails.length > 0) {
+          const emailsToUpsert = instantlyEmails.map((email) => ({
+            lead_id: leadDbId,
+            campaign_id: campaign.id,
+            provider_email_id: email.id,
+            provider_thread_id: email.thread_id || null,
+            direction: email.is_reply ? "inbound" as const : "outbound" as const,
+            from_email: email.from_address_email,
+            to_email: email.to_address_email_list?.[0] || leadEmail,
+            cc_emails: email.cc_address_email_list || null,
+            bcc_emails: email.bcc_address_email_list || null,
+            subject: email.subject || null,
+            body_text: email.body?.text || null,
+            body_html: email.body?.html || null,
+            sent_at: email.timestamp_email || email.timestamp_created || new Date().toISOString(),
+            is_auto_reply: false,
+          }));
+
+          await supabaseClient
+            .from("lead_emails")
+            .upsert(emailsToUpsert, { onConflict: "provider_email_id" });
+
+          console.log(`Synced ${emailsToUpsert.length} emails for ${leadEmail}`);
+        }
+      } catch (emailSyncError) {
+        // Don't fail the webhook if email sync fails
+        console.error("Failed to sync emails:", emailSyncError);
+      }
     }
 
     return NextResponse.json({
