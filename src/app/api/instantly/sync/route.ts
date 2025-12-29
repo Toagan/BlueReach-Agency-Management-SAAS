@@ -138,14 +138,29 @@ export async function POST(request: Request) {
 
           for (const lead of leads) {
             // Determine if this is a positive reply based on Instantly's interest_status
-            const isPositiveReply = lead.interest_status === "interested";
+            // Positive statuses: interested, meeting_booked, meeting_completed, closed (won)
+            const positiveStatuses = ["interested", "meeting_booked", "meeting_completed", "closed"];
+            const isPositiveReply = positiveStatuses.includes(lead.interest_status || "");
 
-            // Map Instantly status to our status
-            let status = "contacted";
-            if (lead.interest_status === "interested") {
-              status = "replied";
-            } else if (lead.interest_status === "not_interested") {
-              status = "not_interested";
+            // Map Instantly interest_status to our lead status
+            let status: string = "contacted";
+            switch (lead.interest_status) {
+              case "interested":
+                status = "replied";
+                break;
+              case "meeting_booked":
+                status = "booked";
+                break;
+              case "meeting_completed":
+              case "closed":
+                status = "won";
+                break;
+              case "not_interested":
+              case "wrong_person":
+                status = "not_interested";
+                break;
+              default:
+                status = "contacted";
             }
 
             const { data: existingLead } = await supabase

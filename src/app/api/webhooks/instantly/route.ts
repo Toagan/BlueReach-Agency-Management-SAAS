@@ -75,6 +75,22 @@ function mapEvent(eventType: string, sentiment?: string): EventMapping {
     case "lead_is_marked_as_interested":
       return { status: "replied", emailEventType: "replied", isPositiveReply: true };
 
+    // Meeting/Booking events - POSITIVE
+    case "meeting_booked":
+    case "lead_meeting_booked":
+    case "lead.meeting_booked":
+      return { status: "booked", emailEventType: null, isPositiveReply: true };
+
+    case "meeting_completed":
+    case "lead_meeting_completed":
+    case "lead.meeting_completed":
+      return { status: "won", emailEventType: null, isPositiveReply: true };
+
+    case "lead_closed":
+    case "lead.closed":
+    case "opportunity_won":
+      return { status: "won", emailEventType: null, isPositiveReply: true };
+
     // Negative events
     case "lead_not_interested":
     case "lead.not_interested":

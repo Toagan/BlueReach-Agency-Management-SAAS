@@ -157,8 +157,29 @@ export async function POST(request: Request) {
         if (lead.created_at) metadata.instantly_created_at = lead.created_at;
         if (lead.updated_at) metadata.instantly_updated_at = lead.updated_at;
 
-        // Map interest_status to is_positive_reply
-        const isPositiveReply = lead.interest_status === "interested";
+        // Map interest_status to is_positive_reply and lead status
+        // Positive statuses: interested, meeting_booked, meeting_completed, closed
+        const positiveStatuses = ["interested", "meeting_booked", "meeting_completed", "closed"];
+        const isPositiveReply = positiveStatuses.includes(lead.interest_status || "");
+
+        // Map interest_status to our lead status
+        let leadStatus: string | undefined = undefined;
+        switch (lead.interest_status) {
+          case "interested":
+            leadStatus = "replied";
+            break;
+          case "meeting_booked":
+            leadStatus = "booked";
+            break;
+          case "meeting_completed":
+          case "closed":
+            leadStatus = "won";
+            break;
+          case "not_interested":
+          case "wrong_person":
+            leadStatus = "not_interested";
+            break;
+        }
 
         if (existingLead) {
           // Update existing lead with all fields
@@ -172,6 +193,7 @@ export async function POST(request: Request) {
           if (lead.phone) updateData.phone = lead.phone;
           if (Object.keys(metadata).length > 0) updateData.metadata = metadata;
           if (isPositiveReply) updateData.is_positive_reply = true;
+          if (leadStatus) updateData.status = leadStatus;
 
           const { error } = await supabase
             .from("leads")
@@ -192,7 +214,7 @@ export async function POST(request: Request) {
             last_name: lead.last_name || null,
             company_name: lead.company_name || null,
             phone: lead.phone || null,
-            status: "contacted",
+            status: leadStatus || "contacted",
             instantly_lead_id: lead.id,
             is_positive_reply: isPositiveReply,
             metadata: Object.keys(metadata).length > 0 ? metadata : {},
