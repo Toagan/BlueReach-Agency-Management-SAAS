@@ -18,6 +18,19 @@ export interface InstantlyApiError {
   statusCode?: number;
 }
 
+// Campaign Sequence Step (email template)
+export interface InstantlySequenceStep {
+  subject: string;
+  body: string;
+  delay?: number; // Delay in days before sending
+  variant_id?: string; // For A/B testing
+}
+
+// Campaign Sequence
+export interface InstantlySequence {
+  steps: InstantlySequenceStep[];
+}
+
 // Campaign types
 export interface InstantlyCampaign {
   id: string;
@@ -29,6 +42,18 @@ export interface InstantlyCampaign {
   emails_sent_count?: number;
   replies_count?: number;
   bounces_count?: number;
+  // Sequences contain the email templates
+  sequences?: InstantlySequence[];
+}
+
+// Campaign with full details including sequences
+export interface InstantlyCampaignDetails extends InstantlyCampaign {
+  sequences: InstantlySequence[];
+  email_gap?: number;
+  daily_limit?: number;
+  stop_on_reply?: boolean;
+  link_tracking?: boolean;
+  open_tracking?: boolean;
 }
 
 export interface InstantlyCampaignAnalytics {
@@ -153,13 +178,49 @@ export interface InstantlyAccountDailyAnalytics {
   warmup_received: number;
 }
 
-// Email types
+// Email types (from Unibox API)
+export interface InstantlyEmailBody {
+  text?: string;
+  html?: string;
+}
+
 export interface InstantlyEmail {
+  id: string;
+  from_address_email: string;
+  to_address_email_list: string[];
+  cc_address_email_list?: string[];
+  bcc_address_email_list?: string[];
+  subject: string;
+  body?: InstantlyEmailBody;
+  message_id?: string;
+  thread_id?: string;
+  i_campaign?: string; // Campaign ID
+  lead_email?: string;
+  eaccount?: string; // Sender account
+  is_reply?: boolean;
+  is_unread?: boolean;
+  timestamp_email?: string; // When email was actually sent
+  timestamp_created?: string; // When added to database
+}
+
+// Email list parameters
+export interface InstantlyEmailListParams {
+  campaign_id?: string;
+  lead_email?: string;
+  eaccount?: string;
+  is_unread?: boolean;
+  limit?: number;
+  skip?: number;
+}
+
+// Simplified email for internal use
+export interface InstantlyEmailSimple {
   id: string;
   from_email: string;
   to_email: string;
   subject: string;
-  body?: string;
+  body_text?: string;
+  body_html?: string;
   sent_at: string;
   opened_at?: string;
   replied_at?: string;

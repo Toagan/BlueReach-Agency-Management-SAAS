@@ -3,6 +3,7 @@
 import { getInstantlyClient } from "./client";
 import type {
   InstantlyCampaign,
+  InstantlyCampaignDetails,
   InstantlyCampaignAnalytics,
   InstantlyCampaignDailyAnalytics,
 } from "./types";
@@ -51,6 +52,12 @@ export async function fetchAllInstantlyCampaigns(): Promise<InstantlyCampaign[]>
 export async function fetchInstantlyCampaign(campaignId: string): Promise<InstantlyCampaign> {
   const client = getInstantlyClient();
   return client.get<InstantlyCampaign>(`/campaigns/${campaignId}`);
+}
+
+// Fetch campaign with full details including sequences (email templates)
+export async function fetchInstantlyCampaignDetails(campaignId: string): Promise<InstantlyCampaignDetails> {
+  const client = getInstantlyClient();
+  return client.get<InstantlyCampaignDetails>(`/campaigns/${campaignId}`);
 }
 
 export async function activateCampaign(campaignId: string): Promise<{ success: boolean }> {

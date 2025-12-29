@@ -31,9 +31,13 @@ export interface Campaign {
   id: string;
   client_id: string;
   instantly_campaign_id: string | null;
+  provider_type: "instantly" | "smartlead" | "lemlist" | "apollo";
+  provider_campaign_id: string | null;
   name: string;
+  original_name: string | null;
   copy_body: string | null;
   is_active: boolean;
+  last_synced_at: string | null;
 }
 
 export interface Lead {
@@ -61,6 +65,68 @@ export interface ClientUser {
   client_id: string;
   user_id: string;
   role?: TeamRole;
+}
+
+// ============================================
+// PROVIDER & EMAIL TABLES
+// ============================================
+
+export type ProviderType = "instantly" | "smartlead" | "lemlist" | "apollo";
+export type EmailDirection = "outbound" | "inbound";
+
+export interface ApiProvider {
+  id: string;
+  client_id: string;
+  provider_type: ProviderType;
+  api_key: string;
+  workspace_id: string | null;
+  is_active: boolean;
+  label: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CampaignSequence {
+  id: string;
+  campaign_id: string;
+  sequence_index: number;
+  step_number: number;
+  variant: string;
+  subject: string | null;
+  body_text: string | null;
+  body_html: string | null;
+  delay_days: number;
+  delay_hours: number;
+  send_time_start: string | null;
+  send_time_end: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeadEmail {
+  id: string;
+  lead_id: string;
+  campaign_id: string | null;
+  provider_email_id: string | null;
+  provider_thread_id: string | null;
+  direction: EmailDirection;
+  from_email: string;
+  to_email: string;
+  cc_emails: string[] | null;
+  bcc_emails: string[] | null;
+  subject: string | null;
+  body_text: string | null;
+  body_html: string | null;
+  sequence_step: number | null;
+  is_auto_reply: boolean;
+  sent_at: string | null;
+  opened_at: string | null;
+  clicked_at: string | null;
+  replied_at: string | null;
+  raw_headers: Record<string, unknown> | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
 }
 
 // ============================================

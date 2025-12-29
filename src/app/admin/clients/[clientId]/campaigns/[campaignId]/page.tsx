@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -15,6 +16,11 @@ import {
   ExternalLink,
   ThumbsUp,
   AlertCircle,
+  FileText,
+  Edit2,
+  Check,
+  X,
+  Download,
 } from "lucide-react";
 
 interface CampaignAnalytics {
@@ -33,10 +39,21 @@ interface CampaignAnalytics {
 interface CampaignData {
   id: string;
   name: string;
+  original_name: string | null;
   instantly_campaign_id: string | null;
   is_active: boolean;
   created_at: string;
   client_id: string;
+}
+
+interface CampaignSequence {
+  id: string;
+  step_number: number;
+  variant: string;
+  subject: string | null;
+  body_text: string | null;
+  body_html: string | null;
+  delay_days: number;
 }
 
 interface ClientData {
@@ -65,20 +82,30 @@ export default function CampaignDetailPage() {
   const [client, setClient] = useState<ClientData | null>(null);
   const [analytics, setAnalytics] = useState<CampaignAnalytics | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [sequences, setSequences] = useState<CampaignSequence[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  // Editing state
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
+
+  // Sequences sync state
+  const [isSyncingSequences, setIsSyncingSequences] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      // Fetch campaign details
-      const [campaignRes, clientRes, leadsRes] = await Promise.all([
+      // Fetch campaign details, sequences, and leads
+      const [campaignRes, clientRes, leadsRes, sequencesRes] = await Promise.all([
         fetch(`/api/campaigns/${campaignId}/details`),
         fetch(`/api/clients/${clientId}`),
         fetch(`/api/campaigns/${campaignId}/leads`),
+        fetch(`/api/campaigns/${campaignId}/sequences`),
       ]);
 
       if (!campaignRes.ok) {
@@ -88,11 +115,13 @@ export default function CampaignDetailPage() {
       const campaignData = await campaignRes.json();
       const clientData = await clientRes.json();
       const leadsData = await leadsRes.json();
+      const sequencesData = await sequencesRes.json();
 
       setCampaign(campaignData.campaign);
       setAnalytics(campaignData.analytics);
       setClient(clientData.client);
       setLeads(leadsData.leads || []);
+      setSequences(sequencesData.sequences || []);
       setLastUpdated(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data");
@@ -100,6 +129,55 @@ export default function CampaignDetailPage() {
       setLoading(false);
     }
   }, [campaignId, clientId]);
+
+  // Save campaign name
+  const handleSaveName = async () => {
+    if (!editedName.trim() || editedName === campaign?.name) {
+      setIsEditingName(false);
+      return;
+    }
+
+    setIsSavingName(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editedName.trim() }),
+      });
+
+      if (!res.ok) throw new Error("Failed to update name");
+
+      const data = await res.json();
+      setCampaign(data.campaign);
+      setIsEditingName(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save name");
+    } finally {
+      setIsSavingName(false);
+    }
+  };
+
+  // Sync sequences from Instantly
+  const handleSyncSequences = async () => {
+    setIsSyncingSequences(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/sequences`, {
+        method: "POST",
+      });
+
+      if (!res.ok) throw new Error("Failed to sync sequences");
+
+      const data = await res.json();
+      // Refresh sequences
+      const sequencesRes = await fetch(`/api/campaigns/${campaignId}/sequences`);
+      const sequencesData = await sequencesRes.json();
+      setSequences(sequencesData.sequences || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to sync sequences");
+    } finally {
+      setIsSyncingSequences(false);
+    }
+  };
 
   useEffect(() => {
     fetchData();
@@ -157,7 +235,50 @@ export default function CampaignDetailPage() {
             Back to {client?.name || "Client"}
           </Link>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-foreground">{campaign?.name}</h1>
+            {isEditingName ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={editedName}
+                  onChange={(e) => setEditedName(e.target.value)}
+                  className="text-xl font-bold h-9 w-80"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveName();
+                    if (e.key === "Escape") setIsEditingName(false);
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleSaveName}
+                  disabled={isSavingName}
+                >
+                  <Check className="h-4 w-4 text-green-600" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setIsEditingName(false)}
+                >
+                  <X className="h-4 w-4 text-red-500" />
+                </Button>
+              </div>
+            ) : (
+              <>
+                <h1 className="text-2xl font-bold text-foreground">{campaign?.name}</h1>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setEditedName(campaign?.name || "");
+                    setIsEditingName(true);
+                  }}
+                  title="Edit campaign name"
+                >
+                  <Edit2 className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </>
+            )}
             <Badge
               variant={campaign?.is_active ? "default" : "secondary"}
               className={campaign?.is_active ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : ""}
@@ -165,7 +286,12 @@ export default function CampaignDetailPage() {
               {campaign?.is_active ? "Active" : "Paused"}
             </Badge>
           </div>
-          <p className="text-muted-foreground text-sm mt-1">Campaign Details</p>
+          <p className="text-muted-foreground text-sm mt-1">
+            Campaign Details
+            {campaign?.original_name && campaign.original_name !== campaign.name && (
+              <span className="ml-2 text-xs">(Originally: {campaign.original_name})</span>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {campaign?.instantly_campaign_id && (
@@ -280,6 +406,73 @@ export default function CampaignDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Email Sequences */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-4">
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Email Sequences
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSyncSequences}
+            disabled={isSyncingSequences}
+          >
+            <Download className={`h-4 w-4 mr-2 ${isSyncingSequences ? "animate-spin" : ""}`} />
+            {isSyncingSequences ? "Syncing..." : "Sync from Instantly"}
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {sequences.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="font-medium">No email sequences found</p>
+              <p className="text-sm mt-1">Click "Sync from Instantly" to fetch the email copy</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Group sequences by variant */}
+              {(() => {
+                const variants = [...new Set(sequences.map(s => s.variant))].sort();
+                return variants.map((variant) => (
+                  <div key={variant} className="border border-border rounded-lg overflow-hidden">
+                    <div className="bg-muted px-4 py-2 font-medium">
+                      Version {variant}
+                    </div>
+                    <div className="divide-y divide-border">
+                      {sequences
+                        .filter(s => s.variant === variant)
+                        .sort((a, b) => a.step_number - b.step_number)
+                        .map((step) => (
+                          <div key={step.id} className="p-4">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Badge variant="outline">Step {step.step_number}</Badge>
+                              {step.delay_days > 0 && (
+                                <span className="text-xs text-muted-foreground">
+                                  +{step.delay_days} day{step.delay_days > 1 ? "s" : ""} delay
+                                </span>
+                              )}
+                            </div>
+                            {step.subject && (
+                              <p className="font-medium text-sm mb-2">
+                                Subject: {step.subject}
+                              </p>
+                            )}
+                            <div className="bg-muted/50 rounded-lg p-3 text-sm whitespace-pre-wrap max-h-48 overflow-y-auto">
+                              {step.body_text || step.body_html || "(No content)"}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Positive Replies */}
       {positiveLeads.length > 0 && (
