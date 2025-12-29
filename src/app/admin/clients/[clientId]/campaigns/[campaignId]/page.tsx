@@ -108,7 +108,7 @@ export default function CampaignDetailPage() {
   if (loading && !campaign) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <RefreshCw className="h-8 w-8 animate-spin text-slate-400" />
+        <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -118,12 +118,12 @@ export default function CampaignDetailPage() {
       <div className="space-y-4">
         <Link
           href={`/admin/clients/${clientId}`}
-          className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+          className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to {client?.name || "Client"}
         </Link>
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+        <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg">
           {error}
         </div>
       </div>
@@ -151,21 +151,21 @@ export default function CampaignDetailPage() {
         <div>
           <Link
             href={`/admin/clients/${clientId}`}
-            className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 mb-2"
+            className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-2"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to {client?.name || "Client"}
           </Link>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-slate-900">{campaign?.name}</h1>
+            <h1 className="text-2xl font-bold text-foreground">{campaign?.name}</h1>
             <Badge
               variant={campaign?.is_active ? "default" : "secondary"}
-              className={campaign?.is_active ? "bg-green-100 text-green-700" : ""}
+              className={campaign?.is_active ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : ""}
             >
               {campaign?.is_active ? "Active" : "Paused"}
             </Badge>
           </div>
-          <p className="text-slate-500 text-sm mt-1">Campaign Details</p>
+          <p className="text-muted-foreground text-sm mt-1">Campaign Details</p>
         </div>
         <div className="flex items-center gap-2">
           {campaign?.instantly_campaign_id && (
@@ -196,13 +196,13 @@ export default function CampaignDetailPage() {
       {analytics && analytics.leads_count > 0 && (
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center justify-between text-sm text-slate-600 mb-2">
+            <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
               <span className="font-medium">Campaign Progress</span>
               <span>
                 {leadsContacted.toLocaleString()} / {analytics.leads_count.toLocaleString()} leads contacted ({progress.toFixed(0)}%)
               </span>
             </div>
-            <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+            <div className="h-3 bg-muted rounded-full overflow-hidden">
               <div
                 className="h-full bg-blue-500 rounded-full transition-all"
                 style={{ width: `${progress}%` }}
@@ -217,10 +217,10 @@ export default function CampaignDetailPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-slate-500">Total Leads</span>
-              <Users className="h-5 w-5 text-slate-400" />
+              <span className="text-sm text-muted-foreground">Total Leads</span>
+              <Users className="h-5 w-5 text-muted-foreground" />
             </div>
-            <div className="text-2xl font-bold text-slate-900">
+            <div className="text-2xl font-bold text-foreground">
               {analytics?.leads_count?.toLocaleString() || 0}
             </div>
           </CardContent>
@@ -229,10 +229,10 @@ export default function CampaignDetailPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-slate-500">Emails Sent</span>
+              <span className="text-sm text-muted-foreground">Emails Sent</span>
               <Mail className="h-5 w-5 text-blue-500" />
             </div>
-            <div className="text-2xl font-bold text-slate-900">
+            <div className="text-2xl font-bold text-foreground">
               {analytics?.emails_sent?.toLocaleString() || 0}
             </div>
           </CardContent>
@@ -241,13 +241,13 @@ export default function CampaignDetailPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-slate-500">Replies</span>
+              <span className="text-sm text-muted-foreground">Replies</span>
               <MessageSquare className="h-5 w-5 text-emerald-500" />
             </div>
-            <div className="text-2xl font-bold text-slate-900">
+            <div className="text-2xl font-bold text-foreground">
               {analytics?.emails_replied?.toLocaleString() || 0}
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground">
               {((analytics?.reply_rate || 0) * 100).toFixed(1)}% rate
             </p>
           </CardContent>
@@ -256,7 +256,7 @@ export default function CampaignDetailPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-slate-500">Positive Replies</span>
+              <span className="text-sm text-muted-foreground">Positive Replies</span>
               <ThumbsUp className="h-5 w-5 text-green-500" />
             </div>
             <div className="text-2xl font-bold text-green-600">
@@ -268,13 +268,13 @@ export default function CampaignDetailPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-slate-500">Bounced</span>
+              <span className="text-sm text-muted-foreground">Bounced</span>
               <AlertCircle className="h-5 w-5 text-red-500" />
             </div>
-            <div className="text-2xl font-bold text-slate-900">
+            <div className="text-2xl font-bold text-foreground">
               {analytics?.emails_bounced?.toLocaleString() || 0}
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground">
               {((analytics?.bounce_rate || 0) * 100).toFixed(1)}% rate
             </p>
           </CardContent>
@@ -295,20 +295,20 @@ export default function CampaignDetailPage() {
               {positiveLeads.map((lead) => (
                 <div
                   key={lead.id}
-                  className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-100"
+                  className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-100 dark:border-green-900"
                 >
                   <div>
-                    <p className="font-medium text-slate-900">
+                    <p className="font-medium text-foreground">
                       {lead.first_name} {lead.last_name}
                     </p>
-                    <p className="text-sm text-slate-600">{lead.email}</p>
+                    <p className="text-sm text-muted-foreground">{lead.email}</p>
                     {lead.company_name && (
-                      <p className="text-xs text-slate-500">{lead.company_name}</p>
+                      <p className="text-xs text-muted-foreground">{lead.company_name}</p>
                     )}
                   </div>
                   <div className="text-right">
-                    <Badge className="bg-green-100 text-green-700">Positive</Badge>
-                    <p className="text-xs text-slate-400 mt-1">
+                    <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">Positive</Badge>
+                    <p className="text-xs text-muted-foreground mt-1">
                       {new Date(lead.updated_at).toLocaleDateString()}
                     </p>
                   </div>
@@ -333,11 +333,11 @@ export default function CampaignDetailPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left py-2 font-medium text-slate-600">Email</th>
-                    <th className="text-left py-2 font-medium text-slate-600">Name</th>
-                    <th className="text-left py-2 font-medium text-slate-600">Company</th>
-                    <th className="text-left py-2 font-medium text-slate-600">Status</th>
-                    <th className="text-left py-2 font-medium text-slate-600">Updated</th>
+                    <th className="text-left py-2 font-medium text-muted-foreground">Email</th>
+                    <th className="text-left py-2 font-medium text-muted-foreground">Name</th>
+                    <th className="text-left py-2 font-medium text-muted-foreground">Company</th>
+                    <th className="text-left py-2 font-medium text-muted-foreground">Status</th>
+                    <th className="text-left py-2 font-medium text-muted-foreground">Updated</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -347,7 +347,7 @@ export default function CampaignDetailPage() {
                       <td className="py-2">
                         {lead.first_name} {lead.last_name}
                       </td>
-                      <td className="py-2 text-slate-500">{lead.company_name || "-"}</td>
+                      <td className="py-2 text-muted-foreground">{lead.company_name || "-"}</td>
                       <td className="py-2">
                         <Badge
                           variant="outline"
@@ -356,7 +356,7 @@ export default function CampaignDetailPage() {
                           {lead.status}
                         </Badge>
                       </td>
-                      <td className="py-2 text-slate-500">
+                      <td className="py-2 text-muted-foreground">
                         {new Date(lead.updated_at).toLocaleDateString()}
                       </td>
                     </tr>
@@ -370,7 +370,7 @@ export default function CampaignDetailPage() {
 
       {/* Footer */}
       {lastUpdated && (
-        <p className="text-xs text-slate-400 text-right">
+        <p className="text-xs text-muted-foreground text-right">
           Last updated: {lastUpdated.toLocaleTimeString()}
         </p>
       )}

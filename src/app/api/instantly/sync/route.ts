@@ -116,11 +116,38 @@ export async function POST(request: Request) {
     };
 
     if (sync_leads) {
+      // Get client name for denormalization
+      const { data: clientData } = await supabase
+        .from("clients")
+        .select("name")
+        .eq("id", client_id)
+        .single();
+      const clientName = clientData?.name || null;
+
       for (const [instantlyCampaignId, localCampaignId] of campaignIdMap) {
         try {
           const leads = await fetchAllLeadsForCampaign(instantlyCampaignId);
 
+          // Get campaign name for denormalization
+          const { data: campaignData } = await supabase
+            .from("campaigns")
+            .select("name")
+            .eq("id", localCampaignId)
+            .single();
+          const campaignName = campaignData?.name || null;
+
           for (const lead of leads) {
+            // Determine if this is a positive reply based on Instantly's interest_status
+            const isPositiveReply = lead.interest_status === "interested";
+
+            // Map Instantly status to our status
+            let status = "contacted";
+            if (lead.interest_status === "interested") {
+              status = "replied";
+            } else if (lead.interest_status === "not_interested") {
+              status = "not_interested";
+            }
+
             const { data: existingLead } = await supabase
               .from("leads")
               .select("id")
@@ -133,7 +160,12 @@ export async function POST(request: Request) {
                 .from("leads")
                 .update({
                   first_name: lead.first_name || undefined,
+                  last_name: lead.last_name || undefined,
+                  company_name: lead.company_name || undefined,
+                  phone: lead.phone || undefined,
                   instantly_lead_id: lead.id,
+                  is_positive_reply: isPositiveReply,
+                  status: status,
                   updated_at: new Date().toISOString(),
                 })
                 .eq("id", existingLead.id);
@@ -146,9 +178,16 @@ export async function POST(request: Request) {
             } else {
               const { error } = await supabase.from("leads").insert({
                 campaign_id: localCampaignId,
+                client_id: client_id,
+                client_name: clientName,
+                campaign_name: campaignName,
                 email: lead.email,
                 first_name: lead.first_name || null,
-                status: "contacted",
+                last_name: lead.last_name || null,
+                company_name: lead.company_name || null,
+                phone: lead.phone || null,
+                status: status,
+                is_positive_reply: isPositiveReply,
                 instantly_lead_id: lead.id,
               });
 

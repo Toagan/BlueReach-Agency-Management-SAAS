@@ -58,14 +58,14 @@ interface AdminLeadsViewProps {
 }
 
 const statusColors: Record<LeadStatus, string> = {
-  contacted: "bg-gray-100 text-gray-700",
-  opened: "bg-yellow-100 text-yellow-700",
-  clicked: "bg-orange-100 text-orange-700",
-  replied: "bg-blue-100 text-blue-700",
-  booked: "bg-green-100 text-green-700",
-  won: "bg-purple-100 text-purple-700",
-  lost: "bg-red-100 text-red-700",
-  not_interested: "bg-slate-100 text-slate-700",
+  contacted: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  opened: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
+  clicked: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
+  replied: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+  booked: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+  won: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+  lost: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  not_interested: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
 };
 
 export function AdminLeadsView({
@@ -284,11 +284,11 @@ export function AdminLeadsView({
           }}
           className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
             showPositiveOnly
-              ? "bg-green-100 text-green-700 border border-green-300"
-              : "bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200"
+              ? "bg-green-100 text-green-700 border border-green-300 dark:bg-green-900 dark:text-green-300 dark:border-green-700"
+              : "bg-muted text-muted-foreground border border-border hover:bg-accent"
           }`}
         >
-          {showPositiveOnly ? "✓ Positive Replies Only" : "Show All Replies"}
+          {showPositiveOnly ? "Positive Replies Only" : "Show All Replies"}
         </button>
 
         {(selectedClient !== "all" || selectedStatus !== "all" || showPositiveOnly) && (
@@ -299,7 +299,7 @@ export function AdminLeadsView({
               setShowPositiveOnly(false);
               router.push("/admin/leads");
             }}
-            className="px-4 py-2 rounded-md text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+            className="px-4 py-2 rounded-md text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
           >
             Clear Filters
           </button>
@@ -307,7 +307,7 @@ export function AdminLeadsView({
       </div>
 
       <div className="flex items-center justify-between mb-4">
-        <div className="text-sm text-gray-500">
+        <div className="text-sm text-muted-foreground">
           Showing {leads.length} of {totalCount.toLocaleString()} leads
           {totalCount > pageSize && ` (Page ${currentPage} of ${totalPages})`}
         </div>
@@ -355,7 +355,7 @@ export function AdminLeadsView({
           <TableBody>
             {filteredLeads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-gray-500 py-8">
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                   No leads found
                 </TableCell>
               </TableRow>
@@ -363,7 +363,7 @@ export function AdminLeadsView({
               filteredLeads.map((lead) => (
                 <TableRow
                   key={lead.id}
-                  className="cursor-pointer hover:bg-gray-50"
+                  className="cursor-pointer hover:bg-accent"
                   onClick={() => {
                     setSelectedLead(lead);
                     setIsPanelOpen(true);
@@ -379,9 +379,9 @@ export function AdminLeadsView({
                   </TableCell>
                   <TableCell>
                     {lead.is_positive_reply ? (
-                      <Badge className="bg-green-100 text-green-700">Yes</Badge>
+                      <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">Yes</Badge>
                     ) : (
-                      <span className="text-gray-400">-</span>
+                      <span className="text-muted-foreground">-</span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -397,7 +397,7 @@ export function AdminLeadsView({
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-4">
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-muted-foreground">
             Page {currentPage} of {totalPages}
           </div>
           <div className="flex gap-2">

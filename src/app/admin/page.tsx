@@ -33,24 +33,16 @@ import {
   Trash2,
   Archive,
   MessageSquareReply,
-  MailX,
   Target,
-  CalendarCheck,
-  Handshake,
   Send,
 } from "lucide-react";
 
 interface OverviewStats {
-  leadsContacted: number;      // Time-filtered
-  emailsSent: number;          // Time-filtered
-  replies: number;             // Time-filtered
-  opportunities: number;       // Time-filtered (positive replies)
-  bouncedCumulative: number;   // All-time (not filterable)
-  meetingsHeldCumulative: number;  // All-time (not filterable)
-  dealsClosedCumulative: number;   // All-time (not filterable)
-  replyRate: number;           // Calculated
-  hasBaseline: boolean;
-  note?: string;
+  leadsContacted: number;
+  emailsSent: number;
+  replies: number;
+  opportunities: number;
+  replyRate: number;
 }
 
 interface Customer {
@@ -76,12 +68,7 @@ export default function AdminCommandCenter() {
     emailsSent: 0,
     replies: 0,
     opportunities: 0,
-    bouncedCumulative: 0,
-    meetingsHeldCumulative: 0,
-    dealsClosedCumulative: 0,
     replyRate: 0,
-    hasBaseline: false,
-    note: undefined,
   });
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,12 +107,7 @@ export default function AdminCommandCenter() {
         emailsSent: analyticsData.emails_sent || 0,
         replies: analyticsData.replies || 0,
         opportunities: analyticsData.opportunities || 0,
-        bouncedCumulative: analyticsData.bounced_cumulative || 0,
-        meetingsHeldCumulative: analyticsData.meetings_held_cumulative || 0,
-        dealsClosedCumulative: analyticsData.deals_closed_cumulative || 0,
         replyRate: analyticsData.reply_rate || 0,
-        hasBaseline: analyticsData.has_baseline || false,
-        note: analyticsData.note,
       });
 
       setCustomers(customersList);
@@ -191,8 +173,8 @@ export default function AdminCommandCenter() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Command Center</h1>
-          <p className="text-slate-500 text-sm">
+          <h1 className="text-2xl font-bold text-foreground">Command Center</h1>
+          <p className="text-muted-foreground text-sm">
             Manage paying customers, workspaces, and campaigns.
           </p>
         </div>
@@ -212,16 +194,16 @@ export default function AdminCommandCenter() {
       </div>
 
       {/* Overview Dashboard */}
-      <Card className="bg-white border-slate-200">
+      <Card className="bg-card border-border">
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-slate-900">Overview Dashboard</h2>
-              <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
+              <h2 className="text-lg font-semibold text-foreground">Overview Dashboard</h2>
+              <Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950">
                 <Activity className="h-3 w-3 mr-1" />
                 Live
               </Badge>
-              <span className="text-xs text-slate-400">Updates every 30s</span>
+              <span className="text-xs text-muted-foreground">Updates every 30s</span>
             </div>
             <Button variant="ghost" size="sm" onClick={() => fetchData(true)} disabled={loading}>
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -234,14 +216,7 @@ export default function AdminCommandCenter() {
             </div>
           )}
 
-          {!loading && stats.note && (
-            <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-6 text-sm">
-              <strong>Note:</strong> {stats.note}
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
-            {/* Time-filtered metrics (respond to period selector) */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <StatCard
               label="Leads Contacted"
               value={stats.leadsContacted}
@@ -270,32 +245,10 @@ export default function AdminCommandCenter() {
               loading={loading}
               href="/admin/leads?positive=true"
             />
-          </div>
-
-          {/* Cumulative metrics (all-time totals, cannot be time-filtered) */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 mt-4">
             <StatCard
               label="Reply Rate"
               value={`${stats.replyRate.toFixed(1)}%`}
               icon={<TrendingUp className="h-5 w-5 text-amber-500" />}
-              loading={loading}
-            />
-            <StatCard
-              label="Bounced (All-time)"
-              value={stats.bouncedCumulative}
-              icon={<MailX className="h-5 w-5 text-red-500" />}
-              loading={loading}
-            />
-            <StatCard
-              label="Meetings (All-time)"
-              value={stats.meetingsHeldCumulative}
-              icon={<CalendarCheck className="h-5 w-5 text-indigo-500" />}
-              loading={loading}
-            />
-            <StatCard
-              label="Deals Closed (All-time)"
-              value={stats.dealsClosedCumulative}
-              icon={<Handshake className="h-5 w-5 text-green-500" />}
               loading={loading}
             />
           </div>
@@ -303,20 +256,20 @@ export default function AdminCommandCenter() {
       </Card>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-slate-200">
+      <div className="flex gap-2 border-b border-border">
         <button
           onClick={() => setActiveTab("customers")}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             activeTab === "customers"
-              ? "border-blue-600 text-blue-600"
-              : "border-transparent text-slate-500 hover:text-slate-700"
+              ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
+              : "border-transparent text-muted-foreground hover:text-foreground"
           }`}
         >
           All Customers
         </button>
         <Link
           href="/admin/leads"
-          className="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors"
+          className="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors"
         >
           All Leads
         </Link>
@@ -332,8 +285,8 @@ export default function AdminCommandCenter() {
                 onClick={() => setCustomerFilter("active")}
                 className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                   customerFilter === "active"
-                    ? "bg-slate-900 text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-accent"
                 }`}
               >
                 Active Customers ({customers.filter((c) => c.is_active !== false).length})
@@ -342,8 +295,8 @@ export default function AdminCommandCenter() {
                 onClick={() => setCustomerFilter("archived")}
                 className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                   customerFilter === "archived"
-                    ? "bg-slate-900 text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-accent"
                 }`}
               >
                 Archived ({customers.filter((c) => c.is_active === false).length})
@@ -352,7 +305,7 @@ export default function AdminCommandCenter() {
 
             <div className="flex items-center gap-2">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search customers..."
                   value={searchQuery}
@@ -401,14 +354,14 @@ export default function AdminCommandCenter() {
             <CardContent className="p-0">
               {loading && customers.length === 0 ? (
                 <div className="flex items-center justify-center py-12">
-                  <RefreshCw className="h-6 w-6 animate-spin text-slate-400" />
+                  <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : filteredCustomers.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
+                <div className="text-center py-12 text-muted-foreground">
                   {searchQuery ? "No customers match your search." : "No customers found."}
                 </div>
               ) : (
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-border">
                   {filteredCustomers.map((customer) => (
                     <CustomerRow key={customer.id} customer={customer} onRefresh={() => fetchData(true)} />
                   ))}
@@ -421,7 +374,7 @@ export default function AdminCommandCenter() {
 
       {/* Footer info */}
       {lastUpdated && (
-        <p className="text-xs text-slate-400 text-right">
+        <p className="text-xs text-muted-foreground text-right">
           Last updated: {lastUpdated.toLocaleTimeString()}
         </p>
       )}
@@ -446,14 +399,14 @@ function StatCard({
 }) {
   const isClickable = href || onClick;
   const content = (
-    <div className={`bg-slate-50 rounded-xl p-4 ${isClickable ? "cursor-pointer hover:bg-slate-100 hover:shadow-md transition-all" : ""}`}>
+    <div className={`bg-muted rounded-xl p-4 ${isClickable ? "cursor-pointer hover:bg-accent hover:shadow-md transition-all" : ""}`}>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm text-slate-500">{label}</span>
+        <span className="text-sm text-muted-foreground">{label}</span>
         {icon}
       </div>
-      <div className="text-2xl font-bold text-slate-900">
+      <div className="text-2xl font-bold text-foreground">
         {loading ? (
-          <div className="h-8 w-16 bg-slate-200 rounded animate-pulse" />
+          <div className="h-8 w-16 bg-accent rounded animate-pulse" />
         ) : typeof value === "number" ? (
           value.toLocaleString()
         ) : (
@@ -461,7 +414,7 @@ function StatCard({
         )}
       </div>
       {isClickable && (
-        <p className="text-xs text-blue-500 mt-2">Click to view details →</p>
+        <p className="text-xs text-blue-500 dark:text-blue-400 mt-2">Click to view details →</p>
       )}
     </div>
   );
@@ -515,17 +468,17 @@ function CustomerRow({ customer, onRefresh }: { customer: Customer; onRefresh: (
   };
 
   return (
-    <div className="flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors">
+    <div className="flex items-center justify-between px-6 py-4 hover:bg-accent transition-colors">
       <Link href={`/admin/clients/${customer.id}`} className="flex-1">
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center">
-            <span className="text-sm font-medium text-slate-600">
+          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+            <span className="text-sm font-medium text-muted-foreground">
               {customer.name.charAt(0).toUpperCase()}
             </span>
           </div>
           <div>
-            <p className="font-medium text-slate-900">{customer.name}</p>
-            <p className="text-sm text-slate-500">
+            <p className="font-medium text-foreground">{customer.name}</p>
+            <p className="text-sm text-muted-foreground">
               {customer.campaigns_count || 0} campaigns
               {customer.total_emails_sent > 0 && ` · ${customer.total_emails_sent.toLocaleString()} emails`}
               {customer.reply_rate > 0 && ` · ${customer.reply_rate.toFixed(1)}% reply rate`}

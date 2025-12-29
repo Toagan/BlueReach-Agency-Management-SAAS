@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { Sidebar } from "@/components/layout/sidebar";
-import { Header } from "@/components/layout/header";
+import Link from "next/link";
+import Image from "next/image";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function AdminLayout({
   children,
@@ -30,16 +31,39 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      <Sidebar isAdmin={true} />
-      <div className="flex-1 flex flex-col">
-        <Header
-          email={user.email}
-          fullName={profile?.full_name || undefined}
-          isAdmin={true}
-        />
-        <main className="flex-1 p-6">{children}</main>
-      </div>
+    <div className="min-h-screen bg-background">
+      {/* Simple top nav */}
+      <header className="bg-card border-b border-border sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <Link href="/admin" className="flex items-center gap-2">
+              <Image
+                src="/logo.png"
+                alt="BlueReach"
+                width={140}
+                height={40}
+                className="h-8 w-auto"
+                priority
+              />
+            </Link>
+            <div className="flex items-center gap-4">
+              <ThemeToggle />
+              <span className="text-sm text-muted-foreground">{user.email}</span>
+              <form action="/auth/signout" method="post">
+                <button
+                  type="submit"
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Sign out
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {children}
+      </main>
     </div>
   );
 }

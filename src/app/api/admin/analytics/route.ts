@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCampaignAnalytics, getCampaignDailyAnalytics } from "@/lib/instantly";
+import { getCampaignDailyAnalytics } from "@/lib/instantly";
 
 // Helper to get date range based on period
 function getDateRange(period: string): { startDate: Date; endDate: Date } {
@@ -55,14 +55,10 @@ export async function GET(request: NextRequest) {
     const endDateStr = endDate.toISOString().split("T")[0];
 
     // Fetch daily analytics from Instantly with date range
-    // AND cumulative analytics for metrics not available in daily
-    const [dailyAnalytics, cumulativeAnalytics] = await Promise.all([
-      getCampaignDailyAnalytics({
-        start_date: startDateStr,
-        end_date: endDateStr,
-      }),
-      getCampaignAnalytics(),
-    ]);
+    const dailyAnalytics = await getCampaignDailyAnalytics({
+      start_date: startDateStr,
+      end_date: endDateStr,
+    });
 
     // Sum up daily metrics (these are filtered by date range)
     let emailsSent = 0;
@@ -79,47 +75,19 @@ export async function GET(request: NextRequest) {
       dailyOpportunities += day.unique_opportunities || 0;
     });
 
-    // Get cumulative metrics (these are totals, not filtered by date)
-    // Note: bounced, meetings, deals are ONLY available as cumulative from Instantly
-    let totalBounced = 0;
-    let totalMeetingsHeld = 0;
-    let totalDealsClosed = 0;
-
-    cumulativeAnalytics.forEach((a) => {
-      totalBounced += a.bounced_count || 0;
-      totalMeetingsHeld += a.total_meeting_completed || 0;
-      totalDealsClosed += a.total_closed || 0;
-    });
-
     // Calculate reply rate based on the period's emails
     const replyRate = emailsSent > 0 ? (replies / emailsSent) * 100 : 0;
 
-    // Determine if we got daily data (indicates time filtering worked)
-    const hasDailyData = dailyAnalytics.length > 0;
-
     return NextResponse.json({
-      source: "instantly",
       period,
       start_date: startDateStr,
       end_date: endDateStr,
-      // Time-filtered metrics (from daily analytics)
-      leads_contacted: newLeadsContacted,  // NEW leads contacted in this period
+      leads_contacted: newLeadsContacted,
       emails_sent: emailsSent,
       emails_opened: emailsOpened,
       replies,
-      opportunities: dailyOpportunities,   // Positive replies in this period
-      // Cumulative metrics (totals - Instantly doesn't provide daily breakdown for these)
-      bounced_cumulative: totalBounced,
-      meetings_held_cumulative: totalMeetingsHeld,
-      deals_closed_cumulative: totalDealsClosed,
-      // Calculated
+      opportunities: dailyOpportunities,
       reply_rate: Number(replyRate.toFixed(2)),
-      // Metadata
-      has_baseline: hasDailyData,
-      daily_data_points: dailyAnalytics.length,
-      note: hasDailyData
-        ? `Showing ${period.replace("_", " ")} activity. Bounced/Meetings/Deals are all-time totals (not filtered).`
-        : "No daily data available for this period.",
     });
   } catch (error) {
     console.error("Error fetching analytics:", error);
