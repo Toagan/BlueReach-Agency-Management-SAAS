@@ -51,7 +51,7 @@ export async function POST(request: Request) {
       errors: [],
     };
 
-    // Get existing campaigns
+    // Get existing campaigns for THIS client only
     const { data: existingCampaigns } = await supabase
       .from("campaigns")
       .select("id, instantly_campaign_id")
@@ -61,13 +61,23 @@ export async function POST(request: Request) {
       existingCampaigns?.map(c => [c.instantly_campaign_id, c.id]) || []
     );
 
+    // Also check which Instantly campaign IDs are already used by OTHER clients
+    const { data: allCampaigns } = await supabase
+      .from("campaigns")
+      .select("instantly_campaign_id")
+      .not("instantly_campaign_id", "is", null);
+
+    const allInstantlyIds = new Set(
+      allCampaigns?.map(c => c.instantly_campaign_id) || []
+    );
+
     const campaignIdMap = new Map<string, string>(); // instantly_id -> local_id
 
     for (const campaign of instantlyCampaigns) {
       const existingId = existingMap.get(campaign.id);
 
       if (existingId) {
-        // Update existing campaign
+        // Update existing campaign (belongs to this client)
         const { error } = await supabase
           .from("campaigns")
           .update({
@@ -83,8 +93,8 @@ export async function POST(request: Request) {
           campaignResult.updated++;
           campaignIdMap.set(campaign.id, existingId);
         }
-      } else {
-        // Create new campaign
+      } else if (!allInstantlyIds.has(campaign.id)) {
+        // Only create if no other client has this campaign
         const { data, error } = await supabase
           .from("campaigns")
           .insert({
@@ -104,6 +114,7 @@ export async function POST(request: Request) {
           campaignIdMap.set(campaign.id, data.id);
         }
       }
+      // Skip campaigns that belong to other clients
     }
 
     // Step 2: Sync leads (if enabled)
