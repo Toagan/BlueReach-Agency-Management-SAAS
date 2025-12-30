@@ -157,28 +157,26 @@ export async function POST(request: Request) {
         if (lead.created_at) metadata.instantly_created_at = lead.created_at;
         if (lead.updated_at) metadata.instantly_updated_at = lead.updated_at;
 
-        // Map interest_status to is_positive_reply and lead status
-        // Positive statuses: interested, meeting_booked, meeting_completed, closed
-        const positiveStatuses = ["interested", "meeting_booked", "meeting_completed", "closed"];
-        const isPositiveReply = positiveStatuses.includes(lead.interest_status || "");
+        // Check if lead has replied using email_reply_count (more reliable than interest_status)
+        const hasReplied = (lead as { email_reply_count?: number }).email_reply_count > 0;
 
-        // Map interest_status to our lead status
+        // Also check interest_status for manually tagged leads
+        const positiveStatuses = ["interested", "meeting_booked", "meeting_completed", "closed"];
+        const hasPositiveInterest = positiveStatuses.includes(lead.interest_status || "");
+
+        // Lead is positive if they replied OR are marked as interested
+        const isPositiveReply = hasReplied || hasPositiveInterest;
+
+        // Map to our lead status
         let leadStatus: string | undefined = undefined;
-        switch (lead.interest_status) {
-          case "interested":
-            leadStatus = "replied";
-            break;
-          case "meeting_booked":
-            leadStatus = "booked";
-            break;
-          case "meeting_completed":
-          case "closed":
-            leadStatus = "won";
-            break;
-          case "not_interested":
-          case "wrong_person":
-            leadStatus = "not_interested";
-            break;
+        if (lead.interest_status === "meeting_booked") {
+          leadStatus = "booked";
+        } else if (lead.interest_status === "meeting_completed" || lead.interest_status === "closed") {
+          leadStatus = "won";
+        } else if (lead.interest_status === "not_interested" || lead.interest_status === "wrong_person") {
+          leadStatus = "not_interested";
+        } else if (hasReplied || lead.interest_status === "interested") {
+          leadStatus = "replied";
         }
 
         if (existingLead) {
