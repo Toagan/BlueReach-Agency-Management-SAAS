@@ -148,30 +148,28 @@ export async function POST(request: Request) {
           const campaignName = campaignData?.name || null;
 
           for (const lead of leads) {
-            // Determine if this is a positive reply based on Instantly's interest_status
-            // Positive statuses: interested, meeting_booked, meeting_completed, closed (won)
-            const positiveStatuses = ["interested", "meeting_booked", "meeting_completed", "closed"];
-            const isPositiveReply = positiveStatuses.includes(lead.interest_status || "");
+            // Check if lead has replied using email_reply_count (more reliable than interest_status)
+            const hasReplied = (lead as { email_reply_count?: number }).email_reply_count > 0;
 
-            // Map Instantly interest_status to our lead status
+            // Also check interest_status for manually tagged leads
+            const positiveStatuses = ["interested", "meeting_booked", "meeting_completed", "closed"];
+            const hasPositiveInterest = positiveStatuses.includes(lead.interest_status || "");
+
+            // Lead is positive if they replied OR are marked as interested
+            const isPositiveReply = hasReplied || hasPositiveInterest;
+
+            // Map to our lead status
             let status: string = "contacted";
-            switch (lead.interest_status) {
-              case "interested":
-                status = "replied";
-                break;
-              case "meeting_booked":
-                status = "booked";
-                break;
-              case "meeting_completed":
-              case "closed":
-                status = "won";
-                break;
-              case "not_interested":
-              case "wrong_person":
-                status = "not_interested";
-                break;
-              default:
-                status = "contacted";
+            if (lead.interest_status === "meeting_booked") {
+              status = "booked";
+            } else if (lead.interest_status === "meeting_completed" || lead.interest_status === "closed") {
+              status = "won";
+            } else if (lead.interest_status === "not_interested" || lead.interest_status === "wrong_person") {
+              status = "not_interested";
+            } else if (hasReplied || lead.interest_status === "interested") {
+              status = "replied";
+            } else {
+              status = "contacted";
             }
 
             const { data: existingLead } = await supabase
