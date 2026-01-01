@@ -35,6 +35,7 @@ import {
   MessageSquareReply,
   Target,
   Send,
+  Settings,
 } from "lucide-react";
 
 interface OverviewStats {
@@ -59,7 +60,7 @@ interface Customer {
 
 type TabType = "customers" | "leads";
 type CustomerFilter = "active" | "archived";
-type TimeRange = "this_week" | "this_month" | "this_quarter";
+type TimeRange = "all_time" | "this_week" | "this_month" | "this_quarter";
 
 export default function AdminCommandCenter() {
   const hasFetched = useRef(false);
@@ -76,7 +77,7 @@ export default function AdminCommandCenter() {
   const [activeTab, setActiveTab] = useState<TabType>("customers");
   const [customerFilter, setCustomerFilter] = useState<CustomerFilter>("active");
   const [searchQuery, setSearchQuery] = useState("");
-  const [timeRange, setTimeRange] = useState<TimeRange>("this_week");
+  const [timeRange, setTimeRange] = useState<TimeRange>("all_time");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // New customer dialog state
@@ -140,10 +141,14 @@ export default function AdminCommandCenter() {
       const res = await fetch("/api/admin/customers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ name: newCustomerName.trim() }),
       });
 
-      if (!res.ok) throw new Error("Failed to create customer");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to create customer");
+      }
 
       setNewCustomerName("");
       setIsAddDialogOpen(false);
@@ -163,6 +168,7 @@ export default function AdminCommandCenter() {
   });
 
   const timeRangeLabels: Record<TimeRange, string> = {
+    all_time: "All Time",
     this_week: "This Week",
     this_month: "This Month",
     this_quarter: "This Quarter",
@@ -186,6 +192,7 @@ export default function AdminCommandCenter() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setTimeRange("all_time")}>All Time</DropdownMenuItem>
             <DropdownMenuItem onClick={() => setTimeRange("this_week")}>This Week</DropdownMenuItem>
             <DropdownMenuItem onClick={() => setTimeRange("this_month")}>This Month</DropdownMenuItem>
             <DropdownMenuItem onClick={() => setTimeRange("this_quarter")}>This Quarter</DropdownMenuItem>
@@ -504,6 +511,12 @@ function CustomerRow({ customer, onRefresh }: { customer: Customer; onRefresh: (
             <Link href={`/admin/clients/${customer.id}`} className="flex items-center gap-2">
               <Eye className="h-4 w-4" />
               View Details
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href={`/admin/clients/${customer.id}/settings`} className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              Settings
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleArchive} className="flex items-center gap-2">

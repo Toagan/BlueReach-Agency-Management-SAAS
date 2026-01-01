@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, LogOut, User, LayoutDashboard } from "lucide-react";
+import { ChevronDown, LogOut, User, LayoutDashboard, Settings } from "lucide-react";
 
 interface HeaderProps {
   email?: string;
@@ -89,6 +89,14 @@ export function Header({ email, fullName, isAdmin }: HeaderProps) {
               Profile
             </a>
           </DropdownMenuItem>
+          {isAdmin && (
+            <DropdownMenuItem asChild>
+              <a href="/admin/settings" className="flex items-center gap-2">
+                <Settings className="h-4 w-4" />
+                Settings
+              </a>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={handleLogout}

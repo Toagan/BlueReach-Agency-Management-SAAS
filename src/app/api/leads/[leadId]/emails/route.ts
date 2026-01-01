@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { fetchEmailsForLead } from "@/lib/instantly/emails";
+import { fetchEmailsForLead, getInstantlyClient } from "@/lib/instantly";
 
 function getSupabase() {
   return createClient(
@@ -9,120 +9,145 @@ function getSupabase() {
   );
 }
 
-interface RouteParams {
-  params: Promise<{ leadId: string }>;
-}
-
-// GET: Fetch emails for a lead (from DB)
-export async function GET(request: Request, { params }: RouteParams) {
+// GET - Fetch emails from database for a lead
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ leadId: string }> }
+) {
   try {
     const { leadId } = await params;
     const supabase = getSupabase();
 
-    // First check if table exists and has data
-    const { data: emails, error: dbError } = await supabase
+    // Get lead to find the email
+    const { data: lead, error: leadError } = await supabase
+      .from("leads")
+      .select("id, email, campaign_id")
+      .eq("id", leadId)
+      .single();
+
+    if (leadError || !lead) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
+    // Fetch emails from database
+    const { data: emails, error: emailsError } = await supabase
       .from("lead_emails")
       .select("*")
       .eq("lead_id", leadId)
       .order("sent_at", { ascending: true });
 
-    if (dbError) {
-      // If table doesn't exist yet, return empty array with needsSync flag
-      if (dbError.code === "42P01") {
-        return NextResponse.json({ emails: [], needsSync: true });
-      }
-      console.error("DB error fetching emails:", dbError);
-      throw dbError;
+    if (emailsError) {
+      console.error("Error fetching emails:", emailsError);
+      return NextResponse.json(
+        { error: "Failed to fetch emails" },
+        { status: 500 }
+      );
     }
 
-    // Get lead to check last sync
-    const { data: lead } = await supabase
-      .from("leads")
-      .select("email, campaign_id")
-      .eq("id", leadId)
-      .single();
-
-    return NextResponse.json({
-      emails: emails || [],
-      leadEmail: lead?.email,
-      needsSync: !emails || emails.length === 0,
-    });
+    return NextResponse.json({ emails: emails || [] });
   } catch (error) {
-    console.error("Error fetching emails:", error);
+    console.error("Error in GET /api/leads/[leadId]/emails:", error);
     return NextResponse.json(
-      { error: "Failed to fetch emails" },
+      { error: error instanceof Error ? error.message : "Failed to fetch emails" },
       { status: 500 }
     );
   }
 }
 
-// POST: Sync emails from Instantly for this lead
-export async function POST(request: Request, { params }: RouteParams) {
+// POST - Sync emails from Instantly for a lead
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ leadId: string }> }
+) {
   try {
     const { leadId } = await params;
     const supabase = getSupabase();
 
-    // Get lead email address
+    // Check if Instantly is configured
+    const client = getInstantlyClient();
+    if (!client.isConfigured()) {
+      return NextResponse.json(
+        { error: "Instantly API not configured" },
+        { status: 503 }
+      );
+    }
+
+    // Get lead info
     const { data: lead, error: leadError } = await supabase
       .from("leads")
-      .select("email, campaign_id")
+      .select("id, email, campaign_id, campaigns(instantly_campaign_id)")
       .eq("id", leadId)
       .single();
 
     if (leadError || !lead) {
-      return NextResponse.json(
-        { error: "Lead not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
     // Fetch emails from Instantly
     const instantlyEmails = await fetchEmailsForLead(lead.email);
 
-    if (!instantlyEmails || instantlyEmails.length === 0) {
-      return NextResponse.json({
-        message: "No emails found in Instantly",
-        synced: 0,
+    let imported = 0;
+    let skipped = 0;
+
+    for (const email of instantlyEmails) {
+      // Check if email already exists
+      const { data: existing } = await supabase
+        .from("lead_emails")
+        .select("id")
+        .eq("lead_id", leadId)
+        .eq("provider_email_id", email.id)
+        .single();
+
+      if (existing) {
+        skipped++;
+        continue;
+      }
+
+      // Determine direction based on from/to emails
+      const isOutbound = email.from_address_email !== lead.email;
+      const toEmail = email.to_address_email_list?.[0] || lead.email;
+
+      // Insert email
+      const { error: insertError } = await supabase.from("lead_emails").insert({
+        lead_id: leadId,
+        campaign_id: lead.campaign_id,
+        provider_email_id: email.id,
+        provider_thread_id: email.thread_id || null,
+        direction: isOutbound ? "outbound" : "inbound",
+        from_email: email.from_address_email || "",
+        to_email: toEmail,
+        subject: email.subject || null,
+        body_text: email.body?.text || null,
+        body_html: email.body?.html || email.body?.text || null,
+        sequence_step: null,
+        is_auto_reply: false,
+        sent_at: email.timestamp_email || email.timestamp_created || null,
+        metadata: {
+          instantly_data: {
+            campaign_id: email.i_campaign,
+            eaccount: email.eaccount,
+            is_reply: email.is_reply,
+          },
+        },
       });
-    }
 
-    // Upsert emails into database
-    const emailsToUpsert = instantlyEmails.map((email) => ({
-      lead_id: leadId,
-      campaign_id: lead.campaign_id,
-      provider_email_id: email.id,
-      provider_thread_id: email.thread_id || null,
-      direction: email.is_reply ? "inbound" as const : "outbound" as const,
-      from_email: email.from_address_email,
-      to_email: email.to_address_email_list?.[0] || lead.email,
-      cc_emails: email.cc_address_email_list || null,
-      bcc_emails: email.bcc_address_email_list || null,
-      subject: email.subject || null,
-      body_text: email.body?.text || null,
-      body_html: email.body?.html || null,
-      sent_at: email.timestamp_email || email.timestamp_created || new Date().toISOString(),
-      is_auto_reply: false,
-    }));
-
-    const { error: upsertError } = await supabase
-      .from("lead_emails")
-      .upsert(emailsToUpsert, {
-        onConflict: "provider_email_id",
-      });
-
-    if (upsertError) {
-      console.error("Error upserting emails:", upsertError);
-      throw upsertError;
+      if (insertError) {
+        console.error("Failed to insert email:", insertError);
+      } else {
+        imported++;
+      }
     }
 
     return NextResponse.json({
-      message: "Emails synced successfully",
-      synced: emailsToUpsert.length,
+      success: true,
+      imported,
+      skipped,
+      total: instantlyEmails.length,
     });
   } catch (error) {
-    console.error("Error syncing emails:", error);
+    console.error("Error in POST /api/leads/[leadId]/emails:", error);
     return NextResponse.json(
-      { error: "Failed to sync emails from Instantly" },
+      { error: error instanceof Error ? error.message : "Failed to sync emails" },
       { status: 500 }
     );
   }

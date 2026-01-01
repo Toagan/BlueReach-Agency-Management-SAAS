@@ -76,10 +76,14 @@ interface Lead {
   first_name: string | null;
   last_name: string | null;
   company_name: string | null;
+  company_domain: string | null;
+  phone: string | null;
+  personalization: string | null;
   status: string;
   is_positive_reply: boolean;
   created_at: string;
   updated_at: string;
+  metadata?: Record<string, unknown>;
 }
 
 export default function CampaignDetailPage() {
@@ -104,11 +108,25 @@ export default function CampaignDetailPage() {
   // Sequences sync state
   const [isSyncingSequences, setIsSyncingSequences] = useState(false);
 
-  // Preview mode state
-  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  // Preview mode state - default to true to show filled-in variables
+  const [isPreviewMode, setIsPreviewMode] = useState(true);
   const [previewLeadId, setPreviewLeadId] = useState<string | null>(null);
 
-  // Get the selected preview lead
+  // Get 3 sample leads for preview - spread across the list for variety
+  const getSampleLeads = () => {
+    if (leads.length === 0) return [];
+    if (leads.length <= 3) return leads;
+    // Pick leads from different positions for variety
+    const indices = [
+      0, // First lead
+      Math.floor(leads.length / 2), // Middle lead
+      Math.min(leads.length - 1, Math.floor(leads.length * 0.75)), // Near end
+    ];
+    return indices.map(i => leads[i]);
+  };
+  const sampleLeads = getSampleLeads();
+
+  // Get the selected preview lead (if using single preview mode)
   const previewLead = leads.find(l => l.id === previewLeadId) || leads[0];
 
   // Function to replace template variables with lead data
@@ -117,20 +135,23 @@ export default function CampaignDetailPage() {
 
     let result = content;
 
-    // Common variable replacements
-    const replacements: Record<string, string> = {
-      '{{firstName}}': lead.first_name || '[First Name]',
-      '{{first_name}}': lead.first_name || '[First Name]',
-      '{{lastName}}': lead.last_name || '[Last Name]',
-      '{{last_name}}': lead.last_name || '[Last Name]',
-      '{{email}}': lead.email || '[Email]',
-      '{{companyName}}': lead.company_name || '[Company]',
-      '{{company_name}}': lead.company_name || '[Company]',
-      '{{company}}': lead.company_name || '[Company]',
+    // Common curly brace variable replacements {{variable}}
+    const curlyReplacements: Record<string, string> = {
+      '{{firstName}}': lead.first_name || '',
+      '{{first_name}}': lead.first_name || '',
+      '{{lastName}}': lead.last_name || '',
+      '{{last_name}}': lead.last_name || '',
+      '{{email}}': lead.email || '',
+      '{{companyName}}': lead.company_name || '',
+      '{{company_name}}': lead.company_name || '',
+      '{{company}}': lead.company_name || '',
+      '{{phone}}': lead.phone || '',
+      '{{domain}}': lead.company_domain || '',
+      '{{company_domain}}': lead.company_domain || '',
     };
 
-    // Apply replacements
-    Object.entries(replacements).forEach(([variable, value]) => {
+    // Apply curly brace replacements
+    Object.entries(curlyReplacements).forEach(([variable, value]) => {
       result = result.replace(new RegExp(variable.replace(/[{}]/g, '\\$&'), 'gi'), value);
     });
 
@@ -140,9 +161,93 @@ export default function CampaignDetailPage() {
       return firstOption;
     });
 
-    // Replace remaining unknown variables with placeholder
+    // Get lead_data from metadata for custom variables
+    const leadData = lead.metadata?.lead_data as Record<string, string> | undefined;
+
+    // Map common template variables to possible payload field names
+    const variableMappings: Record<string, string[]> = {
+      '1st line': ['1st line', '1stLine', 'Master Line', 'masterLine', 'Icebreaker', 'icebreaker', 'personalization', 'opening_line', 'openingLine'],
+      '2nd line': ['2nd line', '2ndLine', 'P.S.', 'PS', 'ps', 'postscript', 'closing_line', 'closingLine'],
+      '3rd line': ['3rd line', '3rdLine', 'extra_line', 'extraLine'],
+    };
+
+    // Replace remaining curly brace variables
     result = result.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
-      return `[${varName.trim()}]`;
+      const trimmedVar = varName.trim();
+
+      // Check if there's a mapping for this variable
+      const possibleKeys = variableMappings[trimmedVar] || [trimmedVar];
+
+      // Try to find the value in lead_data
+      if (leadData) {
+        for (const key of possibleKeys) {
+          if (leadData[key] && leadData[key].trim() !== '') {
+            return leadData[key];
+          }
+        }
+        // Also try exact match with the variable name
+        if (leadData[trimmedVar] && leadData[trimmedVar].trim() !== '') {
+          return leadData[trimmedVar];
+        }
+      }
+      return '';
+    });
+
+    // Handle bracket-style placeholders [variable]
+    // These are used for personalization lines and signatures
+
+    // Common bracket-style replacements
+    const bracketReplacements: Record<string, string> = {
+      '[first_name]': lead.first_name || '',
+      '[firstName]': lead.first_name || '',
+      '[last_name]': lead.last_name || '',
+      '[lastName]': lead.last_name || '',
+      '[company]': lead.company_name || '',
+      '[companyName]': lead.company_name || '',
+      '[company_name]': lead.company_name || '',
+      '[email]': lead.email || '',
+      '[phone]': lead.phone || '',
+      '[domain]': lead.company_domain || '',
+      // Personalization - the personalization field contains the opening line
+      '[1st line]': lead.personalization || '',
+      '[1stLine]': lead.personalization || '',
+      '[icebreaker]': lead.personalization || '',
+      '[Icebreaker]': lead.personalization || '',
+      // Additional lines from lead_data if available
+      '[2nd line]': leadData?.['2nd line'] || leadData?.['2ndLine'] || leadData?.secondLine || '',
+      '[2ndLine]': leadData?.['2nd line'] || leadData?.['2ndLine'] || leadData?.secondLine || '',
+      '[3rd line]': leadData?.['3rd line'] || leadData?.['3rdLine'] || leadData?.thirdLine || '',
+      '[3rdLine]': leadData?.['3rd line'] || leadData?.['3rdLine'] || leadData?.thirdLine || '',
+      // Signature - remove it in preview as it's added by the email sending system
+      '[accountSignature]': '',
+      '[signature]': '',
+      '[Signature]': '',
+    };
+
+    // Apply bracket-style replacements (case-insensitive)
+    Object.entries(bracketReplacements).forEach(([variable, value]) => {
+      const escapedVar = variable.replace(/[[\]]/g, '\\$&');
+      result = result.replace(new RegExp(escapedVar, 'gi'), value);
+    });
+
+    // Handle any remaining bracket variables - try to find them in lead_data
+    result = result.replace(/\[([^\]]+)\]/g, (match, varName) => {
+      const normalizedName = varName.trim();
+      // Check metadata.lead_data for custom variables
+      if (leadData && leadData[normalizedName]) {
+        return leadData[normalizedName];
+      }
+      // Also try camelCase and snake_case variants
+      const camelCase = normalizedName.replace(/\s+(.)/g, (m: string, c: string) => c.toUpperCase());
+      const snakeCase = normalizedName.replace(/\s+/g, '_').toLowerCase();
+      if (leadData && leadData[camelCase]) {
+        return leadData[camelCase];
+      }
+      if (leadData && leadData[snakeCase]) {
+        return leadData[snakeCase];
+      }
+      // Return empty string instead of showing placeholder
+      return '';
     });
 
     return result;
@@ -514,7 +619,7 @@ export default function CampaignDetailPage() {
                   value={previewLeadId || leads[0]?.id}
                   onValueChange={setPreviewLeadId}
                 >
-                  <SelectTrigger className="w-[200px]">
+                  <SelectTrigger className="w-[220px]">
                     <SelectValue placeholder="Select a lead" />
                   </SelectTrigger>
                   <SelectContent>
@@ -544,7 +649,7 @@ export default function CampaignDetailPage() {
             <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2">
               <Eye className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               <span>
-                Previewing as: <strong className="text-foreground">{previewLead.first_name} {previewLead.last_name}</strong>
+                Previewing as: <strong className="text-foreground">{previewLead.first_name || previewLead.email.split('@')[0]}</strong>
                 {previewLead.company_name && <> from <strong className="text-foreground">{previewLead.company_name}</strong></>}
               </span>
             </div>
@@ -581,21 +686,38 @@ export default function CampaignDetailPage() {
                                 </span>
                               )}
                             </div>
-                            {step.subject && (
-                              <p className="font-medium text-sm mb-2">
-                                Subject: {isPreviewMode
-                                  ? replaceTemplateVariables(step.subject, previewLead)
-                                  : step.subject}
-                              </p>
+
+                            {/* Variables Mode - show raw template */}
+                            {!isPreviewMode && (
+                              <>
+                                {step.subject && (
+                                  <p className="font-medium text-sm mb-2">Subject: {step.subject}</p>
+                                )}
+                                <div
+                                  className="bg-muted/50 rounded-lg p-3 text-sm max-h-64 overflow-y-auto [&_div]:mb-1 [&_br]:block [&_a]:text-blue-600 [&_a]:underline"
+                                  dangerouslySetInnerHTML={{
+                                    __html: step.body_html || step.body_text || "<p>(No content)</p>"
+                                  }}
+                                />
+                              </>
                             )}
-                            <div
-                              className="bg-muted/50 rounded-lg p-3 text-sm max-h-64 overflow-y-auto [&_div]:mb-1 [&_br]:block [&_a]:text-blue-600 [&_a]:underline"
-                              dangerouslySetInnerHTML={{
-                                __html: isPreviewMode
-                                  ? replaceTemplateVariables(step.body_html || step.body_text || "<p>(No content)</p>", previewLead)
-                                  : (step.body_html || step.body_text || "<p>(No content)</p>")
-                              }}
-                            />
+
+                            {/* Preview Mode - show single lead with same styling as variables */}
+                            {isPreviewMode && previewLead && (
+                              <>
+                                {step.subject && (
+                                  <p className="font-medium text-sm mb-2">
+                                    Subject: {replaceTemplateVariables(step.subject, previewLead)}
+                                  </p>
+                                )}
+                                <div
+                                  className="bg-muted/50 rounded-lg p-3 text-sm max-h-64 overflow-y-auto [&_div]:mb-1 [&_br]:block [&_a]:text-blue-600 [&_a]:underline"
+                                  dangerouslySetInnerHTML={{
+                                    __html: replaceTemplateVariables(step.body_html || step.body_text || "<p>(No content)</p>", previewLead)
+                                  }}
+                                />
+                              </>
+                            )}
                           </div>
                         ))}
                     </div>

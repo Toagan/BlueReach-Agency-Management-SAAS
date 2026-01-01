@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mail, RefreshCw, Download, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { Mail, RefreshCw, Download, ArrowUpRight, ArrowDownLeft, Building, Phone, Globe, Linkedin, User, Calendar, BarChart3 } from "lucide-react";
 import type { Lead, LeadStatus, LeadEmail } from "@/types/database";
 
 interface LeadDetailPanelProps {
@@ -130,11 +130,18 @@ export function LeadDetailPanel({
       <SheetContent className="w-[400px] sm:w-[540px]">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            {lead.email}
+            {lead.first_name || lead.last_name
+              ? `${lead.first_name || ""} ${lead.last_name || ""}`.trim()
+              : lead.email}
             <Badge className={statusColors[lead.status]}>{lead.status}</Badge>
+            {lead.is_positive_reply && (
+              <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                Positive
+              </Badge>
+            )}
           </SheetTitle>
-          <SheetDescription>
-            {lead.first_name && <span>Name: {lead.first_name}</span>}
+          <SheetDescription className="text-sm">
+            {lead.email}
           </SheetDescription>
         </SheetHeader>
 
@@ -268,16 +275,114 @@ export function LeadDetailPanel({
             )}
           </div>
 
+          {/* Lead Info */}
           <div className="pt-4 border-t">
-            <h4 className="text-sm font-medium text-foreground mb-2">Details</h4>
+            <h4 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Lead Information
+            </h4>
             <dl className="space-y-2 text-sm">
+              {lead.company_name && (
+                <div className="flex items-center gap-2">
+                  <Building className="h-4 w-4 text-muted-foreground" />
+                  <span>{lead.company_name}</span>
+                </div>
+              )}
+              {lead.company_domain && (
+                <div className="flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-muted-foreground" />
+                  <a
+                    href={`https://${lead.company_domain}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline"
+                  >
+                    {lead.company_domain}
+                  </a>
+                </div>
+              )}
+              {lead.phone && (
+                <div className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <a href={`tel:${lead.phone}`} className="text-blue-600 hover:underline">
+                    {lead.phone}
+                  </a>
+                </div>
+              )}
+              {lead.linkedin_url && (
+                <div className="flex items-center gap-2">
+                  <Linkedin className="h-4 w-4 text-muted-foreground" />
+                  <a
+                    href={lead.linkedin_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline"
+                  >
+                    LinkedIn Profile
+                  </a>
+                </div>
+              )}
+              {lead.personalization && (
+                <div className="mt-2 p-2 bg-muted rounded-md">
+                  <p className="text-xs text-muted-foreground mb-1">Personalization:</p>
+                  <p className="text-sm">{lead.personalization}</p>
+                </div>
+              )}
+            </dl>
+          </div>
+
+          {/* Email Stats */}
+          <div className="pt-4 border-t">
+            <h4 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Email Stats
+            </h4>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="p-2 bg-muted rounded-md text-center">
+                <p className="text-lg font-semibold">{lead.email_open_count || 0}</p>
+                <p className="text-xs text-muted-foreground">Opens</p>
+              </div>
+              <div className="p-2 bg-muted rounded-md text-center">
+                <p className="text-lg font-semibold">{lead.email_click_count || 0}</p>
+                <p className="text-xs text-muted-foreground">Clicks</p>
+              </div>
+              <div className="p-2 bg-muted rounded-md text-center">
+                <p className="text-lg font-semibold">{lead.email_reply_count || 0}</p>
+                <p className="text-xs text-muted-foreground">Replies</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Dates & IDs */}
+          <div className="pt-4 border-t">
+            <h4 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Timeline
+            </h4>
+            <dl className="space-y-2 text-sm">
+              {lead.last_contacted_at && (
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">Last Contacted</dt>
+                  <dd>{new Date(lead.last_contacted_at).toLocaleString()}</dd>
+                </div>
+              )}
+              {lead.instantly_created_at && (
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">Added to Instantly</dt>
+                  <dd>{new Date(lead.instantly_created_at).toLocaleString()}</dd>
+                </div>
+              )}
               <div className="flex justify-between">
-                <dt className="text-muted-foreground">Lead ID</dt>
-                <dd className="font-mono text-xs">{lead.id.slice(0, 8)}...</dd>
+                <dt className="text-muted-foreground">Created in DB</dt>
+                <dd>{new Date(lead.created_at).toLocaleString()}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Last Updated</dt>
                 <dd>{new Date(lead.updated_at).toLocaleString()}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Lead ID</dt>
+                <dd className="font-mono text-xs">{lead.id.slice(0, 8)}...</dd>
               </div>
               {lead.instantly_lead_id && (
                 <div className="flex justify-between">

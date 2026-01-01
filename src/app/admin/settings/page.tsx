@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Key, Shield, Check, X, RefreshCw, Eye, EyeOff } from "lucide-react";
+import { Settings, Key, Shield, Check, X, RefreshCw, Eye, EyeOff, Upload, ArrowLeft, Image as ImageIcon } from "lucide-react";
+import Link from "next/link";
+import Image from "next/image";
 
 interface Setting {
   key: string;
@@ -26,11 +28,24 @@ export default function SettingsPage() {
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"success" | "error" | null>(null);
 
+  // Logo state
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const fetchSettings = async () => {
     try {
       const res = await fetch("/api/admin/settings");
       const data = await res.json();
       setSettings(data.settings || []);
+      // Find logo URL if set
+      const logoSetting = (data.settings || []).find((s: Setting) => s.key === "agency_logo_url");
+      if (logoSetting?.is_set) {
+        setLogoUrl(logoSetting.masked_value);
+        setLogoPreview(logoSetting.masked_value);
+      }
     } catch (error) {
       console.error("Error fetching settings:", error);
     } finally {
@@ -41,6 +56,49 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchSettings();
   }, []);
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setLogoFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleLogoUpload = async () => {
+    if (!logoFile) return;
+
+    setUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", logoFile);
+
+      const res = await fetch("/api/admin/settings/logo", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setLogoUrl(data.url);
+        setLogoPreview(data.url);
+        setLogoFile(null);
+        await fetchSettings();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to upload logo");
+      }
+    } catch (error) {
+      console.error("Error uploading logo:", error);
+      alert("Failed to upload logo");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   const handleSave = async (key: string) => {
     setSaving(key);
@@ -120,12 +178,80 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
+        <Link
+          href="/admin"
+          className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Command Center
+        </Link>
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Settings className="h-6 w-6" />
           Settings
         </h1>
-        <p className="text-gray-500">Configure your integrations and API keys</p>
+        <p className="text-gray-500">Configure your agency branding and integrations</p>
       </div>
+
+      {/* Agency Logo */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ImageIcon className="h-5 w-5" />
+            Agency Logo
+          </CardTitle>
+          <CardDescription>
+            Upload your agency logo to display in the dashboard
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-6">
+            <div className="w-24 h-24 border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center overflow-hidden bg-gray-50">
+              {logoPreview ? (
+                <Image
+                  src={logoPreview}
+                  alt="Agency logo"
+                  width={96}
+                  height={96}
+                  className="object-contain w-full h-full"
+                />
+              ) : (
+                <Upload className="h-8 w-8 text-gray-400" />
+              )}
+            </div>
+            <div className="space-y-2">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleLogoChange}
+                accept="image/*"
+                className="hidden"
+              />
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {logoPreview ? "Change Logo" : "Upload Logo"}
+                </Button>
+                {logoFile && (
+                  <Button onClick={handleLogoUpload} disabled={uploadingLogo}>
+                    {uploadingLogo ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4 mr-2" />
+                    )}
+                    Save
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Recommended: 200x200px, PNG or JPG
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Instantly Integration */}
       <Card>

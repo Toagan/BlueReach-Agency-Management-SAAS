@@ -48,7 +48,7 @@ export async function GET() {
       return {
         id: client.id,
         name: client.name,
-        is_active: client.is_active ?? true,
+        is_active: true, // All clients are active by default
         created_at: client.created_at,
         campaigns_count: campaigns.length,
         total_leads: 0, // Will be populated from Instantly data if available
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
 
     const { data: client, error } = await supabase
       .from("clients")
-      .insert({ name: name.trim(), is_active: true })
+      .insert({ name: name.trim() })
       .select()
       .single();
 

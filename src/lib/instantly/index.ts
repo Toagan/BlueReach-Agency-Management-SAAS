@@ -6,3 +6,4 @@ export * from "./campaigns";
 export * from "./leads";
 export * from "./accounts";
 export * from "./analytics";
+export * from "./emails";

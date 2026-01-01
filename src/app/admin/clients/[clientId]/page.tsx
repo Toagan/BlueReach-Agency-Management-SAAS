@@ -22,7 +22,16 @@ import {
   MousePointer,
   ThumbsUp,
   Trash2,
+  CheckCircle,
+  Calendar,
+  Trophy,
+  XCircle,
+  Clock,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 
 interface CampaignAnalytics {
   emails_sent: number;
@@ -68,6 +77,25 @@ interface ClientStats {
   totalCampaigns: number;
 }
 
+interface Lead {
+  id: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  company_name: string | null;
+  company_domain: string | null;
+  status: string;
+  has_replied: boolean;
+  is_positive_reply: boolean;
+  responded_at: string | null;
+  meeting_at: string | null;
+  closed_at: string | null;
+  notes: string | null;
+  campaign_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export default function ClientDashboardPage() {
   const params = useParams();
   const clientId = params.clientId as string;
@@ -91,6 +119,64 @@ export default function ClientDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [deletingCampaignId, setDeletingCampaignId] = useState<string | null>(null);
+  const [positiveLeads, setPositiveLeads] = useState<Lead[]>([]);
+  const [showWorkflow, setShowWorkflow] = useState(false);
+  const [loadingLeads, setLoadingLeads] = useState(false);
+  const [updatingLeadId, setUpdatingLeadId] = useState<string | null>(null);
+  const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
+  const [notesInput, setNotesInput] = useState("");
+  const [meetingDateInput, setMeetingDateInput] = useState("");
+  const [showMeetingInput, setShowMeetingInput] = useState<string | null>(null);
+
+  const fetchPositiveLeads = useCallback(async () => {
+    setLoadingLeads(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/leads?positive=true&limit=200`);
+      if (res.ok) {
+        const data = await res.json();
+        setPositiveLeads(data.leads || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch positive leads:", err);
+    } finally {
+      setLoadingLeads(false);
+    }
+  }, [clientId]);
+
+  const handleWorkflowAction = async (
+    leadId: string,
+    action: "mark_responded" | "schedule_meeting" | "close_won" | "close_lost" | "update_notes" | "revert_status",
+    extraData?: { meeting_at?: string; notes?: string }
+  ) => {
+    console.log("Workflow action:", { leadId, action, extraData });
+    setUpdatingLeadId(leadId);
+    try {
+      const res = await fetch(`/api/leads/${leadId}/workflow`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...extraData }),
+      });
+
+      const data = await res.json();
+      console.log("Workflow response:", data);
+
+      if (res.ok) {
+        // Refresh leads after update
+        await fetchPositiveLeads();
+        setEditingNotesId(null);
+        setShowMeetingInput(null);
+        setNotesInput("");
+        setMeetingDateInput("");
+      } else {
+        alert(data.error || "Failed to update lead");
+      }
+    } catch (err) {
+      console.error("Workflow error:", err);
+      alert("Failed to update lead: " + (err instanceof Error ? err.message : "Unknown error"));
+    } finally {
+      setUpdatingLeadId(null);
+    }
+  };
 
   const handleDeleteCampaign = async (campaignId: string, campaignName: string) => {
     if (!confirm(`Are you sure you want to unlink "${campaignName}"?\n\nThis will remove the campaign from this dashboard. Leads will be preserved.`)) {
@@ -188,14 +274,16 @@ export default function ClientDashboardPage() {
 
   useEffect(() => {
     fetchClientData();
+    fetchPositiveLeads();
 
     // Auto-refresh every 30 seconds
     const interval = setInterval(() => {
       fetchClientData(true);
+      fetchPositiveLeads();
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [fetchClientData]);
+  }, [fetchClientData, fetchPositiveLeads]);
 
   if (loading && !client) {
     return (
@@ -319,6 +407,338 @@ export default function ClientDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Lead Workflow Management */}
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <ThumbsUp className="h-5 w-5 text-green-500" />
+              Lead Workflow
+              {positiveLeads.length > 0 && (
+                <Badge variant="secondary">{positiveLeads.length}</Badge>
+              )}
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => fetchPositiveLeads()}
+                disabled={loadingLeads}
+              >
+                <RefreshCw className={`h-4 w-4 ${loadingLeads ? "animate-spin" : ""}`} />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowWorkflow(!showWorkflow)}
+              >
+                {showWorkflow ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+          {/* Stats Summary */}
+          {positiveLeads.length > 0 && (
+            <div className="flex flex-wrap gap-4 mt-3 text-sm">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle className="h-4 w-4 text-green-500" />
+                <span className="text-muted-foreground">Responded:</span>
+                <span className="font-medium">
+                  {positiveLeads.filter(l => l.responded_at).length}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Calendar className="h-4 w-4 text-blue-500" />
+                <span className="text-muted-foreground">Meetings:</span>
+                <span className="font-medium">
+                  {positiveLeads.filter(l => l.status === "meeting" || l.meeting_at).length}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Trophy className="h-4 w-4 text-green-600" />
+                <span className="text-muted-foreground">Won:</span>
+                <span className="font-medium text-green-600">
+                  {positiveLeads.filter(l => l.status === "closed_won").length}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <XCircle className="h-4 w-4 text-red-500" />
+                <span className="text-muted-foreground">Lost:</span>
+                <span className="font-medium text-red-500">
+                  {positiveLeads.filter(l => l.status === "closed_lost").length}
+                </span>
+              </div>
+            </div>
+          )}
+        </CardHeader>
+        {showWorkflow && (
+          <CardContent>
+            {loadingLeads && positiveLeads.length === 0 ? (
+              <div className="flex items-center justify-center py-8">
+                <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : positiveLeads.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <ThumbsUp className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
+                <p className="font-medium">No positive replies yet</p>
+                <p className="text-sm mt-1">
+                  Positive replies will appear here for workflow management.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {positiveLeads.map((lead) => (
+                  <div
+                    key={lead.id}
+                    className="border border-border rounded-lg p-4 relative"
+                  >
+                    {/* Lead Header */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-foreground">
+                            {/* Show email username if first_name looks like salutation */}
+                            {lead.first_name && !lead.first_name.toLowerCase().startsWith("sehr geehrte")
+                              ? `${lead.first_name}${lead.last_name ? ` ${lead.last_name}` : ""}`
+                              : lead.email.split("@")[0]}
+                          </span>
+                          <Badge
+                            variant={
+                              lead.status === "closed_won"
+                                ? "default"
+                                : lead.status === "closed_lost"
+                                ? "destructive"
+                                : "secondary"
+                            }
+                            className={
+                              lead.status === "closed_won"
+                                ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                                : lead.status === "meeting"
+                                ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                                : ""
+                            }
+                          >
+                            {lead.status === "closed_won"
+                              ? "Won"
+                              : lead.status === "closed_lost"
+                              ? "Lost"
+                              : lead.status === "meeting"
+                              ? "Meeting"
+                              : lead.status === "replied"
+                              ? "Replied"
+                              : lead.status}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{lead.email}</p>
+                        {lead.company_name && (
+                          <p className="text-sm text-muted-foreground">{lead.company_name}</p>
+                        )}
+                        {lead.campaign_name && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Campaign: {lead.campaign_name}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Timeline indicators */}
+                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground mb-3">
+                      {lead.responded_at && (
+                        <span className="flex items-center gap-1">
+                          <CheckCircle className="h-3 w-3 text-green-500" />
+                          Responded: {new Date(lead.responded_at).toLocaleDateString()}
+                        </span>
+                      )}
+                      {lead.meeting_at && (
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3 text-blue-500" />
+                          Meeting: {new Date(lead.meeting_at).toLocaleDateString()}
+                        </span>
+                      )}
+                      {lead.closed_at && (
+                        <span className="flex items-center gap-1">
+                          {lead.status === "closed_won" ? (
+                            <Trophy className="h-3 w-3 text-green-500" />
+                          ) : (
+                            <XCircle className="h-3 w-3 text-red-500" />
+                          )}
+                          Closed: {new Date(lead.closed_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {!lead.responded_at && lead.status !== "closed_won" && lead.status !== "closed_lost" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleWorkflowAction(lead.id, "mark_responded")}
+                          disabled={updatingLeadId === lead.id}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Mark Responded
+                        </Button>
+                      )}
+
+                      {lead.status !== "meeting" && lead.status !== "closed_won" && lead.status !== "closed_lost" && (
+                        <>
+                          {showMeetingInput === lead.id ? (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="datetime-local"
+                                value={meetingDateInput}
+                                onChange={(e) => setMeetingDateInput(e.target.value)}
+                                className="w-auto text-sm"
+                              />
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  if (meetingDateInput) {
+                                    handleWorkflowAction(lead.id, "schedule_meeting", {
+                                      meeting_at: new Date(meetingDateInput).toISOString(),
+                                    });
+                                  }
+                                }}
+                                disabled={!meetingDateInput || updatingLeadId === lead.id}
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setShowMeetingInput(null);
+                                  setMeetingDateInput("");
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setShowMeetingInput(lead.id)}
+                              disabled={updatingLeadId === lead.id}
+                            >
+                              <Calendar className="h-4 w-4 mr-1" />
+                              Schedule Meeting
+                            </Button>
+                          )}
+                        </>
+                      )}
+
+                      {lead.status !== "closed_won" && lead.status !== "closed_lost" && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                            onClick={() => handleWorkflowAction(lead.id, "close_won")}
+                            disabled={updatingLeadId === lead.id}
+                          >
+                            <Trophy className="h-4 w-4 mr-1" />
+                            Close Won
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => handleWorkflowAction(lead.id, "close_lost")}
+                            disabled={updatingLeadId === lead.id}
+                          >
+                            <XCircle className="h-4 w-4 mr-1" />
+                            Close Lost
+                          </Button>
+                        </>
+                      )}
+
+                      {(lead.status === "closed_won" || lead.status === "closed_lost" || lead.status === "meeting") && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-muted-foreground"
+                          onClick={() => handleWorkflowAction(lead.id, "revert_status")}
+                          disabled={updatingLeadId === lead.id}
+                        >
+                          <Clock className="h-4 w-4 mr-1" />
+                          Revert
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Notes Section */}
+                    <div className="border-t border-border pt-3">
+                      {editingNotesId === lead.id ? (
+                        <div className="space-y-2">
+                          <Textarea
+                            value={notesInput}
+                            onChange={(e) => setNotesInput(e.target.value)}
+                            placeholder="Add notes about this lead..."
+                            className="text-sm"
+                            rows={3}
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                handleWorkflowAction(lead.id, "update_notes", { notes: notesInput })
+                              }
+                              disabled={updatingLeadId === lead.id}
+                            >
+                              Save Notes
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setEditingNotesId(null);
+                                setNotesInput("");
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          className="cursor-pointer group"
+                          onClick={() => {
+                            setEditingNotesId(lead.id);
+                            setNotesInput(lead.notes || "");
+                          }}
+                        >
+                          {lead.notes ? (
+                            <p className="text-sm text-muted-foreground group-hover:text-foreground">
+                              {lead.notes}
+                            </p>
+                          ) : (
+                            <p className="text-sm text-muted-foreground/50 group-hover:text-muted-foreground">
+                              Click to add notes...
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Loading overlay */}
+                    {updatingLeadId === lead.id && (
+                      <div className="absolute inset-0 bg-background/50 flex items-center justify-center rounded-lg">
+                        <RefreshCw className="h-6 w-6 animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
 
       {/* Campaigns List */}
       <Card>

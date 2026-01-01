@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCampaignDailyAnalytics } from "@/lib/instantly";
+import { createClient } from "@supabase/supabase-js";
+
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 // Helper to get date range based on period
-function getDateRange(period: string): { startDate: Date; endDate: Date } {
+function getDateRange(period: string): { startDate: Date; endDate: Date } | null {
+  if (period === "all_time") {
+    return null; // No date filtering
+  }
+
   const now = new Date();
   const endDate = new Date(now);
   endDate.setHours(23, 59, 59, 999);
@@ -33,60 +44,70 @@ function getDateRange(period: string): { startDate: Date; endDate: Date } {
       break;
     }
     default:
-      // Default to this week
-      startDate = new Date(now);
-      const defaultDay = startDate.getDay();
-      const defaultDiff = startDate.getDate() - defaultDay + (defaultDay === 0 ? -6 : 1);
-      startDate.setDate(defaultDiff);
-      startDate.setHours(0, 0, 0, 0);
+      return null; // Default to all time
   }
 
   return { startDate, endDate };
 }
 
-// GET - Get analytics with date filtering using Instantly's daily analytics
+// GET - Get analytics from database
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const period = searchParams.get("period") || "this_week";
+    const period = searchParams.get("period") || "all_time";
 
-    const { startDate, endDate } = getDateRange(period);
-    const startDateStr = startDate.toISOString().split("T")[0];
-    const endDateStr = endDate.toISOString().split("T")[0];
+    const supabase = getSupabase();
+    const dateRange = getDateRange(period);
 
-    // Fetch daily analytics from Instantly with date range
-    const dailyAnalytics = await getCampaignDailyAnalytics({
-      start_date: startDateStr,
-      end_date: endDateStr,
-    });
+    // Build query for total leads (contacted)
+    let leadsQuery = supabase.from("leads").select("*", { count: "exact", head: true });
 
-    // Sum up daily metrics (these are filtered by date range)
-    let emailsSent = 0;
-    let emailsOpened = 0;
-    let replies = 0;
-    let newLeadsContacted = 0;
-    let dailyOpportunities = 0;
+    // Build query for replies - simple boolean check
+    let repliesQuery = supabase
+      .from("leads")
+      .select("*", { count: "exact", head: true })
+      .eq("has_replied", true);
 
-    dailyAnalytics.forEach((day) => {
-      emailsSent += day.sent || 0;
-      emailsOpened += day.unique_opened || 0;
-      replies += day.unique_replies || 0;
-      newLeadsContacted += day.new_leads_contacted || 0;
-      dailyOpportunities += day.unique_opportunities || 0;
-    });
+    // Build query for positive replies
+    let positiveQuery = supabase.from("leads").select("*", { count: "exact", head: true }).eq("is_positive_reply", true);
 
-    // Calculate reply rate based on the period's emails
-    const replyRate = emailsSent > 0 ? (replies / emailsSent) * 100 : 0;
+    // Apply date filter if not all_time
+    if (dateRange) {
+      const startDateStr = dateRange.startDate.toISOString();
+      const endDateStr = dateRange.endDate.toISOString();
+
+      leadsQuery = leadsQuery.gte("created_at", startDateStr).lte("created_at", endDateStr);
+      repliesQuery = repliesQuery.gte("created_at", startDateStr).lte("created_at", endDateStr);
+      positiveQuery = positiveQuery.gte("created_at", startDateStr).lte("created_at", endDateStr);
+    }
+
+    // Execute all queries in parallel
+    const [leadsResult, repliesResult, positiveResult] = await Promise.all([
+      leadsQuery,
+      repliesQuery,
+      positiveQuery,
+    ]);
+
+    const leadsContacted = leadsResult.count || 0;
+    const replies = repliesResult.count || 0;
+    const opportunities = positiveResult.count || 0;
+
+    // For emails sent, we'll use leads contacted as a proxy
+    // (each lead represents at least one email sent)
+    // Could also sum email counts if you want total emails including follow-ups
+    const emailsSent = leadsContacted;
+
+    // Calculate reply rate
+    const replyRate = leadsContacted > 0 ? (replies / leadsContacted) * 100 : 0;
 
     return NextResponse.json({
       period,
-      start_date: startDateStr,
-      end_date: endDateStr,
-      leads_contacted: newLeadsContacted,
+      start_date: dateRange?.startDate.toISOString().split("T")[0] || null,
+      end_date: dateRange?.endDate.toISOString().split("T")[0] || null,
+      leads_contacted: leadsContacted,
       emails_sent: emailsSent,
-      emails_opened: emailsOpened,
       replies,
-      opportunities: dailyOpportunities,
+      opportunities,
       reply_rate: Number(replyRate.toFixed(2)),
     });
   } catch (error) {

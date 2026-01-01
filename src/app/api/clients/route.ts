@@ -8,6 +8,45 @@ function getSupabase() {
   );
 }
 
+// POST - Create a new client
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { name } = body;
+
+    if (!name || typeof name !== "string" || name.trim().length === 0) {
+      return NextResponse.json(
+        { error: "Client name is required" },
+        { status: 400 }
+      );
+    }
+
+    const supabase = getSupabase();
+
+    const { data: client, error } = await supabase
+      .from("clients")
+      .insert({ name: name.trim() })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error creating client:", error);
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ client });
+  } catch (error) {
+    console.error("Error creating client:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to create client" },
+      { status: 500 }
+    );
+  }
+}
+
 // GET - List all clients with their campaigns
 export async function GET() {
   try {

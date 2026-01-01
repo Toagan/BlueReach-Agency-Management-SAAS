@@ -148,28 +148,23 @@ export async function POST(request: Request) {
           const campaignName = campaignData?.name || null;
 
           for (const lead of leads) {
-            // Check if lead has replied using email_reply_count (more reliable than interest_status)
-            const hasReplied = (lead as { email_reply_count?: number }).email_reply_count > 0;
+            // Check if lead has replied using email_reply_count
+            const hasReplied = ((lead as { email_reply_count?: number }).email_reply_count || 0) > 0;
 
-            // Also check interest_status for manually tagged leads
+            // Positive reply = manually tagged as interested/booked/etc (NOT just any reply)
             const positiveStatuses = ["interested", "meeting_booked", "meeting_completed", "closed"];
-            const hasPositiveInterest = positiveStatuses.includes(lead.interest_status || "");
+            const isPositiveReply = positiveStatuses.includes(lead.interest_status || "");
 
-            // Lead is positive if they replied OR are marked as interested
-            const isPositiveReply = hasReplied || hasPositiveInterest;
-
-            // Map to our lead status
+            // Map to our lead status: contacted → replied → meeting → closed_won / closed_lost
             let status: string = "contacted";
-            if (lead.interest_status === "meeting_booked") {
-              status = "booked";
-            } else if (lead.interest_status === "meeting_completed" || lead.interest_status === "closed") {
-              status = "won";
+            if (lead.interest_status === "closed") {
+              status = "closed_won";
             } else if (lead.interest_status === "not_interested" || lead.interest_status === "wrong_person") {
-              status = "not_interested";
+              status = "closed_lost";
+            } else if (lead.interest_status === "meeting_booked" || lead.interest_status === "meeting_completed") {
+              status = "meeting";
             } else if (hasReplied || lead.interest_status === "interested") {
               status = "replied";
-            } else {
-              status = "contacted";
             }
 
             const { data: existingLead } = await supabase
@@ -194,7 +189,14 @@ export async function POST(request: Request) {
                 email_open_count?: number;
                 email_click_count?: number;
                 email_reply_count?: number;
+                payload?: Record<string, string>;
               };
+
+              // Build metadata with payload for personalization variables
+              const metadata: Record<string, unknown> = {};
+              if (instantlyData.payload) {
+                metadata.lead_data = instantlyData.payload;
+              }
 
               const { error } = await supabase.from("leads").insert({
                 campaign_id: localCampaignId,
@@ -214,9 +216,9 @@ export async function POST(request: Request) {
                 instantly_created_at: instantlyData.timestamp_created || null,
                 last_contacted_at: instantlyData.timestamp_last_contact || null,
                 last_step_info: instantlyData.status_summary?.lastStep || null,
-                email_open_count: instantlyData.email_open_count || 0,
-                email_click_count: instantlyData.email_click_count || 0,
                 email_reply_count: instantlyData.email_reply_count || 0,
+                has_replied: hasReplied,
+                metadata: Object.keys(metadata).length > 0 ? metadata : {},
               });
 
               if (error) {

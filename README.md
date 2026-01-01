@@ -88,6 +88,26 @@ BlueReach Agency Management Dashboard is a white-label SaaS platform designed fo
 - Add/edit notes
 - View contact details (email, phone, company)
 
+#### Lead Workflow (`/admin/clients/[clientId]`)
+- **Track Lead Progress**: Follow positive replies through the sales funnel
+- **Workflow States**:
+  - Responded - Lead has been contacted/followed up
+  - Meeting Scheduled - Meeting date and time set
+  - Closed Won - Deal successfully closed
+  - Closed Lost - Deal did not close
+- **Collapsible UI**: Shows summary stats (responded, meetings, won, lost) in header
+- **Quick Actions**: One-click status updates with date/time selection for meetings
+
+#### Client Settings (`/admin/clients/[clientId]/settings`)
+- **Client Logo**: Upload custom logo for each client
+- **Client Details**: Name, website, notes
+- **Internal Notes**: Track target market, TCV, services, and other important info
+
+#### Agency Settings (`/admin/settings`)
+- **Agency Logo**: Upload your agency branding logo
+- **Instantly API Key**: Securely store and manage API credentials
+- **Webhook Configuration**: Set up Instantly webhook secrets
+
 #### Instantly Integration (`/admin/instantly`)
 - **Connection Status**: View API connection health
 - **Campaign Sync**: Import campaigns from Instantly
@@ -303,6 +323,9 @@ Stores all leads from campaigns.
 | `status` | enum | Lead status (see below) |
 | `is_positive_reply` | boolean | Whether reply was positive |
 | `notes` | text | Admin notes |
+| `responded_at` | timestamp | When lead was marked as responded |
+| `meeting_at` | timestamp | Scheduled meeting date/time |
+| `closed_at` | timestamp | When deal was closed |
 | `created_at` | timestamp | Creation timestamp |
 | `updated_at` | timestamp | Last update timestamp |
 
@@ -339,6 +362,14 @@ Application settings (singleton table).
 ## API Reference
 
 ### Admin APIs
+
+#### Settings
+```
+GET  /api/admin/settings           # Get all settings (masked values)
+POST /api/admin/settings           # Update a setting
+DELETE /api/admin/settings?key=x   # Clear a setting
+POST /api/admin/settings/logo      # Upload agency logo
+```
 
 #### Analytics
 ```
@@ -383,6 +414,29 @@ GET  /api/admin/customers/[id]    # Get client
 PUT  /api/admin/customers/[id]    # Update client
 DELETE /api/admin/customers/[id]  # Delete client
 ```
+
+### Client APIs
+
+```
+GET    /api/clients/[clientId]         # Get client details
+PATCH  /api/clients/[clientId]         # Update client (name, website, notes, logo_url)
+GET    /api/clients/[clientId]/leads   # Get leads for client (?positive=true)
+POST   /api/clients/[clientId]/logo    # Upload client logo
+```
+
+### Lead Workflow APIs
+
+```
+PATCH  /api/leads/[leadId]/workflow    # Update lead workflow status
+```
+
+**Actions:**
+- `mark_responded` - Mark lead as responded
+- `schedule_meeting` - Set meeting date/time
+- `close_won` - Mark deal as won
+- `close_lost` - Mark deal as lost
+- `update_notes` - Update workflow notes
+- `revert_status` - Revert to previous status
 
 ### Campaign APIs
 
