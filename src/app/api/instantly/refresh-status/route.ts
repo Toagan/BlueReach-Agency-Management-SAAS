@@ -87,11 +87,13 @@ export async function POST(request: Request) {
           const hasReplied = (instantlyData.email_reply_count || 0) > 0;
 
           // Check interest_status for manually tagged leads
+          // Only these statuses count as "positive" - not just any reply
           const positiveStatuses = ["interested", "meeting_booked", "meeting_completed", "closed"];
           const hasPositiveInterest = positiveStatuses.includes(lead.interest_status || "");
 
-          // Lead is positive if they replied OR are marked as interested
-          const isPositiveReply = hasReplied || hasPositiveInterest;
+          // Lead is positive ONLY if tagged as interested/meeting/closed in Instantly
+          // Just replying doesn't make it positive (could be negative reply)
+          const isPositiveReply = hasPositiveInterest;
 
           // Determine status based on Instantly data
           let newStatus: string | null = null;
