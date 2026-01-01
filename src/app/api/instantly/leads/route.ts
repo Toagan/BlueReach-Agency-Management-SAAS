@@ -180,29 +180,9 @@ export async function POST(request: Request) {
         }
 
         if (existingLead) {
-          // Update existing lead with all fields
-          const updateData: Record<string, unknown> = {
-            instantly_lead_id: lead.id,
-            updated_at: new Date().toISOString(),
-          };
-          if (lead.first_name) updateData.first_name = lead.first_name;
-          if (lead.last_name) updateData.last_name = lead.last_name;
-          if (lead.company_name) updateData.company_name = lead.company_name;
-          if (lead.phone) updateData.phone = lead.phone;
-          if (Object.keys(metadata).length > 0) updateData.metadata = metadata;
-          if (isPositiveReply) updateData.is_positive_reply = true;
-          if (leadStatus) updateData.status = leadStatus;
-
-          const { error } = await supabase
-            .from("leads")
-            .update(updateData)
-            .eq("id", existingLead.id);
-
-          if (error) {
-            failed++;
-          } else {
-            updated++;
-          }
+          // Lead already exists - skip it (don't update existing leads)
+          // This preserves any manual changes made in the database
+          updated++; // Count as "already exists"
         } else {
           // Create new lead with ALL fields
           const { error } = await supabase.from("leads").insert({

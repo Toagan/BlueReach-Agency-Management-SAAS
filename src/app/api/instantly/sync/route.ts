@@ -180,25 +180,9 @@ export async function POST(request: Request) {
               .single();
 
             if (existingLead) {
-              const { error } = await supabase
-                .from("leads")
-                .update({
-                  first_name: lead.first_name || undefined,
-                  last_name: lead.last_name || undefined,
-                  company_name: lead.company_name || undefined,
-                  phone: lead.phone || undefined,
-                  instantly_lead_id: lead.id,
-                  is_positive_reply: isPositiveReply,
-                  status: status,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq("id", existingLead.id);
-
-              if (error) {
-                leadResult.failed++;
-              } else {
-                leadResult.updated++;
-              }
+              // Lead already exists - skip it (don't update existing leads)
+              // This preserves any manual changes made in the database
+              leadResult.updated++; // Count as "already exists"
             } else {
               const { error } = await supabase.from("leads").insert({
                 campaign_id: localCampaignId,
