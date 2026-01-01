@@ -184,6 +184,18 @@ export async function POST(request: Request) {
               // This preserves any manual changes made in the database
               leadResult.updated++; // Count as "already exists"
             } else {
+              // Extract additional Instantly fields
+              const instantlyData = lead as {
+                company_domain?: string;
+                personalization?: string;
+                timestamp_created?: string;
+                timestamp_last_contact?: string;
+                status_summary?: { lastStep?: Record<string, unknown> };
+                email_open_count?: number;
+                email_click_count?: number;
+                email_reply_count?: number;
+              };
+
               const { error } = await supabase.from("leads").insert({
                 campaign_id: localCampaignId,
                 client_id: client_id,
@@ -193,10 +205,18 @@ export async function POST(request: Request) {
                 first_name: lead.first_name || null,
                 last_name: lead.last_name || null,
                 company_name: lead.company_name || null,
+                company_domain: instantlyData.company_domain || null,
                 phone: lead.phone || null,
+                personalization: instantlyData.personalization || null,
                 status: status,
                 is_positive_reply: isPositiveReply,
                 instantly_lead_id: lead.id,
+                instantly_created_at: instantlyData.timestamp_created || null,
+                last_contacted_at: instantlyData.timestamp_last_contact || null,
+                last_step_info: instantlyData.status_summary?.lastStep || null,
+                email_open_count: instantlyData.email_open_count || 0,
+                email_click_count: instantlyData.email_click_count || 0,
+                email_reply_count: instantlyData.email_reply_count || 0,
               });
 
               if (error) {
