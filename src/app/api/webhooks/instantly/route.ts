@@ -1,332 +1,249 @@
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import type { LeadStatus, EmailEventType } from "@/types/database";
-import { fetchEmailsForLead } from "@/lib/instantly/emails";
-
-// Lazy initialization of Supabase client
-let supabase: SupabaseClient | null = null;
+import { createClient } from "@supabase/supabase-js";
+import { headers } from "next/headers";
+import crypto from "crypto";
 
 function getSupabase() {
-  if (!supabase) {
-    supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
+
+// Verify webhook signature from Instantly
+async function verifySignature(payload: string, signature: string | null): Promise<boolean> {
+  if (!signature) return false;
+  
+  const supabase = getSupabase();
+  const { data: setting } = await supabase
+    .from("settings")
+    .select("value")
+    .eq("key", "instantly_webhook_secret")
+    .single();
+    
+  const secret = setting?.value;
+  if (!secret) {
+    console.warn("No webhook secret configured, accepting all webhooks");
+    return true; // Allow webhooks if no secret is configured
   }
-  return supabase;
+  
+  const expectedSignature = crypto
+    .createHmac("sha256", secret)
+    .update(payload)
+    .digest("hex");
+    
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expectedSignature)
+  );
 }
 
 interface InstantlyWebhookPayload {
   event_type: string;
   campaign_id?: string;
-  campaign?: { id?: string; name?: string };
+  lead_email?: string;
   lead?: {
     email?: string;
     first_name?: string;
     last_name?: string;
     company_name?: string;
-    lead_id?: string;
   };
-  email?: string;
+  email?: {
+    subject?: string;
+    body?: string;
+    timestamp?: string;
+    direction?: "sent" | "received";
+  };
   timestamp?: string;
-  subject?: string;
-  link_url?: string;
-  reply_sentiment?: string; // "positive", "negative", "neutral"
-}
-
-interface EventMapping {
-  status: LeadStatus | null;
-  emailEventType: EmailEventType | null;
-  isPositiveReply: boolean;
-}
-
-function mapEvent(eventType: string, sentiment?: string): EventMapping {
-  switch (eventType) {
-    // Email sent events
-    case "email_sent":
-    case "email.sent":
-      return { status: "contacted", emailEventType: "sent", isPositiveReply: false };
-
-    // Email opened
-    case "email_opened":
-    case "email.opened":
-      return { status: "opened", emailEventType: "opened", isPositiveReply: false };
-
-    // Link clicked
-    case "email_clicked":
-    case "email.clicked":
-    case "link_clicked":
-    case "link.clicked":
-      return { status: "clicked", emailEventType: "clicked", isPositiveReply: false };
-
-    // Reply/interest events - POSITIVE
-    case "reply_received":
-    case "reply.received":
-    case "lead_replied":
-      // Check sentiment if available
-      const isPositive = sentiment === "positive" || sentiment === "interested";
-      return {
-        status: "replied",
-        emailEventType: "replied",
-        isPositiveReply: isPositive || eventType.includes("interested")
-      };
-
-    case "lead_interested":
-    case "lead.interested":
-    case "lead_is_marked_as_interested":
-      return { status: "replied", emailEventType: "replied", isPositiveReply: true };
-
-    // Meeting/Booking events - POSITIVE
-    case "meeting_booked":
-    case "lead_meeting_booked":
-    case "lead.meeting_booked":
-      return { status: "booked", emailEventType: null, isPositiveReply: true };
-
-    case "meeting_completed":
-    case "lead_meeting_completed":
-    case "lead.meeting_completed":
-      return { status: "won", emailEventType: null, isPositiveReply: true };
-
-    case "lead_closed":
-    case "lead.closed":
-    case "opportunity_won":
-      return { status: "won", emailEventType: null, isPositiveReply: true };
-
-    // Negative events
-    case "lead_not_interested":
-    case "lead.not_interested":
-    case "lead_is_marked_as_not_interested":
-      return { status: "not_interested", emailEventType: null, isPositiveReply: false };
-
-    case "lead_unsubscribed":
-    case "lead.unsubscribed":
-      return { status: "lost", emailEventType: "unsubscribed", isPositiveReply: false };
-
-    // Bounce events
-    case "email_bounced":
-    case "email.bounced":
-      return { status: null, emailEventType: "bounced", isPositiveReply: false };
-
-    // Events we log but don't change status
-    case "lead_neutral":
-    case "lead.neutral":
-    case "lead_out_of_office":
-    case "lead_wrong_person":
-    case "campaign_completed":
-    case "email_account_error":
-      return { status: null, emailEventType: null, isPositiveReply: false };
-
-    default:
-      console.log("Unknown event type:", eventType);
-      return { status: null, emailEventType: null, isPositiveReply: false };
-  }
+  data?: Record<string, unknown>;
 }
 
 export async function POST(request: Request) {
-  // Validate webhook secret (check both header and database)
-  const webhookSecret = request.headers.get("x-webhook-secret");
-  const supabaseClient = getSupabase();
-
-  // Get secret from database if not in env
-  let expectedSecret = process.env.INSTANTLY_WEBHOOK_SECRET;
-  if (!expectedSecret) {
-    const { data: setting } = await supabaseClient
-      .from("settings")
-      .select("value")
-      .eq("key", "instantly_webhook_secret")
-      .single();
-    expectedSecret = setting?.value;
-  }
-
-  if (expectedSecret && webhookSecret !== expectedSecret) {
-    console.error("Invalid webhook secret");
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
-    const payload: InstantlyWebhookPayload = await request.json();
-    console.log("Webhook received:", payload.event_type);
-
-    // Extract campaign ID (Instantly may send it in different formats)
-    const campaignId = payload.campaign_id || payload.campaign?.id;
-
-    // Extract lead data
-    const leadEmail = payload.lead?.email || payload.email;
-    const leadFirstName = payload.lead?.first_name;
-    const leadLastName = payload.lead?.last_name;
-    const leadCompany = payload.lead?.company_name;
-    const leadId = payload.lead?.lead_id;
-
-    // Validate required fields
-    if (!campaignId || !leadEmail) {
-      console.log("Webhook payload missing fields:", JSON.stringify(payload, null, 2));
-      return NextResponse.json(
-        { error: "Missing required fields: campaign_id or email", received: { campaignId, leadEmail } },
-        { status: 400 }
-      );
+    const headersList = await headers();
+    const signature = headersList.get("x-instantly-signature");
+    const rawBody = await request.text();
+    
+    // Verify signature if configured
+    const isValid = await verifySignature(rawBody, signature);
+    if (!isValid) {
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
-
-    // Map the event
-    const eventMapping = mapEvent(payload.event_type, payload.reply_sentiment);
-
-    // Find the campaign by Instantly campaign ID
-    const { data: campaign, error: campaignError } = await supabaseClient
-      .from("campaigns")
-      .select("id")
-      .eq("instantly_campaign_id", campaignId)
-      .single();
-
-    if (campaignError || !campaign) {
-      console.error("Campaign not found:", campaignId);
-      return NextResponse.json(
-        { error: "Campaign not found", campaignId },
-        { status: 404 }
-      );
-    }
-
-    // Check if lead already exists
-    const { data: existingLead } = await supabaseClient
-      .from("leads")
-      .select("id, status, is_positive_reply")
-      .eq("campaign_id", campaign.id)
-      .eq("email", leadEmail)
-      .single();
-
-    let leadDbId: string;
-
-    if (existingLead) {
-      leadDbId = existingLead.id;
-
-      // Update lead if status should change
-      if (eventMapping.status) {
-        const statusOrder: LeadStatus[] = ["contacted", "opened", "clicked", "replied", "booked", "won", "lost", "not_interested"];
-        const currentIndex = statusOrder.indexOf(existingLead.status);
-        const newIndex = statusOrder.indexOf(eventMapping.status);
-
-        // Only upgrade status (except for lost/not_interested which override)
-        const shouldUpdate = eventMapping.status === "lost" ||
-          eventMapping.status === "not_interested" ||
-          newIndex > currentIndex;
-
-        if (shouldUpdate) {
-          const updateData: Record<string, unknown> = {
-            status: eventMapping.status,
-            updated_at: new Date().toISOString(),
-          };
-
-          // Set positive reply flag if this is a positive reply
-          if (eventMapping.isPositiveReply && !existingLead.is_positive_reply) {
-            updateData.is_positive_reply = true;
-          }
-
-          // Update other fields if provided
-          if (leadFirstName) updateData.first_name = leadFirstName;
-          if (leadLastName) updateData.last_name = leadLastName;
-          if (leadCompany) updateData.company_name = leadCompany;
-          if (leadId) updateData.instantly_lead_id = leadId;
-
-          await supabaseClient
-            .from("leads")
-            .update(updateData)
-            .eq("id", existingLead.id);
-        }
-      }
-    } else {
-      // Create new lead
-      const { data: newLead, error: insertError } = await supabaseClient
-        .from("leads")
-        .insert({
-          campaign_id: campaign.id,
-          email: leadEmail,
-          first_name: leadFirstName || null,
-          last_name: leadLastName || null,
-          company_name: leadCompany || null,
-          status: eventMapping.status || "contacted",
-          is_positive_reply: eventMapping.isPositiveReply,
-          instantly_lead_id: leadId || null,
-        })
-        .select()
+    
+    const payload: InstantlyWebhookPayload = JSON.parse(rawBody);
+    const supabase = getSupabase();
+    
+    console.log("Received webhook:", payload.event_type, payload);
+    
+    // Find the campaign and lead
+    let campaignId: string | null = null;
+    let leadId: string | null = null;
+    const leadEmail = payload.lead_email || payload.lead?.email;
+    
+    if (payload.campaign_id) {
+      const { data: campaign } = await supabase
+        .from("campaigns")
+        .select("id, client_id")
+        .eq("instantly_campaign_id", payload.campaign_id)
         .single();
-
-      if (insertError) {
-        console.error("Error creating lead:", insertError);
-        return NextResponse.json(
-          { error: "Failed to create lead" },
-          { status: 500 }
-        );
-      }
-
-      leadDbId = newLead.id;
-    }
-
-    // Log to email_events table if applicable
-    if (eventMapping.emailEventType) {
-      await supabaseClient.from("email_events").insert({
-        lead_id: leadDbId,
-        campaign_id: campaign.id,
-        event_type: eventMapping.emailEventType,
-        email_subject: payload.subject || null,
-        link_clicked: payload.link_url || null,
-        timestamp: payload.timestamp || new Date().toISOString(),
-        metadata: {
-          original_event: payload.event_type,
-          sentiment: payload.reply_sentiment,
-        },
-      });
-    }
-
-    // If this is a positive reply, sync the email thread from Instantly
-    if (eventMapping.isPositiveReply && leadEmail) {
-      try {
-        console.log(`Syncing emails for positive reply from ${leadEmail}`);
-        const instantlyEmails = await fetchEmailsForLead(leadEmail);
-
-        if (instantlyEmails && instantlyEmails.length > 0) {
-          const emailsToUpsert = instantlyEmails.map((email) => ({
-            lead_id: leadDbId,
-            campaign_id: campaign.id,
-            provider_email_id: email.id,
-            provider_thread_id: email.thread_id || null,
-            direction: email.is_reply ? "inbound" as const : "outbound" as const,
-            from_email: email.from_address_email,
-            to_email: email.to_address_email_list?.[0] || leadEmail,
-            cc_emails: email.cc_address_email_list || null,
-            bcc_emails: email.bcc_address_email_list || null,
-            subject: email.subject || null,
-            body_text: email.body?.text || null,
-            body_html: email.body?.html || null,
-            sent_at: email.timestamp_email || email.timestamp_created || new Date().toISOString(),
-            is_auto_reply: false,
-          }));
-
-          await supabaseClient
-            .from("lead_emails")
-            .upsert(emailsToUpsert, { onConflict: "provider_email_id" });
-
-          console.log(`Synced ${emailsToUpsert.length} emails for ${leadEmail}`);
+        
+      if (campaign) {
+        campaignId = campaign.id;
+        
+        // Find the lead
+        if (leadEmail) {
+          const { data: lead } = await supabase
+            .from("leads")
+            .select("id")
+            .eq("campaign_id", campaignId)
+            .eq("email", leadEmail)
+            .single();
+            
+          if (lead) {
+            leadId = lead.id;
+          }
         }
-      } catch (emailSyncError) {
-        // Don't fail the webhook if email sync fails
-        console.error("Failed to sync emails:", emailSyncError);
       }
     }
-
-    return NextResponse.json({
-      success: true,
-      action: existingLead ? "updated" : "created",
-      lead_id: leadDbId,
-      is_positive_reply: eventMapping.isPositiveReply,
+    
+    // Handle different event types
+    switch (payload.event_type) {
+      case "email_sent":
+        if (leadId) {
+          await supabase.from("leads").update({
+            status: "contacted",
+            last_contacted_at: payload.timestamp || new Date().toISOString(),
+          }).eq("id", leadId);
+          
+          // Store the email in lead_emails if email data is provided
+          if (payload.email) {
+            await supabase.from("lead_emails").insert({
+              lead_id: leadId,
+              direction: "sent",
+              subject: payload.email.subject || "Outreach Email",
+              body: payload.email.body || "",
+              sent_at: payload.email.timestamp || payload.timestamp,
+            });
+          }
+        }
+        break;
+        
+      case "email_opened":
+        if (leadId) {
+          await supabase.from("leads").update({
+            status: "contacted",
+            // Increment open count if we had that field
+          }).eq("id", leadId);
+        }
+        break;
+        
+      case "link_clicked":
+        if (leadId) {
+          // Could add clicked_at timestamp
+          await supabase.from("leads").update({
+            // status stays as contacted
+          }).eq("id", leadId);
+        }
+        break;
+        
+      case "reply_received":
+      case "lead_replied":
+        if (leadId) {
+          await supabase.from("leads").update({
+            status: "replied",
+            has_replied: true,
+            email_reply_count: supabase.rpc ? undefined : 1, // Increment would need RPC
+          }).eq("id", leadId);
+          
+          // Store the reply email
+          if (payload.email) {
+            await supabase.from("lead_emails").insert({
+              lead_id: leadId,
+              direction: "received",
+              subject: payload.email.subject || "Re: Outreach",
+              body: payload.email.body || "",
+              sent_at: payload.email.timestamp || payload.timestamp,
+            });
+          }
+        }
+        break;
+        
+      case "lead_interested":
+      case "positive_reply":
+        if (leadId) {
+          await supabase.from("leads").update({
+            status: "replied",
+            is_positive_reply: true,
+            has_replied: true,
+          }).eq("id", leadId);
+        }
+        break;
+        
+      case "lead_not_interested":
+      case "negative_reply":
+        if (leadId) {
+          await supabase.from("leads").update({
+            status: "closed_lost",
+            has_replied: true,
+          }).eq("id", leadId);
+        }
+        break;
+        
+      case "meeting_booked":
+        if (leadId) {
+          await supabase.from("leads").update({
+            status: "meeting",
+            is_positive_reply: true,
+            meeting_at: payload.timestamp || null,
+          }).eq("id", leadId);
+        }
+        break;
+        
+      case "lead_bounced":
+        // Could mark lead as bounced
+        break;
+        
+      default:
+        console.log("Unhandled event type:", payload.event_type);
+    }
+    
+    // Log the webhook event
+    await supabase.from("webhook_logs").insert({
+      source: "instantly",
+      event_type: payload.event_type,
+      payload: payload,
+      processed_at: new Date().toISOString(),
+    }).catch(() => {
+      // webhook_logs table might not exist, that's ok
     });
+    
+    return NextResponse.json({ success: true, event: payload.event_type });
   } catch (error) {
     console.error("Webhook error:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: error instanceof Error ? error.message : "Webhook processing failed" },
       { status: 500 }
     );
   }
 }
 
-// Health check endpoint
+// GET endpoint to check webhook status
 export async function GET() {
-  return NextResponse.json({ status: "ok", service: "instantly-webhook" });
+  return NextResponse.json({
+    status: "active",
+    endpoint: "/api/webhooks/instantly",
+    supported_events: [
+      "email_sent",
+      "email_opened",
+      "link_clicked",
+      "reply_received",
+      "lead_replied",
+      "lead_interested",
+      "positive_reply",
+      "lead_not_interested",
+      "negative_reply",
+      "meeting_booked",
+      "lead_bounced",
+    ],
+  });
 }

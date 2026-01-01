@@ -229,6 +229,7 @@ export default function ClientSettingsPage() {
                   width={96}
                   height={96}
                   className="object-contain w-full h-full"
+                  unoptimized={logoPreview.startsWith("data:")}
                 />
               ) : (
                 <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">

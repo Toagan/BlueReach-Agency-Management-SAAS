@@ -48,6 +48,7 @@ export async function GET() {
       return {
         id: client.id,
         name: client.name,
+        logo_url: client.logo_url || null,
         is_active: true, // All clients are active by default
         created_at: client.created_at,
         campaigns_count: campaigns.length,

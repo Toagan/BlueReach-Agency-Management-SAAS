@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Users,
   TrendingUp,
@@ -50,6 +51,7 @@ interface Customer {
   id: string;
   name: string;
   email?: string;
+  logo_url?: string;
   is_active: boolean;
   created_at: string;
   campaigns_count: number;
@@ -484,10 +486,21 @@ function CustomerRow({ customer, onRefresh }: { customer: Customer; onRefresh: (
     <div className="flex items-center justify-between px-6 py-4 hover:bg-accent transition-colors">
       <Link href={`/admin/clients/${customer.id}`} className="flex-1">
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-            <span className="text-sm font-medium text-muted-foreground">
-              {customer.name.charAt(0).toUpperCase()}
-            </span>
+          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+            {customer.logo_url ? (
+              <Image
+                src={customer.logo_url}
+                alt={customer.name}
+                width={40}
+                height={40}
+                className="object-cover w-full h-full"
+                unoptimized={customer.logo_url.startsWith("data:")}
+              />
+            ) : (
+              <span className="text-sm font-medium text-muted-foreground">
+                {customer.name.charAt(0).toUpperCase()}
+              </span>
+            )}
           </div>
           <div>
             <p className="font-medium text-foreground">{customer.name}</p>

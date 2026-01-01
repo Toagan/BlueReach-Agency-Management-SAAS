@@ -213,6 +213,7 @@ export default function SettingsPage() {
                   width={96}
                   height={96}
                   className="object-contain w-full h-full"
+                  unoptimized={logoPreview.startsWith("data:")}
                 />
               ) : (
                 <Upload className="h-8 w-8 text-gray-400" />
