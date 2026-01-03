@@ -5,6 +5,7 @@ import { getCampaigns } from "@/lib/queries/campaigns";
 import { getClientStats } from "@/lib/queries/stats";
 import { StatsCards } from "@/components/layout/stats-cards";
 import { ClientLeadsView } from "./client-leads-view";
+import { ClientInfoTooltip } from "./client-info-tooltip";
 
 interface PageProps {
   params: Promise<{ clientId: string }>;
@@ -43,10 +44,21 @@ export default async function ClientDashboardPage({ params }: PageProps) {
     .eq("campaigns.client_id", clientId)
     .order("updated_at", { ascending: false });
 
+  // Check if client has intelligence data to show
+  const hasIntelligence = client.tam || (client.verticals && client.verticals.length > 0);
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">{client.name}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">{client.name}</h1>
+          {hasIntelligence && (
+            <ClientInfoTooltip
+              tam={client.tam}
+              verticals={client.verticals}
+            />
+          )}
+        </div>
         <p className="text-gray-500">
           {campaigns.length} campaign{campaigns.length !== 1 ? "s" : ""} active
         </p>

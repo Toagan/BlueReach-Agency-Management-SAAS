@@ -57,7 +57,7 @@ export async function POST(
         }
         updateData = {
           meeting_at: body.meeting_at,
-          status: "meeting",
+          status: "booked",
         };
         break;
 
@@ -65,7 +65,7 @@ export async function POST(
         // Mark as closed won
         updateData = {
           closed_at: now,
-          status: "closed_won",
+          status: "won",
         };
         break;
 
@@ -73,7 +73,7 @@ export async function POST(
         // Mark as closed lost
         updateData = {
           closed_at: now,
-          status: "closed_lost",
+          status: "lost",
         };
         break;
 
@@ -88,7 +88,7 @@ export async function POST(
         // Revert to previous status (for mistakes)
         // Determine appropriate status based on what data exists
         if (lead.meeting_at) {
-          updateData = { status: "meeting", closed_at: null };
+          updateData = { status: "booked", closed_at: null };
         } else if (lead.responded_at || lead.has_replied) {
           updateData = { status: "replied", meeting_at: null, closed_at: null };
         } else {

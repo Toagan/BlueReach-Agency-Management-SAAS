@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -17,6 +18,31 @@ interface ClientData {
   logo_url?: string;
   website?: string;
   notes?: string;
+  product_service?: string;
+  acv?: number;
+  tcv?: number;
+  verticals?: string[];
+  tam?: number;
+  target_daily_emails?: number;
+}
+
+interface ClientUser {
+  user_id: string;
+  role: string;
+  created_at: string;
+  profiles: {
+    id: string;
+    email: string;
+    full_name: string | null;
+  };
+}
+
+interface PendingInvitation {
+  id: string;
+  email: string;
+  role: string;
+  created_at: string;
+  expires_at: string;
 }
 
 export default function ClientSettingsPage() {
@@ -37,9 +63,129 @@ export default function ClientSettingsPage() {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Client Intelligence fields
+  const [productService, setProductService] = useState("");
+  const [acv, setAcv] = useState("");
+  const [tcv, setTcv] = useState("");
+  const [verticals, setVerticals] = useState("");
+  const [tam, setTam] = useState("");
+  const [targetDailyEmails, setTargetDailyEmails] = useState("");
+
+  // Team/Invitation state
+  const [clientUsers, setClientUsers] = useState<ClientUser[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null);
+
   useEffect(() => {
     fetchClient();
+    fetchTeamMembers();
   }, [clientId]);
+
+  const fetchTeamMembers = async () => {
+    try {
+      const res = await fetch(`/api/clients/${clientId}/invitations`);
+      if (res.ok) {
+        const data = await res.json();
+        setClientUsers(data.users || []);
+        setPendingInvitations(data.pendingInvitations || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch team members:", err);
+    }
+  };
+
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+
+    setInviting(true);
+    setInviteError(null);
+    setInviteSuccess(null);
+    setInviteLink(null);
+
+    try {
+      const res = await fetch(`/api/clients/${clientId}/invitations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: inviteEmail.trim(), role: "owner" }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setInviteSuccess(data.message || "Invitation created!");
+        setInviteEmail("");
+        fetchTeamMembers();
+
+        // If email wasn't sent, show the login link
+        if (data.loginUrl) {
+          setInviteLink(data.loginUrl);
+        } else {
+          setTimeout(() => setInviteSuccess(null), 5000);
+        }
+      } else {
+        setInviteError(data.error || "Failed to send invitation");
+      }
+    } catch (err) {
+      setInviteError("Failed to send invitation");
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const copyInviteLink = () => {
+    if (inviteLink) {
+      navigator.clipboard.writeText(inviteLink);
+      setInviteSuccess("Link copied to clipboard!");
+      setTimeout(() => {
+        setInviteSuccess(null);
+      }, 3000);
+    }
+  };
+
+  const dismissInviteLink = () => {
+    setInviteLink(null);
+    setInviteSuccess(null);
+  };
+
+  const handleRemoveUser = async (userId: string) => {
+    if (!confirm("Remove this user from the client?")) return;
+
+    setRemovingUserId(userId);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/invitations?userId=${userId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        fetchTeamMembers();
+      }
+    } catch (err) {
+      console.error("Failed to remove user:", err);
+    } finally {
+      setRemovingUserId(null);
+    }
+  };
+
+  const handleCancelInvitation = async (invitationId: string) => {
+    try {
+      const res = await fetch(`/api/clients/${clientId}/invitations?invitationId=${invitationId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        fetchTeamMembers();
+      }
+    } catch (err) {
+      console.error("Failed to cancel invitation:", err);
+    }
+  };
 
   const fetchClient = async () => {
     try {
@@ -54,6 +200,13 @@ export default function ClientSettingsPage() {
         if (clientData.logo_url) {
           setLogoPreview(clientData.logo_url);
         }
+        // Load Client Intelligence fields
+        setProductService(clientData.product_service || "");
+        setAcv(clientData.acv ? String(clientData.acv) : "");
+        setTcv(clientData.tcv ? String(clientData.tcv) : "");
+        setVerticals(clientData.verticals ? clientData.verticals.join(", ") : "");
+        setTam(clientData.tam ? String(clientData.tam) : "");
+        setTargetDailyEmails(clientData.target_daily_emails ? String(clientData.target_daily_emails) : "");
       } else {
         setError("Failed to load client");
       }
@@ -133,6 +286,12 @@ export default function ClientSettingsPage() {
     setSuccess(null);
 
     try {
+      // Parse verticals from comma-separated string
+      const verticalsArray = verticals
+        .split(",")
+        .map((v) => v.trim())
+        .filter((v) => v.length > 0);
+
       const res = await fetch(`/api/clients/${clientId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -140,6 +299,12 @@ export default function ClientSettingsPage() {
           name: name.trim(),
           website: website.trim() || null,
           notes: notes.trim() || null,
+          product_service: productService.trim() || null,
+          acv: acv ? parseFloat(acv) : null,
+          tcv: tcv ? parseFloat(tcv) : null,
+          verticals: verticalsArray.length > 0 ? verticalsArray : null,
+          tam: tam ? parseInt(tam, 10) : null,
+          target_daily_emails: targetDailyEmails ? parseInt(targetDailyEmails, 10) : null,
         }),
       });
 
@@ -319,6 +484,275 @@ export default function ClientSettingsPage() {
               rows={4}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Client Intelligence */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Client Intelligence</CardTitle>
+          <CardDescription>
+            Business details for campaign planning and email recommendations
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="productService">Product/Service</Label>
+            <Textarea
+              id="productService"
+              value={productService}
+              onChange={(e) => setProductService(e.target.value)}
+              placeholder="Describe the product or service being sold..."
+              rows={3}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="acv">ACV (Annual Contract Value)</Label>
+              <Input
+                id="acv"
+                type="number"
+                value={acv}
+                onChange={(e) => setAcv(e.target.value)}
+                placeholder="e.g., 50000"
+              />
+              <p className="text-xs text-muted-foreground">Average annual value per deal</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tcv">TCV (Total Contract Value)</Label>
+              <Input
+                id="tcv"
+                type="number"
+                value={tcv}
+                onChange={(e) => setTcv(e.target.value)}
+                placeholder="e.g., 150000"
+              />
+              <p className="text-xs text-muted-foreground">Total value over contract lifetime</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="verticals">Target Verticals</Label>
+            <Input
+              id="verticals"
+              value={verticals}
+              onChange={(e) => setVerticals(e.target.value)}
+              placeholder="e.g., SaaS, Healthcare, FinTech"
+            />
+            <p className="text-xs text-muted-foreground">Comma-separated list of industries</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="tam">TAM (Total Addressable Market)</Label>
+              <Input
+                id="tam"
+                type="number"
+                value={tam}
+                onChange={(e) => setTam(e.target.value)}
+                placeholder="e.g., 5000"
+              />
+              <p className="text-xs text-muted-foreground">Total number of potential leads</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="targetDailyEmails">Target Daily Emails</Label>
+              <Input
+                id="targetDailyEmails"
+                type="number"
+                value={targetDailyEmails}
+                onChange={(e) => setTargetDailyEmails(e.target.value)}
+                placeholder="e.g., 100"
+              />
+              <p className="text-xs text-muted-foreground">Recommended daily send volume</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Team Access */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Team Access
+          </CardTitle>
+          <CardDescription>
+            Invite client owners to access their dashboard
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Invite Form */}
+          <form onSubmit={handleInvite} className="space-y-4">
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <Input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="email@example.com"
+                  disabled={inviting}
+                />
+              </div>
+              <Button type="submit" disabled={inviting || !inviteEmail.trim()}>
+                {inviting ? (
+                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <UserPlus className="h-4 w-4 mr-2" />
+                )}
+                Invite
+              </Button>
+            </div>
+
+            {inviteError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+                <AlertCircle className="h-4 w-4" />
+                {inviteError}
+              </div>
+            )}
+
+            {inviteSuccess && (
+              <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+                <Check className="h-4 w-4" />
+                {inviteSuccess}
+              </div>
+            )}
+
+            {inviteLink && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2">
+                    <Mail className="h-5 w-5 text-blue-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-blue-800">Share this link with the user</p>
+                      <p className="text-xs text-blue-600 mt-1">
+                        Copy and send this link via email, Slack, or any messaging app.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={dismissInviteLink}
+                    className="text-blue-600 hover:text-blue-800 hover:bg-blue-100 -mr-2 -mt-2"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={inviteLink}
+                    readOnly
+                    className="text-xs bg-white font-mono"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={copyInviteLink}
+                    className="shrink-0"
+                  >
+                    Copy Link
+                  </Button>
+                </div>
+              </div>
+            )}
+          </form>
+
+          {/* Current Team Members */}
+          {clientUsers.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-muted-foreground">Active Members</h4>
+              <div className="space-y-2">
+                {clientUsers.map((cu) => (
+                  <div
+                    key={cu.user_id}
+                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                        <span className="text-sm font-medium text-primary">
+                          {cu.profiles?.email?.charAt(0).toUpperCase() || "?"}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">
+                          {cu.profiles?.full_name || cu.profiles?.email || "Unknown"}
+                        </p>
+                        {cu.profiles?.full_name && cu.profiles?.email && (
+                          <p className="text-xs text-muted-foreground">{cu.profiles.email}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">{cu.role || "owner"}</Badge>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleRemoveUser(cu.user_id)}
+                        disabled={removingUserId === cu.user_id}
+                        className="text-muted-foreground hover:text-red-600"
+                      >
+                        {removingUserId === cu.user_id ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <X className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Pending Invitations */}
+          {pendingInvitations.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-muted-foreground">Pending Invitations</h4>
+              <div className="space-y-2">
+                {pendingInvitations.map((inv) => (
+                  <div
+                    key={inv.id}
+                    className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
+                        <Mail className="h-4 w-4 text-amber-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{inv.email}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Expires: {new Date(inv.expires_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-amber-600 border-amber-300">
+                        Pending
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleCancelInvitation(inv.id)}
+                        className="text-muted-foreground hover:text-red-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {clientUsers.length === 0 && pendingInvitations.length === 0 && (
+            <div className="text-center py-6 text-muted-foreground">
+              <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No team members yet</p>
+              <p className="text-xs mt-1">Invite client owners to give them access to their dashboard</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

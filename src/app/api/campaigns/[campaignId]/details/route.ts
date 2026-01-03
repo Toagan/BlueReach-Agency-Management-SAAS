@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getCampaignAnalytics, getInstantlyClient } from "@/lib/instantly";
+import { getCampaignAnalytics, getInstantlyClient, fetchInstantlyCampaign } from "@/lib/instantly";
 
 function getSupabase() {
   return createClient(
@@ -36,8 +36,33 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Check if Instantly API is configured
     const instantlyClient = getInstantlyClient();
     let analytics = null;
+    let updatedCampaign = campaign;
 
     if (instantlyClient.isConfigured() && campaign.instantly_campaign_id) {
+      try {
+        // Fetch campaign status from Instantly and sync it
+        const instantlyCampaign = await fetchInstantlyCampaign(campaign.instantly_campaign_id);
+        // Instantly API returns status as number: 1 = active, 0 = paused
+        const statusValue = instantlyCampaign.status;
+        const isActive = statusValue === 1 || statusValue === "active";
+
+        // Update local DB if status changed
+        if (campaign.is_active !== isActive) {
+          const { data: updated } = await supabase
+            .from("campaigns")
+            .update({ is_active: isActive })
+            .eq("id", campaignId)
+            .select()
+            .single();
+
+          if (updated) {
+            updatedCampaign = updated;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch Instantly campaign status:", e);
+      }
+
       try {
         const analyticsData = await getCampaignAnalytics({
           id: campaign.instantly_campaign_id,
@@ -72,7 +97,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       }
     }
 
-    return NextResponse.json({ campaign, analytics });
+    return NextResponse.json({ campaign: updatedCampaign, analytics });
   } catch (error) {
     console.error("Error fetching campaign details:", error);
     return NextResponse.json(

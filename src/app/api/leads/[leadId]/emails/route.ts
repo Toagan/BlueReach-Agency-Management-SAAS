@@ -72,7 +72,7 @@ export async function POST(
       );
     }
 
-    // Get lead info
+    // Get lead info with campaign's Instantly ID
     const { data: lead, error: leadError } = await supabase
       .from("leads")
       .select("id, email, campaign_id, campaigns(instantly_campaign_id)")
@@ -83,8 +83,13 @@ export async function POST(
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
-    // Fetch emails from Instantly
-    const instantlyEmails = await fetchEmailsForLead(lead.email);
+    // Get the Instantly campaign ID from the joined data
+    const instantlyCampaignId = (lead.campaigns as { instantly_campaign_id: string | null } | null)?.instantly_campaign_id;
+
+    console.log(`[Email Sync] Lead: ${lead.email}, Instantly Campaign: ${instantlyCampaignId}`);
+
+    // Fetch emails from Instantly - pass campaign ID for more accurate results
+    const instantlyEmails = await fetchEmailsForLead(lead.email, instantlyCampaignId || undefined);
 
     let imported = 0;
     let skipped = 0;

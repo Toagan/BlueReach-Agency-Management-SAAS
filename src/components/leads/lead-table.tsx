@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { StickyNote } from "lucide-react";
 import { LeadDetailPanel } from "./lead-detail-panel";
 import type { Lead, LeadStatus } from "@/types/database";
 
@@ -63,6 +64,7 @@ export function LeadTable({ leads, onStatusChange, onNotesChange }: LeadTablePro
               <TableHead>Email</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Notes</TableHead>
               <TableHead>Last Updated</TableHead>
               <TableHead className="w-[100px]">Actions</TableHead>
             </TableRow>
@@ -70,7 +72,7 @@ export function LeadTable({ leads, onStatusChange, onNotesChange }: LeadTablePro
           <TableBody>
             {leads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-gray-500 py-8">
+                <TableCell colSpan={6} className="text-center text-gray-500 py-8">
                   No leads yet
                 </TableCell>
               </TableRow>
@@ -87,6 +89,18 @@ export function LeadTable({ leads, onStatusChange, onNotesChange }: LeadTablePro
                     <Badge className={statusColors[lead.status]}>
                       {lead.status}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="max-w-[200px]">
+                    {lead.notes ? (
+                      <div className="flex items-start gap-1.5">
+                        <StickyNote className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        <span className="text-sm text-muted-foreground line-clamp-2" title={lead.notes}>
+                          {lead.notes}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">-</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     {new Date(lead.updated_at).toLocaleDateString()}

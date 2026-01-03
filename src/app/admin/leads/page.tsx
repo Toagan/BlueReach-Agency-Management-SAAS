@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminLeadsView } from "./admin-leads-view";
 
 interface PageProps {
@@ -66,28 +65,26 @@ export default async function AdminLeadsPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">All Leads</h1>
+      <div>
+        <h1 className="text-2xl font-bold">All Leads</h1>
+        <p className="text-muted-foreground mt-1">
+          Manage and track all leads across your campaigns
+        </p>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Lead Management</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AdminLeadsView
-            leads={leads || []}
-            clients={clients || []}
-            totalCount={count || 0}
-            totalLeads={totalLeads || 0}
-            positiveCount={positiveCount || 0}
-            repliedCount={repliedCount || 0}
-            currentPage={page}
-            pageSize={PAGE_SIZE}
-            initialStatus={params.status}
-            initialClient={params.client}
-            initialPositive={params.positive === "true"}
-          />
-        </CardContent>
-      </Card>
+      <AdminLeadsView
+        leads={leads || []}
+        clients={clients || []}
+        totalCount={count || 0}
+        totalLeads={totalLeads || 0}
+        positiveCount={positiveCount || 0}
+        repliedCount={repliedCount || 0}
+        currentPage={page}
+        pageSize={PAGE_SIZE}
+        initialStatus={params.status}
+        initialClient={params.client}
+        initialPositive={params.positive === "true"}
+      />
     </div>
   );
 }

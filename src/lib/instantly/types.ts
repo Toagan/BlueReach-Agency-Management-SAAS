@@ -45,7 +45,8 @@ export interface InstantlySequence {
 export interface InstantlyCampaign {
   id: string;
   name: string;
-  status: "active" | "paused" | "completed" | "draft";
+  // Status can be numeric (1=active, 0=paused) or string depending on API version
+  status: number | "active" | "paused" | "completed" | "draft";
   created_at: string;
   updated_at?: string;
   leads_count?: number;
@@ -64,6 +65,42 @@ export interface InstantlyCampaignDetails extends InstantlyCampaign {
   stop_on_reply?: boolean;
   link_tracking?: boolean;
   open_tracking?: boolean;
+}
+
+// Campaign Schedule for creation
+export interface InstantlyCampaignSchedule {
+  name?: string;
+  timing?: {
+    from: string; // e.g., "09:00"
+    to: string;   // e.g., "17:00"
+  };
+  days?: {
+    sunday?: boolean;
+    monday?: boolean;
+    tuesday?: boolean;
+    wednesday?: boolean;
+    thursday?: boolean;
+    friday?: boolean;
+    saturday?: boolean;
+  };
+  timezone?: string; // e.g., "Europe/Berlin"
+}
+
+// Campaign Creation Payload
+export interface InstantlyCampaignCreatePayload {
+  name: string;
+  campaign_schedule: {
+    schedules: InstantlyCampaignSchedule[];
+  };
+  // Optional fields
+  sequences?: InstantlySequence[];
+  email_gap?: number;        // Minutes between emails
+  daily_limit?: number;      // Max emails per day
+  stop_on_reply?: boolean;
+  link_tracking?: boolean;
+  open_tracking?: boolean;
+  text_only?: boolean;
+  email_list?: string[];     // Email accounts to use
 }
 
 export interface InstantlyCampaignAnalytics {

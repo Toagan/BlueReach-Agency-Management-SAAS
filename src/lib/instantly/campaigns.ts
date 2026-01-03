@@ -6,6 +6,7 @@ import type {
   InstantlyCampaignDetails,
   InstantlyCampaignAnalytics,
   InstantlyCampaignDailyAnalytics,
+  InstantlyCampaignCreatePayload,
 } from "./types";
 
 interface CampaignsListResponse {
@@ -103,4 +104,61 @@ export async function getCampaignDailyAnalytics(params?: {
     return response.daily || [];
   }
   return [];
+}
+
+// Create a new campaign in Instantly
+export async function createInstantlyCampaign(
+  payload: InstantlyCampaignCreatePayload
+): Promise<InstantlyCampaign> {
+  const client = getInstantlyClient();
+  return client.post<InstantlyCampaign>("/campaigns", payload);
+}
+
+// Create campaign with sensible defaults
+export async function createInstantlyCampaignWithDefaults(
+  name: string,
+  options?: {
+    timezone?: string;
+    emailAccounts?: string[];
+    dailyLimit?: number;
+    stopOnReply?: boolean;
+  }
+): Promise<InstantlyCampaign> {
+  const payload: InstantlyCampaignCreatePayload = {
+    name,
+    campaign_schedule: {
+      schedules: [
+        {
+          name: "Default Schedule",
+          timing: {
+            from: "09:00",
+            to: "17:00",
+          },
+          days: {
+            monday: true,
+            tuesday: true,
+            wednesday: true,
+            thursday: true,
+            friday: true,
+            saturday: false,
+            sunday: false,
+          },
+          timezone: options?.timezone || "Europe/Berlin",
+        },
+      ],
+    },
+    daily_limit: options?.dailyLimit,
+    stop_on_reply: options?.stopOnReply ?? true,
+    email_list: options?.emailAccounts,
+  };
+
+  return createInstantlyCampaign(payload);
+}
+
+// Delete a campaign from Instantly
+export async function deleteInstantlyCampaign(
+  campaignId: string
+): Promise<{ success: boolean }> {
+  const client = getInstantlyClient();
+  return client.delete<{ success: boolean }>(`/campaigns/${campaignId}`);
 }

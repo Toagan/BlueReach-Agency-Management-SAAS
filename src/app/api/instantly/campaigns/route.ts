@@ -4,7 +4,9 @@ import {
   fetchAllInstantlyCampaigns,
   getCampaignAnalytics,
   getInstantlyClient,
+  createInstantlyCampaignWithDefaults,
 } from "@/lib/instantly";
+import type { InstantlyCampaignCreatePayload } from "@/lib/instantly";
 
 function getSupabase() {
   return createClient(
@@ -118,6 +120,90 @@ export async function POST(request: Request) {
     console.error("Error syncing campaigns:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to sync campaigns" },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT - Create a new campaign in Instantly and optionally link to local client
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const {
+      name,
+      client_id,
+      timezone,
+      email_accounts,
+      daily_limit,
+      stop_on_reply,
+      auto_link = true, // Automatically create local campaign record
+    } = body as {
+      name: string;
+      client_id?: string;
+      timezone?: string;
+      email_accounts?: string[];
+      daily_limit?: number;
+      stop_on_reply?: boolean;
+      auto_link?: boolean;
+    };
+
+    if (!name) {
+      return NextResponse.json(
+        { error: "Campaign name is required" },
+        { status: 400 }
+      );
+    }
+
+    const client = getInstantlyClient();
+    if (!client.isConfigured()) {
+      return NextResponse.json(
+        { error: "Instantly API not configured" },
+        { status: 503 }
+      );
+    }
+
+    // Create campaign in Instantly
+    const instantlyCampaign = await createInstantlyCampaignWithDefaults(name, {
+      timezone,
+      emailAccounts: email_accounts,
+      dailyLimit: daily_limit,
+      stopOnReply: stop_on_reply,
+    });
+
+    // Optionally create local campaign record
+    let localCampaign = null;
+    if (auto_link && client_id) {
+      const supabase = getSupabase();
+      const { data, error } = await supabase
+        .from("campaigns")
+        .insert({
+          client_id,
+          instantly_campaign_id: instantlyCampaign.id,
+          name: instantlyCampaign.name,
+          is_active: false, // New campaigns start paused
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Failed to create local campaign record:", error);
+      } else {
+        localCampaign = data;
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      instantly_campaign: instantlyCampaign,
+      local_campaign: localCampaign,
+      webhook_url: localCampaign
+        ? `/api/webhooks/instantly/${localCampaign.id}`
+        : null,
+    });
+  } catch (error) {
+    console.error("Error creating campaign in Instantly:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to create campaign" },
       { status: 500 }
     );
   }

@@ -1,12 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get("invite");
+  const inviteEmail = searchParams.get("email");
+  const redirectPath = searchParams.get("redirect");
+
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Check if user is already logged in
+  useEffect(() => {
+    const checkSession = async () => {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (session) {
+        // User is already logged in, redirect them
+        if (redirectPath) {
+          router.push(redirectPath);
+        } else {
+          router.push("/dashboard");
+        }
+      } else {
+        setCheckingSession(false);
+      }
+    };
+
+    checkSession();
+  }, [redirectPath, router]);
+
+  // Pre-fill email from invite link
+  useEffect(() => {
+    if (inviteEmail) {
+      setEmail(inviteEmail);
+    }
+  }, [inviteEmail]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -15,10 +51,18 @@ export default function LoginPage() {
 
     const supabase = createClient();
 
+    // Build redirect URL
+    let redirectUrl = `${window.location.origin}/auth/callback`;
+    if (inviteToken) {
+      redirectUrl = `${window.location.origin}/auth/accept-invite?token=${inviteToken}`;
+    } else if (redirectPath) {
+      redirectUrl = `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectPath)}`;
+    }
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: redirectUrl,
       },
     });
 
@@ -31,13 +75,36 @@ export default function LoginPage() {
     setLoading(false);
   };
 
+  // Show loading while checking session
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-xl shadow-lg">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900">Client Portal</h1>
-          <p className="mt-2 text-gray-600">Sign in to access your dashboard</p>
+          {inviteToken ? (
+            <p className="mt-2 text-gray-600">
+              You&apos;ve been invited! Sign in to access your dashboard.
+            </p>
+          ) : (
+            <p className="mt-2 text-gray-600">Sign in to access your dashboard</p>
+          )}
         </div>
+
+        {inviteToken && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+            <p className="text-sm text-blue-800">
+              Enter your email below and click &quot;Send Magic Link&quot; to complete your invitation.
+            </p>
+          </div>
+        )}
 
         <form onSubmit={handleLogin} className="mt-8 space-y-6">
           <div>

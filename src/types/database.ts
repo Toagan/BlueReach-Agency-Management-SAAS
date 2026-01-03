@@ -24,6 +24,16 @@ export interface Profile {
 export interface Client {
   id: string;
   name: string;
+  logo_url?: string | null;
+  website?: string | null;
+  notes?: string | null;
+  product_service?: string | null;
+  acv?: number | null;
+  tcv?: number | null;
+  verticals?: string[] | null;
+  tam?: number | null;
+  target_daily_emails?: number | null;
+  is_active?: boolean;
   created_at: string;
 }
 

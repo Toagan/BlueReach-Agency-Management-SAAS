@@ -167,31 +167,95 @@ export async function POST(request: Request) {
               status = "replied";
             }
 
+            // Extract additional Instantly fields (needed for both insert and update)
+            const instantlyData = lead as {
+              company_domain?: string;
+              personalization?: string;
+              timestamp_created?: string;
+              timestamp_last_contact?: string;
+              status_summary?: { lastStep?: Record<string, unknown> };
+              email_open_count?: number;
+              email_click_count?: number;
+              email_reply_count?: number;
+              payload?: Record<string, string>;
+            };
+
             const { data: existingLead } = await supabase
               .from("leads")
-              .select("id")
+              .select("id, status, is_positive_reply, first_name, last_name, company_name, company_domain, phone, personalization, email_open_count, email_click_count, email_reply_count, last_contacted_at")
               .eq("campaign_id", localCampaignId)
               .eq("email", lead.email)
               .single();
 
             if (existingLead) {
-              // Lead already exists - skip it (don't update existing leads)
-              // This preserves any manual changes made in the database
-              leadResult.updated++; // Count as "already exists"
-            } else {
-              // Extract additional Instantly fields
-              const instantlyData = lead as {
-                company_domain?: string;
-                personalization?: string;
-                timestamp_created?: string;
-                timestamp_last_contact?: string;
-                status_summary?: { lastStep?: Record<string, unknown> };
-                email_open_count?: number;
-                email_click_count?: number;
-                email_reply_count?: number;
-                payload?: Record<string, string>;
+              // Lead exists - UPDATE Instantly-sourced fields while preserving local-only fields
+              // Status priority: won(8) > lost(7) > booked(6) > replied(5) > clicked(4) > opened(3) > contacted(2) > not_interested(1)
+              const statusPriority: Record<string, number> = {
+                "won": 8, "lost": 7, "booked": 6, "replied": 5,
+                "clicked": 4, "opened": 3, "contacted": 2, "not_interested": 1
               };
 
+              const currentPriority = statusPriority[existingLead.status] || 0;
+              const newPriority = statusPriority[status] || 0;
+
+              // Build update object - only update fields that should be updated
+              const updateData: Record<string, unknown> = {
+                // Always update these from Instantly (they're Instantly-sourced)
+                // Use newer timestamp if available
+                last_contacted_at: instantlyData.timestamp_last_contact || null,
+                last_step_info: instantlyData.status_summary?.lastStep || null,
+                // Only increment counts, never decrease
+                email_open_count: Math.max(instantlyData.email_open_count || 0, existingLead.email_open_count || 0),
+                email_click_count: Math.max(instantlyData.email_click_count || 0, existingLead.email_click_count || 0),
+                email_reply_count: Math.max(instantlyData.email_reply_count || 0, existingLead.email_reply_count || 0),
+              };
+
+              // Only update status if new status has higher priority (never downgrade)
+              if (newPriority > currentPriority) {
+                updateData.status = status;
+              }
+
+              // Only set is_positive_reply to true, never reset to false via sync
+              // (webhooks can reset it based on explicit negative events)
+              if (isPositiveReply && !existingLead.is_positive_reply) {
+                updateData.is_positive_reply = true;
+              }
+
+              // Fill-only fields: only update if local value is empty
+              if (!existingLead.first_name && lead.first_name) {
+                updateData.first_name = lead.first_name;
+              }
+              if (!existingLead.last_name && lead.last_name) {
+                updateData.last_name = lead.last_name;
+              }
+              if (!existingLead.company_name && lead.company_name) {
+                updateData.company_name = lead.company_name;
+              }
+              if (!existingLead.company_domain && instantlyData.company_domain) {
+                updateData.company_domain = instantlyData.company_domain;
+              }
+              if (!existingLead.phone && lead.phone) {
+                updateData.phone = lead.phone;
+              }
+              if (!existingLead.personalization && instantlyData.personalization) {
+                updateData.personalization = instantlyData.personalization;
+              }
+
+              // NOTE: These fields are NEVER touched by sync (preserved):
+              // - notes, deal_value, next_action, next_action_date, linkedin_url
+
+              const { error: updateError } = await supabase
+                .from("leads")
+                .update(updateData)
+                .eq("id", existingLead.id);
+
+              if (updateError) {
+                leadResult.failed++;
+              } else {
+                leadResult.updated++;
+              }
+            } else {
+              // New lead - insert with all Instantly data
               // Build metadata with payload for personalization variables
               const metadata: Record<string, unknown> = {};
               if (instantlyData.payload) {

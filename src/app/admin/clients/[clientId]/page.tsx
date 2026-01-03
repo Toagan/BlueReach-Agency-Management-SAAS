@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowLeft,
   Mail,
@@ -29,9 +30,20 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
+  Target,
+  DollarSign,
+  Settings,
+  Lightbulb,
+  Building2,
+  MessageSquareText,
+  Send,
+  Reply,
+  Download,
+  Webhook,
+  Copy,
+  Check,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 
 interface CampaignAnalytics {
   emails_sent: number;
@@ -59,8 +71,15 @@ interface ClientData {
   id: string;
   name: string;
   is_active: boolean;
+  logo_url?: string;
   website?: string;
   notes?: string;
+  product_service?: string;
+  acv?: number;
+  tcv?: number;
+  verticals?: string[];
+  tam?: number;
+  target_daily_emails?: number;
   created_at: string;
 }
 
@@ -96,6 +115,17 @@ interface Lead {
   updated_at: string;
 }
 
+interface LeadEmail {
+  id: string;
+  direction: "outbound" | "inbound";
+  from_email: string;
+  to_email: string;
+  subject: string | null;
+  body_text: string | null;
+  body_html: string | null;
+  sent_at: string | null;
+}
+
 export default function ClientDashboardPage() {
   const params = useParams();
   const clientId = params.clientId as string;
@@ -120,13 +150,77 @@ export default function ClientDashboardPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [deletingCampaignId, setDeletingCampaignId] = useState<string | null>(null);
   const [positiveLeads, setPositiveLeads] = useState<Lead[]>([]);
-  const [showWorkflow, setShowWorkflow] = useState(false);
+  const [showWorkflow, setShowWorkflow] = useState(true);
   const [loadingLeads, setLoadingLeads] = useState(false);
   const [updatingLeadId, setUpdatingLeadId] = useState<string | null>(null);
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [notesInput, setNotesInput] = useState("");
-  const [meetingDateInput, setMeetingDateInput] = useState("");
-  const [showMeetingInput, setShowMeetingInput] = useState<string | null>(null);
+
+  // Email viewing state
+  const [expandedEmailLeadId, setExpandedEmailLeadId] = useState<string | null>(null);
+  const [leadEmails, setLeadEmails] = useState<Record<string, LeadEmail[]>>({});
+  const [loadingEmailsForLead, setLoadingEmailsForLead] = useState<string | null>(null);
+  const [syncingEmailsForLead, setSyncingEmailsForLead] = useState<string | null>(null);
+  const [syncingPositiveLeads, setSyncingPositiveLeads] = useState(false);
+
+  const fetchEmailsForLead = async (leadId: string) => {
+    setLoadingEmailsForLead(leadId);
+    try {
+      const res = await fetch(`/api/leads/${leadId}/emails`);
+      if (res.ok) {
+        const data = await res.json();
+        setLeadEmails((prev) => ({ ...prev, [leadId]: data.emails || [] }));
+      }
+    } catch (err) {
+      console.error("Failed to fetch emails:", err);
+    } finally {
+      setLoadingEmailsForLead(null);
+    }
+  };
+
+  const syncEmailsForLead = async (leadId: string) => {
+    setSyncingEmailsForLead(leadId);
+    try {
+      const res = await fetch(`/api/leads/${leadId}/emails`, { method: "POST" });
+      if (res.ok) {
+        // Refresh emails after sync
+        await fetchEmailsForLead(leadId);
+      }
+    } catch (err) {
+      console.error("Failed to sync emails:", err);
+    } finally {
+      setSyncingEmailsForLead(null);
+    }
+  };
+
+  const toggleEmailView = async (leadId: string) => {
+    if (expandedEmailLeadId === leadId) {
+      setExpandedEmailLeadId(null);
+    } else {
+      setExpandedEmailLeadId(leadId);
+      // Fetch emails if we don't have them yet
+      if (!leadEmails[leadId]) {
+        await fetchEmailsForLead(leadId);
+      }
+    }
+  };
+
+  const syncPositiveLeads = async () => {
+    setSyncingPositiveLeads(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/sync-positive`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        console.log("Sync result:", data);
+        // Refresh leads after sync
+        await fetchPositiveLeads();
+      }
+    } catch (err) {
+      console.error("Failed to sync positive leads:", err);
+    } finally {
+      setSyncingPositiveLeads(false);
+    }
+  };
 
   const fetchPositiveLeads = useCallback(async () => {
     setLoadingLeads(true);
@@ -164,9 +258,7 @@ export default function ClientDashboardPage() {
         // Refresh leads after update
         await fetchPositiveLeads();
         setEditingNotesId(null);
-        setShowMeetingInput(null);
         setNotesInput("");
-        setMeetingDateInput("");
       } else {
         alert(data.error || "Failed to update lead");
       }
@@ -265,8 +357,12 @@ export default function ClientDashboardPage() {
       });
 
       setLastUpdated(new Date());
+
+      // Return the positive count for auto-sync check
+      return totalPositiveReplies;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data");
+      return 0;
     } finally {
       setLoading(false);
     }
@@ -323,10 +419,21 @@ export default function ClientDashboardPage() {
             Back to Command Center
           </Link>
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
-              <span className="text-lg font-bold text-muted-foreground">
-                {client?.name?.charAt(0).toUpperCase()}
-              </span>
+            <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center overflow-hidden">
+              {client?.logo_url ? (
+                <Image
+                  src={client.logo_url}
+                  alt={`${client.name} logo`}
+                  width={48}
+                  height={48}
+                  className="object-contain w-full h-full"
+                  unoptimized={client.logo_url.startsWith("data:")}
+                />
+              ) : (
+                <span className="text-lg font-bold text-muted-foreground">
+                  {client?.name?.charAt(0).toUpperCase()}
+                </span>
+              )}
             </div>
             <div>
               <h1 className="text-2xl font-bold text-foreground">{client?.name}</h1>
@@ -355,6 +462,111 @@ export default function ClientDashboardPage() {
         <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg">
           {error}
         </div>
+      )}
+
+      {/* Client Intelligence - at the top */}
+      {(client?.notes || client?.product_service || client?.acv || client?.tcv || client?.verticals?.length || client?.tam) && (
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Lightbulb className="h-5 w-5 text-yellow-500" />
+                Client Intelligence
+              </CardTitle>
+              <Link href={`/admin/clients/${clientId}/settings`}>
+                <Button variant="ghost" size="sm">
+                  <Settings className="h-4 w-4 mr-1" />
+                  Edit
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Notes */}
+            {client.notes && (
+              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <p className="text-sm font-medium text-blue-700 dark:text-blue-300 mb-2 flex items-center gap-2">
+                  <MessageSquareText className="h-4 w-4" />
+                  Notes
+                </p>
+                <p className="text-sm text-blue-600 dark:text-blue-400 whitespace-pre-wrap">{client.notes}</p>
+              </div>
+            )}
+
+            {/* Product/Service */}
+            {client.product_service && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">Product/Service</p>
+                <p className="text-foreground">{client.product_service}</p>
+              </div>
+            )}
+
+            {/* Key Metrics Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {client.tam && (
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                    <Target className="h-3 w-3" />
+                    TAM
+                  </div>
+                  <p className="font-semibold text-foreground">
+                    {client.tam.toLocaleString()} leads
+                  </p>
+                </div>
+              )}
+              {client.acv && (
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                    <DollarSign className="h-3 w-3" />
+                    ACV
+                  </div>
+                  <p className="font-semibold text-foreground">
+                    ${client.acv.toLocaleString()}
+                  </p>
+                </div>
+              )}
+              {client.tcv && (
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                    <DollarSign className="h-3 w-3" />
+                    TCV
+                  </div>
+                  <p className="font-semibold text-foreground">
+                    ${client.tcv.toLocaleString()}
+                  </p>
+                </div>
+              )}
+              {client.target_daily_emails && (
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                    <Mail className="h-3 w-3" />
+                    Daily Target
+                  </div>
+                  <p className="font-semibold text-foreground">
+                    {client.target_daily_emails.toLocaleString()} emails
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Verticals */}
+            {client.verticals && client.verticals.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                  <Building2 className="h-3 w-3" />
+                  Target Verticals
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {client.verticals.map((vertical, index) => (
+                    <Badge key={index} variant="secondary">
+                      {vertical}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Stats Overview */}
@@ -418,8 +630,29 @@ export default function ClientDashboardPage() {
               {positiveLeads.length > 0 && (
                 <Badge variant="secondary">{positiveLeads.length}</Badge>
               )}
+              {stats.totalPositiveReplies > positiveLeads.length && (
+                <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950">
+                  {stats.totalPositiveReplies - positiveLeads.length} missing
+                </Badge>
+              )}
             </CardTitle>
             <div className="flex items-center gap-2">
+              {stats.totalPositiveReplies > positiveLeads.length && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={syncPositiveLeads}
+                  disabled={syncingPositiveLeads}
+                  className="text-amber-600 hover:text-amber-700 border-amber-300"
+                >
+                  {syncingPositiveLeads ? (
+                    <RefreshCw className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-1" />
+                  )}
+                  Sync
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -455,21 +688,21 @@ export default function ClientDashboardPage() {
                 <Calendar className="h-4 w-4 text-blue-500" />
                 <span className="text-muted-foreground">Meetings:</span>
                 <span className="font-medium">
-                  {positiveLeads.filter(l => l.status === "meeting" || l.meeting_at).length}
+                  {positiveLeads.filter(l => l.status === "booked" || l.meeting_at).length}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Trophy className="h-4 w-4 text-green-600" />
                 <span className="text-muted-foreground">Won:</span>
                 <span className="font-medium text-green-600">
-                  {positiveLeads.filter(l => l.status === "closed_won").length}
+                  {positiveLeads.filter(l => l.status === "won").length}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
                 <XCircle className="h-4 w-4 text-red-500" />
                 <span className="text-muted-foreground">Lost:</span>
                 <span className="font-medium text-red-500">
-                  {positiveLeads.filter(l => l.status === "closed_lost").length}
+                  {positiveLeads.filter(l => l.status === "lost").length}
                 </span>
               </div>
             </div>
@@ -508,26 +741,26 @@ export default function ClientDashboardPage() {
                           </span>
                           <Badge
                             variant={
-                              lead.status === "closed_won"
+                              lead.status === "won"
                                 ? "default"
-                                : lead.status === "closed_lost"
+                                : lead.status === "lost"
                                 ? "destructive"
                                 : "secondary"
                             }
                             className={
-                              lead.status === "closed_won"
+                              lead.status === "won"
                                 ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                                : lead.status === "meeting"
+                                : lead.status === "booked"
                                 ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
                                 : ""
                             }
                           >
-                            {lead.status === "closed_won"
+                            {lead.status === "won"
                               ? "Won"
-                              : lead.status === "closed_lost"
+                              : lead.status === "lost"
                               ? "Lost"
-                              : lead.status === "meeting"
-                              ? "Meeting"
+                              : lead.status === "booked"
+                              ? "Meeting Booked"
                               : lead.status === "replied"
                               ? "Replied"
                               : lead.status}
@@ -561,7 +794,7 @@ export default function ClientDashboardPage() {
                       )}
                       {lead.closed_at && (
                         <span className="flex items-center gap-1">
-                          {lead.status === "closed_won" ? (
+                          {lead.status === "won" ? (
                             <Trophy className="h-3 w-3 text-green-500" />
                           ) : (
                             <XCircle className="h-3 w-3 text-red-500" />
@@ -573,7 +806,7 @@ export default function ClientDashboardPage() {
 
                     {/* Action Buttons */}
                     <div className="flex flex-wrap gap-2 mb-3">
-                      {!lead.responded_at && lead.status !== "closed_won" && lead.status !== "closed_lost" && (
+                      {!lead.responded_at && lead.status !== "won" && lead.status !== "lost" && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -585,55 +818,21 @@ export default function ClientDashboardPage() {
                         </Button>
                       )}
 
-                      {lead.status !== "meeting" && lead.status !== "closed_won" && lead.status !== "closed_lost" && (
-                        <>
-                          {showMeetingInput === lead.id ? (
-                            <div className="flex items-center gap-2">
-                              <Input
-                                type="datetime-local"
-                                value={meetingDateInput}
-                                onChange={(e) => setMeetingDateInput(e.target.value)}
-                                className="w-auto text-sm"
-                              />
-                              <Button
-                                size="sm"
-                                onClick={() => {
-                                  if (meetingDateInput) {
-                                    handleWorkflowAction(lead.id, "schedule_meeting", {
-                                      meeting_at: new Date(meetingDateInput).toISOString(),
-                                    });
-                                  }
-                                }}
-                                disabled={!meetingDateInput || updatingLeadId === lead.id}
-                              >
-                                Save
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                  setShowMeetingInput(null);
-                                  setMeetingDateInput("");
-                                }}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setShowMeetingInput(lead.id)}
-                              disabled={updatingLeadId === lead.id}
-                            >
-                              <Calendar className="h-4 w-4 mr-1" />
-                              Schedule Meeting
-                            </Button>
-                          )}
-                        </>
+                      {lead.status !== "booked" && lead.status !== "won" && lead.status !== "lost" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleWorkflowAction(lead.id, "schedule_meeting", {
+                            meeting_at: new Date().toISOString(),
+                          })}
+                          disabled={updatingLeadId === lead.id}
+                        >
+                          <Calendar className="h-4 w-4 mr-1" />
+                          Schedule Meeting
+                        </Button>
                       )}
 
-                      {lead.status !== "closed_won" && lead.status !== "closed_lost" && (
+                      {lead.status !== "won" && lead.status !== "lost" && (
                         <>
                           <Button
                             size="sm"
@@ -658,7 +857,7 @@ export default function ClientDashboardPage() {
                         </>
                       )}
 
-                      {(lead.status === "closed_won" || lead.status === "closed_lost" || lead.status === "meeting") && (
+                      {(lead.status === "won" || lead.status === "lost" || lead.status === "booked") && (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -671,6 +870,154 @@ export default function ClientDashboardPage() {
                         </Button>
                       )}
                     </div>
+
+                    {/* View Emails Button */}
+                    <div className="mb-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => toggleEmailView(lead.id)}
+                        disabled={loadingEmailsForLead === lead.id}
+                        className="w-full justify-between"
+                      >
+                        <span className="flex items-center">
+                          <MessageSquareText className="h-4 w-4 mr-2" />
+                          View Email Exchange
+                        </span>
+                        {loadingEmailsForLead === lead.id ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : expandedEmailLeadId === lead.id ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+
+                    {/* Email Exchange Section */}
+                    {expandedEmailLeadId === lead.id && (
+                      <div className="mb-3 border border-border rounded-lg overflow-hidden">
+                        <div className="bg-muted/50 px-3 py-2 flex items-center justify-between">
+                          <span className="text-sm font-medium">
+                            Email Thread
+                            {leadEmails[lead.id] && leadEmails[lead.id].length > 0 && (
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                ({leadEmails[lead.id].length} {leadEmails[lead.id].length === 1 ? "email" : "emails"})
+                              </span>
+                            )}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => fetchEmailsForLead(lead.id)}
+                              disabled={loadingEmailsForLead === lead.id}
+                              className="h-7 text-xs"
+                              title="Refresh emails"
+                            >
+                              <RefreshCw className={`h-3 w-3 ${loadingEmailsForLead === lead.id ? "animate-spin" : ""}`} />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => syncEmailsForLead(lead.id)}
+                              disabled={syncingEmailsForLead === lead.id}
+                              className="h-7 text-xs"
+                              title="Fetch latest emails from Instantly"
+                            >
+                              {syncingEmailsForLead === lead.id ? (
+                                <RefreshCw className="h-3 w-3 animate-spin mr-1" />
+                              ) : (
+                                <Download className="h-3 w-3 mr-1" />
+                              )}
+                              Fetch from Instantly
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="p-3 space-y-3 max-h-[400px] overflow-y-auto">
+                          {loadingEmailsForLead === lead.id ? (
+                            <div className="flex items-center justify-center py-4">
+                              <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+                            </div>
+                          ) : !leadEmails[lead.id] || leadEmails[lead.id].length === 0 ? (
+                            <div className="text-center py-4 text-muted-foreground">
+                              <MessageSquareText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                              <p className="text-sm">No emails found</p>
+                              <p className="text-xs mt-1">
+                                Emails are synced automatically via webhooks.
+                              </p>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => syncEmailsForLead(lead.id)}
+                                disabled={syncingEmailsForLead === lead.id}
+                                className="mt-3"
+                              >
+                                {syncingEmailsForLead === lead.id ? (
+                                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                                ) : (
+                                  <Download className="h-4 w-4 mr-2" />
+                                )}
+                                Fetch from Instantly
+                              </Button>
+                            </div>
+                          ) : (
+                            leadEmails[lead.id]
+                              .filter((email) => email.body_text || email.body_html)
+                              .map((email) => {
+                                // Extract text content - prefer body_text, fall back to stripped HTML
+                                let content = email.body_text;
+                                if (!content && email.body_html) {
+                                  // Strip HTML tags for display
+                                  content = email.body_html
+                                    .replace(/<br\s*\/?>/gi, '\n')
+                                    .replace(/<\/p>/gi, '\n')
+                                    .replace(/<[^>]+>/g, '')
+                                    .replace(/&nbsp;/g, ' ')
+                                    .replace(/&amp;/g, '&')
+                                    .replace(/&lt;/g, '<')
+                                    .replace(/&gt;/g, '>')
+                                    .replace(/&quot;/g, '"')
+                                    .trim();
+                                }
+                                if (!content) return null;
+
+                                return (
+                                  <div
+                                    key={email.id}
+                                    className={`rounded-lg p-3 ${
+                                      email.direction === "outbound"
+                                        ? "bg-blue-50 dark:bg-blue-950 border-l-4 border-blue-500"
+                                        : "bg-green-50 dark:bg-green-950 border-l-4 border-green-500"
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between mb-2">
+                                      <div className="flex items-center gap-2">
+                                        {email.direction === "outbound" ? (
+                                          <Send className="h-3 w-3 text-blue-500" />
+                                        ) : (
+                                          <Reply className="h-3 w-3 text-green-500" />
+                                        )}
+                                        <span className="text-xs font-medium text-muted-foreground">
+                                          {email.direction === "outbound" ? "You" : lead.email.split("@")[0]}
+                                        </span>
+                                      </div>
+                                      <span className="text-xs text-muted-foreground">
+                                        {email.sent_at
+                                          ? new Date(email.sent_at).toLocaleDateString()
+                                          : ""}
+                                      </span>
+                                    </div>
+                                    <div className="text-sm text-foreground whitespace-pre-wrap">
+                                      {content}
+                                    </div>
+                                  </div>
+                                );
+                              })
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Notes Section */}
                     <div className="border-t border-border pt-3">
@@ -806,8 +1153,54 @@ function CampaignCard({
   onDelete: () => void;
   isDeleting: boolean;
 }) {
+  const [showWebhook, setShowWebhook] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showInstantlyDeleteConfirm, setShowInstantlyDeleteConfirm] = useState(false);
+  const [deletingFromInstantly, setDeletingFromInstantly] = useState(false);
   const analytics = campaign.analytics;
   const hasAnalytics = analytics && analytics.emails_sent > 0;
+
+  const handleDeleteFromInstantly = async () => {
+    if (!campaign.instantly_campaign_id) {
+      alert("This campaign is not linked to Instantly");
+      return;
+    }
+
+    setDeletingFromInstantly(true);
+    try {
+      const res = await fetch(`/api/instantly/campaigns/${campaign.instantly_campaign_id}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to delete from Instantly");
+      }
+
+      const data = await res.json();
+      alert(data.message || "Campaign deleted from Instantly successfully");
+      setShowInstantlyDeleteConfirm(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete campaign from Instantly");
+    } finally {
+      setDeletingFromInstantly(false);
+    }
+  };
+
+  // Generate webhook URL
+  const webhookUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/api/webhooks/instantly/${campaign.id}`
+    : `/api/webhooks/instantly/${campaign.id}`;
+
+  const copyWebhookUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(webhookUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
 
   return (
     <div className="border border-border rounded-lg p-4 hover:border-muted-foreground/50 transition-colors">
@@ -904,6 +1297,121 @@ function CampaignCard({
           </div>
         );
       })()}
+
+      {/* Webhook Configuration */}
+      <div className="mt-4 pt-4 border-t border-border">
+        <button
+          onClick={() => setShowWebhook(!showWebhook)}
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Webhook className="h-4 w-4" />
+          <span>Webhook for Instantly</span>
+          {showWebhook ? (
+            <ChevronUp className="h-3 w-3" />
+          ) : (
+            <ChevronDown className="h-3 w-3" />
+          )}
+        </button>
+
+        {showWebhook && (
+          <div className="mt-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all">
+                {webhookUrl}
+              </code>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={copyWebhookUrl}
+                className="shrink-0"
+              >
+                {copied ? (
+                  <Check className="h-4 w-4 text-green-500" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+
+            <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs">
+              <p className="font-medium text-amber-800 dark:text-amber-200 mb-2">Setup in Instantly:</p>
+              <ol className="list-decimal list-inside space-y-1 text-amber-700 dark:text-amber-300">
+                <li>Open this campaign in Instantly</li>
+                <li>Go to <span className="font-medium">Campaign Settings</span> → <span className="font-medium">Webhooks</span></li>
+                <li>Click <span className="font-medium">Add Webhook</span></li>
+                <li>Paste the URL above</li>
+                <li>Select these events:</li>
+              </ol>
+              <div className="mt-2 ml-4 space-y-1">
+                <p className="text-amber-700 dark:text-amber-300">
+                  <span className="font-medium text-green-700 dark:text-green-400">Positive:</span>{" "}
+                  <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">lead_interested</code>,{" "}
+                  <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">lead_meeting_booked</code>,{" "}
+                  <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">lead_meeting_completed</code>,{" "}
+                  <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">lead_closed</code>
+                </p>
+                <p className="text-amber-700 dark:text-amber-300">
+                  <span className="font-medium text-red-700 dark:text-red-400">Negative:</span>{" "}
+                  <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">lead_not_interested</code>,{" "}
+                  <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">lead_neutral</code>
+                </p>
+              </div>
+              <p className="mt-3 text-amber-600 dark:text-amber-400 italic">
+                When Instantly fires these events, positive replies will sync automatically in real-time.
+              </p>
+            </div>
+
+            {/* Delete from Instantly - Admin Only */}
+            {campaign.instantly_campaign_id && (
+              <div className="mt-4 pt-4 border-t border-border">
+                {!showInstantlyDeleteConfirm ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowInstantlyDeleteConfirm(true)}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete from Instantly
+                  </Button>
+                ) : (
+                  <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                    <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-2">
+                      Are you sure you want to delete this campaign from Instantly?
+                    </p>
+                    <p className="text-xs text-red-600 dark:text-red-400 mb-3">
+                      This will permanently delete the campaign from Instantly. Your local campaign data and leads will NOT be affected.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleDeleteFromInstantly}
+                        disabled={deletingFromInstantly}
+                      >
+                        {deletingFromInstantly ? (
+                          <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Trash2 className="h-4 w-4 mr-2" />
+                        )}
+                        Yes, Delete from Instantly
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowInstantlyDeleteConfirm(false)}
+                        disabled={deletingFromInstantly}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
