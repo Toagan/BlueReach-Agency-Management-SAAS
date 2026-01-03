@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Key, Shield, Check, X, RefreshCw, Eye, EyeOff, Upload, ArrowLeft, Image as ImageIcon } from "lucide-react";
+import { Settings, Key, Shield, Check, X, RefreshCw, Eye, EyeOff, Upload, ArrowLeft, Image as ImageIcon, Building2, Palette, Mail } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -35,21 +35,65 @@ export default function SettingsPage() {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Branding state
+  const [agencyName, setAgencyName] = useState("");
+  const [primaryColor, setPrimaryColor] = useState("#2563eb");
+  const [senderName, setSenderName] = useState("");
+  const [senderEmail, setSenderEmail] = useState("");
+  const [savingBranding, setSavingBranding] = useState(false);
+
   const fetchSettings = async () => {
     try {
       const res = await fetch("/api/admin/settings");
       const data = await res.json();
       setSettings(data.settings || []);
-      // Find logo URL if set
-      const logoSetting = (data.settings || []).find((s: Setting) => s.key === "agency_logo_url");
+
+      // Load branding settings
+      const allSettings = data.settings || [];
+      const logoSetting = allSettings.find((s: Setting) => s.key === "agency_logo_url");
+      const nameSetting = allSettings.find((s: Setting) => s.key === "agency_name");
+      const colorSetting = allSettings.find((s: Setting) => s.key === "agency_primary_color");
+      const senderNameSetting = allSettings.find((s: Setting) => s.key === "agency_sender_name");
+      const senderEmailSetting = allSettings.find((s: Setting) => s.key === "agency_sender_email");
+
       if (logoSetting?.is_set) {
         setLogoUrl(logoSetting.masked_value);
         setLogoPreview(logoSetting.masked_value);
       }
+      if (nameSetting?.is_set) setAgencyName(nameSetting.masked_value);
+      if (colorSetting?.is_set) setPrimaryColor(colorSetting.masked_value);
+      if (senderNameSetting?.is_set) setSenderName(senderNameSetting.masked_value);
+      if (senderEmailSetting?.is_set) setSenderEmail(senderEmailSetting.masked_value);
     } catch (error) {
       console.error("Error fetching settings:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveBrandingSettings = async () => {
+    setSavingBranding(true);
+    try {
+      const updates = [
+        { key: "agency_name", value: agencyName },
+        { key: "agency_primary_color", value: primaryColor },
+        { key: "agency_sender_name", value: senderName },
+        { key: "agency_sender_email", value: senderEmail },
+      ];
+
+      for (const update of updates) {
+        await fetch("/api/admin/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(update),
+        });
+      }
+
+      await fetchSettings();
+    } catch (error) {
+      console.error("Error saving branding:", error);
+    } finally {
+      setSavingBranding(false);
     }
   };
 
@@ -251,6 +295,206 @@ export default function SettingsPage() {
               </p>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Branding Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Building2 className="h-5 w-5" />
+            Agency Branding
+          </CardTitle>
+          <CardDescription>
+            Customize your agency name and colors for client communications
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="agencyName">Agency Name</Label>
+              <Input
+                id="agencyName"
+                value={agencyName}
+                onChange={(e) => setAgencyName(e.target.value)}
+                placeholder="BlueReach Agency"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="primaryColor" className="flex items-center gap-2">
+                <Palette className="h-4 w-4" />
+                Primary Color
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id="primaryColor"
+                  type="color"
+                  value={primaryColor}
+                  onChange={(e) => setPrimaryColor(e.target.value)}
+                  className="w-16 h-10 p-1 cursor-pointer"
+                />
+                <Input
+                  value={primaryColor}
+                  onChange={(e) => setPrimaryColor(e.target.value)}
+                  placeholder="#2563eb"
+                  className="flex-1"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t pt-4 mt-4">
+            <Label className="flex items-center gap-2 mb-3">
+              <Mail className="h-4 w-4" />
+              Email Sender Settings
+            </Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="senderName">Sender Name</Label>
+                <Input
+                  id="senderName"
+                  value={senderName}
+                  onChange={(e) => setSenderName(e.target.value)}
+                  placeholder="BlueReach Team"
+                />
+                <p className="text-xs text-muted-foreground">
+                  This name appears as the &quot;From&quot; in emails
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="senderEmail">Sender Email</Label>
+                <Input
+                  id="senderEmail"
+                  type="email"
+                  value={senderEmail}
+                  onChange={(e) => setSenderEmail(e.target.value)}
+                  placeholder="hello@bluereach.com"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Must be verified in Resend
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button onClick={saveBrandingSettings} disabled={savingBranding}>
+              {savingBranding ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4 mr-2" />
+              )}
+              Save Branding Settings
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Email API Key */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5" />
+            Email Service (Resend)
+          </CardTitle>
+          <CardDescription>
+            Configure Resend API key to send invitation emails
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {(() => {
+            const resendSetting = settings.find(s => s.key === "resend_api_key");
+            const isEditing = editingKey === "resend_api_key";
+
+            return (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <Key className="h-4 w-4 text-gray-500" />
+                    Resend API Key
+                    {resendSetting?.is_set ? (
+                      <Badge variant="default" className="ml-2">Configured</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="ml-2">Not Set</Badge>
+                    )}
+                  </Label>
+                </div>
+                <p className="text-sm text-gray-500">
+                  Get your API key from <a href="https://resend.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">resend.com</a>
+                </p>
+
+                {isEditing ? (
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        type={showValue ? "text" : "password"}
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        placeholder="re_..."
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowValue(!showValue)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <Button
+                      onClick={() => handleSave("resend_api_key")}
+                      disabled={saving === "resend_api_key"}
+                    >
+                      {saving === "resend_api_key" ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "Save"
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setEditingKey(null);
+                        setEditValue("");
+                        setShowValue(false);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      type="password"
+                      value={resendSetting?.is_set ? resendSetting.masked_value : ""}
+                      disabled
+                      placeholder="Not configured"
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setEditingKey("resend_api_key");
+                        setEditValue("");
+                      }}
+                    >
+                      {resendSetting?.is_set ? "Change" : "Set"}
+                    </Button>
+                    {resendSetting?.is_set && (
+                      <Button
+                        variant="outline"
+                        onClick={() => handleClear("resend_api_key")}
+                        disabled={saving === "resend_api_key"}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 

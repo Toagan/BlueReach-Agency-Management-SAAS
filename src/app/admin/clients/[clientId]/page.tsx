@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -133,18 +133,48 @@ export default function ClientDashboardPage() {
 
   const [client, setClient] = useState<ClientData | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [stats, setStats] = useState<ClientStats>({
-    totalEmailsSent: 0,
-    totalOpened: 0,
-    totalReplies: 0,
-    totalBounced: 0,
-    totalPositiveReplies: 0,
-    openRate: 0,
-    replyRate: 0,
-    bounceRate: 0,
-    activeCampaigns: 0,
-    totalCampaigns: 0,
-  });
+  // Client-wide stats from the API (more reliable than summing by campaign)
+  const [clientStats, setClientStats] = useState<{ replied: number; positive: number }>({ replied: 0, positive: 0 });
+
+  // Calculate stats reactively whenever campaigns or clientStats change
+  const stats = useMemo<ClientStats>(() => {
+    let totalEmailsSent = 0;
+    let totalOpened = 0;
+    let totalBounced = 0;
+    let activeCampaigns = 0;
+
+    campaigns.forEach((campaign) => {
+      if (campaign.is_active) {
+        activeCampaigns++;
+      }
+      if (campaign.analytics) {
+        totalEmailsSent += campaign.analytics.emails_sent || 0;
+        totalOpened += campaign.analytics.emails_opened || 0;
+        totalBounced += campaign.analytics.emails_bounced || 0;
+      }
+    });
+
+    // Use client-wide stats for replies and positive (more reliable)
+    const totalReplies = clientStats.replied;
+    const totalPositiveReplies = clientStats.positive;
+
+    const openRate = totalEmailsSent > 0 ? (totalOpened / totalEmailsSent) * 100 : 0;
+    const replyRate = totalEmailsSent > 0 ? (totalReplies / totalEmailsSent) * 100 : 0;
+    const bounceRate = totalEmailsSent > 0 ? (totalBounced / totalEmailsSent) * 100 : 0;
+
+    return {
+      totalEmailsSent,
+      totalOpened,
+      totalReplies,
+      totalBounced,
+      totalPositiveReplies,
+      openRate,
+      replyRate,
+      bounceRate,
+      activeCampaigns,
+      totalCampaigns: campaigns.length,
+    };
+  }, [campaigns, clientStats]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -302,10 +332,10 @@ export default function ClientDashboardPage() {
     setError(null);
 
     try {
-      // Fetch client details and campaigns in parallel
+      // Fetch client details and campaigns from local DB (fast)
       const [clientRes, campaignsRes] = await Promise.all([
         fetch(`/api/clients/${clientId}`),
-        fetch(`/api/clients/${clientId}/campaigns`),
+        fetch(`/api/clients/${clientId}/campaigns`), // Uses local Supabase data by default
       ]);
 
       if (!clientRes.ok) {
@@ -317,49 +347,26 @@ export default function ClientDashboardPage() {
 
       setClient(clientData.client);
       setCampaigns(campaignsData.campaigns || []);
+      // Set client-wide stats (more reliable for replies/positive counts)
+      if (campaignsData.clientStats) {
+        setClientStats(campaignsData.clientStats);
+      }
 
-      // Calculate stats from linked campaigns
-      let totalEmailsSent = 0;
-      let totalOpened = 0;
-      let totalReplies = 0;
-      let totalBounced = 0;
-      let totalPositiveReplies = 0;
-      let activeCampaigns = 0;
-
-      (campaignsData.campaigns || []).forEach((campaign: Campaign) => {
-        if (campaign.is_active) {
-          activeCampaigns++;
-        }
-        if (campaign.analytics) {
-          totalEmailsSent += campaign.analytics.emails_sent || 0;
-          totalOpened += campaign.analytics.emails_opened || 0;
-          totalReplies += campaign.analytics.emails_replied || 0;
-          totalBounced += campaign.analytics.emails_bounced || 0;
-          totalPositiveReplies += campaign.analytics.total_opportunities || 0;
-        }
-      });
-
-      const openRate = totalEmailsSent > 0 ? (totalOpened / totalEmailsSent) * 100 : 0;
-      const replyRate = totalEmailsSent > 0 ? (totalReplies / totalEmailsSent) * 100 : 0;
-      const bounceRate = totalEmailsSent > 0 ? (totalBounced / totalEmailsSent) * 100 : 0;
-
-      setStats({
-        totalEmailsSent,
-        totalOpened,
-        totalReplies,
-        totalBounced,
-        totalPositiveReplies,
-        openRate,
-        replyRate,
-        bounceRate,
-        activeCampaigns,
-        totalCampaigns: (campaignsData.campaigns || []).length,
-      });
+      // Fetch Instantly stats in background for accurate emails_sent counts
+      // Stats will auto-recalculate via useMemo when campaigns state updates
+      fetch(`/api/clients/${clientId}/campaigns?source=instantly`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.campaigns) {
+            setCampaigns(data.campaigns);
+          }
+          if (data.clientStats) {
+            setClientStats(data.clientStats);
+          }
+        })
+        .catch((err) => console.error("Failed to fetch Instantly stats:", err));
 
       setLastUpdated(new Date());
-
-      // Return the positive count for auto-sync check
-      return totalPositiveReplies;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data");
       return 0;

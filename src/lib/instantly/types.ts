@@ -184,7 +184,7 @@ export interface InstantlyLeadListPayload {
   limit?: number;
   skip?: number;
   email?: string;
-  interest_status?: string;
+  interest_status?: number | string;  // 1 = positive, 0 = not interested, etc.
 }
 
 export interface InstantlyLeadInterestUpdate {

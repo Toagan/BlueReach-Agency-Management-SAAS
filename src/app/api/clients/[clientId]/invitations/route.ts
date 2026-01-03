@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import { sendInvitationEmail } from "@/lib/email";
 
 function getSupabaseAdmin() {
   return createClient(
@@ -85,7 +86,7 @@ export async function POST(
   try {
     const { clientId } = await params;
     const body = await request.json();
-    const { email, role = "owner" } = body as { email: string; role?: string };
+    const { email, name, role = "owner" } = body as { email: string; name?: string; role?: string };
 
     if (!email) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
@@ -201,6 +202,7 @@ export async function POST(
       .insert({
         client_id: clientId,
         email: email.toLowerCase(),
+        name: name || null,
         role: role,
         token: token,
         invited_by: user.id,
@@ -223,12 +225,21 @@ export async function POST(
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const loginUrl = `${appUrl}/login?invite=${token}&email=${encodeURIComponent(email)}`;
 
-    // Always return the login URL since Supabase free tier email is unreliable
-    // In production, you would integrate a proper email service here (Resend, SendGrid, etc.)
+    // Try to send the invitation email
+    const emailResult = await sendInvitationEmail({
+      to: email.toLowerCase(),
+      inviteeName: name || email.split("@")[0],
+      clientName: client.name,
+      loginUrl,
+    });
+
     return NextResponse.json({
       success: true,
-      message: `Invitation created for ${email}. Share the login link with them.`,
-      emailSent: false,
+      message: emailResult.success
+        ? `Invitation email sent to ${email}.`
+        : `Invitation created for ${email}. Share the login link with them.`,
+      emailSent: emailResult.success,
+      emailError: emailResult.error,
       loginUrl,
       isNewUser: true,
     });

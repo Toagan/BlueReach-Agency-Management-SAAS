@@ -35,7 +35,6 @@ export async function POST(
 
     let totalSynced = 0;
     let totalCreated = 0;
-    let totalUpdated = 0;
 
     // For each campaign, fetch positive leads from Instantly
     for (const campaign of campaigns || []) {
@@ -61,65 +60,49 @@ export async function POST(
 
       console.log(`[Sync Positive] Found ${positiveLeads.length} positive leads in Instantly for ${campaign.name}`);
 
+      // Get client name once for all leads
+      const { data: clientData } = await supabase
+        .from("clients")
+        .select("name")
+        .eq("id", clientId)
+        .single();
+      const clientName = clientData?.name || "";
+
       for (const lead of positiveLeads) {
-        // Check if lead exists in local database
-        const { data: existingLead, error: findError } = await supabase
+        // Normalize email to handle case sensitivity and whitespace
+        const normalizedEmail = lead.email.toLowerCase().trim();
+
+        // Use upsert to handle duplicates gracefully
+        const { data: upsertedLead, error: upsertError } = await supabase
           .from("leads")
-          .select("id, is_positive_reply")
-          .eq("email", lead.email)
-          .eq("campaign_id", campaign.id)
-          .single();
-
-        if (findError && findError.code !== "PGRST116") {
-          console.error("Error finding lead:", findError);
-          continue;
-        }
-
-        if (existingLead) {
-          // Lead exists - update if not already marked as positive
-          if (!existingLead.is_positive_reply) {
-            const { error: updateError } = await supabase
-              .from("leads")
-              .update({
-                is_positive_reply: true,
-                lt_interest_status: 1,
-                has_replied: true,
-                status: "replied",
-              })
-              .eq("id", existingLead.id);
-
-            if (updateError) {
-              console.error("Error updating lead:", updateError);
-            } else {
-              totalUpdated++;
-              console.log(`[Sync Positive] Updated lead: ${lead.email}`);
-            }
-          }
-        } else {
-          // Lead doesn't exist - create it
-          const { error: createError } = await supabase
-            .from("leads")
-            .insert({
-              email: lead.email,
+          .upsert(
+            {
+              email: normalizedEmail,
               first_name: lead.first_name || null,
               last_name: lead.last_name || null,
               company_name: lead.company_name || null,
               campaign_id: campaign.id,
               client_id: clientId,
-              client_name: (await supabase.from("clients").select("name").eq("id", clientId).single()).data?.name || "",
+              client_name: clientName,
               campaign_name: campaign.name,
               is_positive_reply: true,
               has_replied: true,
               lt_interest_status: 1,
               status: "replied",
-            });
+            },
+            {
+              onConflict: "campaign_id,email",
+              ignoreDuplicates: false, // Update existing records
+            }
+          )
+          .select("id")
+          .single();
 
-          if (createError) {
-            console.error("Error creating lead:", createError);
-          } else {
-            totalCreated++;
-            console.log(`[Sync Positive] Created lead: ${lead.email}`);
-          }
+        if (upsertError) {
+          console.error(`[Sync Positive] Error upserting lead ${normalizedEmail}:`, upsertError);
+        } else {
+          totalCreated++;
+          console.log(`[Sync Positive] Upserted lead: ${normalizedEmail}`);
         }
 
         totalSynced++;
@@ -129,8 +112,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       synced: totalSynced,
-      created: totalCreated,
-      updated: totalUpdated,
+      upserted: totalCreated,
     });
   } catch (error) {
     console.error("Error in sync positive leads:", error);

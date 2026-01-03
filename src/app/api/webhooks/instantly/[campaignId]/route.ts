@@ -109,16 +109,19 @@ export async function POST(request: Request, { params }: RouteParams) {
       interest_status: payload.interest_status || payload.lt_interest_status,
     });
 
-    // Get lead email from payload
-    const leadEmail = payload.lead_email;
+    // Get lead email from payload and normalize it
+    const rawLeadEmail = payload.lead_email;
 
-    if (!leadEmail) {
+    if (!rawLeadEmail) {
       console.warn("[Webhook] No lead_email in payload:", payload);
       return NextResponse.json({
         success: true,
         message: "No lead_email in payload, skipped"
       });
     }
+
+    // Normalize email to handle case sensitivity and whitespace
+    const leadEmail = rawLeadEmail.toLowerCase().trim();
 
     // Instantly event types (from API V2 docs):
     // Positive: "lead_interested", "lead_meeting_booked", "lead_meeting_completed", "lead_closed"
@@ -146,43 +149,89 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const isPositive = positiveEvents.includes(eventType);
     const isNegative = negativeEvents.includes(eventType);
+    const isReply = eventType === "reply_received" || eventType === "auto_reply_received";
 
-    // Update lead based on the event
-    if (isPositive || isNegative) {
-      const { data: updatedLead, error: updateError } = await supabase
+    // Get client_id from campaign for creating new leads
+    const { data: campaignWithClient } = await supabase
+      .from("campaigns")
+      .select("client_id")
+      .eq("id", campaignId)
+      .single();
+
+    const clientId = campaignWithClient?.client_id;
+
+    // Get client name separately if we have client_id
+    let clientName = "";
+    if (clientId) {
+      const { data: clientData } = await supabase
+        .from("clients")
+        .select("name")
+        .eq("id", clientId)
+        .single();
+      clientName = clientData?.name || "";
+    }
+
+    // Build update data based on event type
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (isPositive) {
+      updateData.is_positive_reply = true;
+      updateData.has_replied = true;
+      updateData.status = "replied";
+    } else if (isNegative) {
+      updateData.is_positive_reply = false;
+    }
+
+    if (isReply) {
+      updateData.has_replied = true;
+      updateData.status = "replied";
+    }
+
+    // Try to update existing lead first
+    const { data: existingLead, error: findError } = await supabase
+      .from("leads")
+      .select("id")
+      .eq("campaign_id", campaignId)
+      .eq("email", leadEmail)
+      .maybeSingle();
+
+    if (existingLead) {
+      // Update existing lead
+      const { error: updateError } = await supabase
         .from("leads")
-        .update({
-          is_positive_reply: isPositive,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("campaign_id", campaignId)
-        .eq("email", leadEmail)
-        .select("id, email, is_positive_reply")
-        .maybeSingle();
+        .update(updateData)
+        .eq("id", existingLead.id);
 
       if (updateError) {
         console.error("[Webhook] Error updating lead:", updateError);
-      } else if (updatedLead) {
-        console.log(`[Webhook] Updated lead ${leadEmail} - is_positive_reply: ${isPositive}`);
       } else {
-        console.warn(`[Webhook] Lead not found in DB: ${leadEmail} for campaign ${campaignId}`);
+        console.log(`[Webhook] Updated lead ${leadEmail} - event: ${eventType}`);
       }
-    }
-
-    // Handle reply_received event - update lead status
-    if (eventType === "reply_received") {
-      const { error: replyError } = await supabase
+    } else if (clientId && (isPositive || isReply)) {
+      // Create new lead if it doesn't exist and this is a positive/reply event
+      const { error: insertError } = await supabase
         .from("leads")
-        .update({
+        .insert({
+          email: leadEmail,
+          campaign_id: campaignId,
+          client_id: clientId,
+          client_name: clientName,
+          campaign_name: campaign.name,
+          is_positive_reply: isPositive,
+          has_replied: isReply || isPositive,
           status: "replied",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("campaign_id", campaignId)
-        .eq("email", leadEmail);
+          ...updateData,
+        });
 
-      if (replyError) {
-        console.error("[Webhook] Error updating reply status:", replyError);
+      if (insertError) {
+        console.error("[Webhook] Error creating lead:", insertError);
+      } else {
+        console.log(`[Webhook] Created new lead ${leadEmail} from webhook event: ${eventType}`);
       }
+    } else {
+      console.warn(`[Webhook] Lead not found and not creating for event ${eventType}: ${leadEmail}`);
     }
 
     const duration = Date.now() - startTime;
