@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   fetchAllInstantlyCampaigns,
   fetchAllLeadsForCampaign,
+  getCampaignAnalytics,
   getInstantlyClient,
 } from "@/lib/instantly";
 import type { SyncResult } from "@/lib/instantly";
@@ -117,7 +118,30 @@ export async function POST(request: Request) {
       // Skip campaigns that belong to other clients
     }
 
-    // Step 2: Sync leads (if enabled)
+    // Step 2: Sync campaign analytics (always)
+    try {
+      const analyticsData = await getCampaignAnalytics();
+      for (const a of analyticsData) {
+        // Find local campaign by Instantly ID
+        const localId = campaignIdMap.get(a.campaign_id) || existingMap.get(a.campaign_id);
+        if (localId) {
+          await supabase
+            .from("campaigns")
+            .update({
+              cached_emails_sent: a.emails_sent_count || 0,
+              cached_emails_bounced: a.bounced_count || 0,
+              cached_emails_opened: a.open_count_unique || 0,
+              cached_reply_count: a.reply_count || 0,
+              cache_updated_at: new Date().toISOString(),
+            })
+            .eq("id", localId);
+        }
+      }
+    } catch (analyticsError) {
+      console.error("Failed to sync analytics:", analyticsError);
+    }
+
+    // Step 3: Sync leads (if enabled)
     const leadResult: SyncResult = {
       success: true,
       imported: 0,
@@ -155,14 +179,17 @@ export async function POST(request: Request) {
             const positiveStatuses = ["interested", "meeting_booked", "meeting_completed", "closed"];
             const isPositiveReply = positiveStatuses.includes(lead.interest_status || "");
 
-            // Map to our lead status: contacted → replied → meeting → closed_won / closed_lost
+            // Normalize email for consistent lookup
+            const normalizedEmail = lead.email.toLowerCase().trim();
+
+            // Map to our lead status: contacted → replied → booked → won / lost
             let status: string = "contacted";
             if (lead.interest_status === "closed") {
-              status = "closed_won";
+              status = "won";
             } else if (lead.interest_status === "not_interested" || lead.interest_status === "wrong_person") {
-              status = "closed_lost";
+              status = "lost";
             } else if (lead.interest_status === "meeting_booked" || lead.interest_status === "meeting_completed") {
-              status = "meeting";
+              status = "booked";
             } else if (hasReplied || lead.interest_status === "interested") {
               status = "replied";
             }
@@ -184,7 +211,7 @@ export async function POST(request: Request) {
               .from("leads")
               .select("id, status, is_positive_reply, first_name, last_name, company_name, company_domain, phone, personalization, email_open_count, email_click_count, email_reply_count, last_contacted_at")
               .eq("campaign_id", localCampaignId)
-              .eq("email", lead.email)
+              .eq("email", normalizedEmail)
               .single();
 
             if (existingLead) {
@@ -267,7 +294,7 @@ export async function POST(request: Request) {
                 client_id: client_id,
                 client_name: clientName,
                 campaign_name: campaignName,
-                email: lead.email,
+                email: normalizedEmail,
                 first_name: lead.first_name || null,
                 last_name: lead.last_name || null,
                 company_name: lead.company_name || null,

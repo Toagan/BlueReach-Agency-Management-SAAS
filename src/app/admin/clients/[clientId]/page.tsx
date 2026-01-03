@@ -347,24 +347,10 @@ export default function ClientDashboardPage() {
 
       setClient(clientData.client);
       setCampaigns(campaignsData.campaigns || []);
-      // Set client-wide stats (more reliable for replies/positive counts)
+      // Set client-wide stats
       if (campaignsData.clientStats) {
         setClientStats(campaignsData.clientStats);
       }
-
-      // Fetch Instantly stats in background for accurate emails_sent counts
-      // Stats will auto-recalculate via useMemo when campaigns state updates
-      fetch(`/api/clients/${clientId}/campaigns?source=instantly`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.campaigns) {
-            setCampaigns(data.campaigns);
-          }
-          if (data.clientStats) {
-            setClientStats(data.clientStats);
-          }
-        })
-        .catch((err) => console.error("Failed to fetch Instantly stats:", err));
 
       setLastUpdated(new Date());
     } catch (err) {
