@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AddCustomerDialog } from "@/components/admin/add-customer-dialog";
+import { DeleteCustomerDialog } from "@/components/admin/delete-customer-dialog";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -398,6 +399,8 @@ function StatCard({
 }
 
 function CustomerRow({ customer, onRefresh }: { customer: Customer; onRefresh: () => void }) {
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
   const handleArchive = async () => {
     try {
       await fetch(`/api/admin/customers/${customer.id}`, {
@@ -412,26 +415,16 @@ function CustomerRow({ customer, onRefresh }: { customer: Customer; onRefresh: (
   };
 
   const handleDelete = async () => {
-    if (!confirm(`Are you sure you want to delete "${customer.name}"? This will also delete all their campaigns and leads. This action cannot be undone.`)) {
-      return;
+    const res = await fetch(`/api/admin/customers/${customer.id}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Failed to delete customer");
     }
 
-    try {
-      const res = await fetch(`/api/admin/customers/${customer.id}`, {
-        method: "DELETE",
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        alert(data.error || "Failed to delete customer");
-        return;
-      }
-
-      onRefresh();
-    } catch (error) {
-      console.error("Failed to delete customer:", error);
-      alert("Failed to delete customer");
-    }
+    onRefresh();
   };
 
   return (
@@ -488,12 +481,22 @@ function CustomerRow({ customer, onRefresh }: { customer: Customer; onRefresh: (
             <Archive className="h-4 w-4" />
             {customer.is_active ? "Archive" : "Restore"}
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleDelete} className="flex items-center gap-2 text-red-600 focus:text-red-600">
+          <DropdownMenuItem
+            onClick={() => setIsDeleteDialogOpen(true)}
+            className="flex items-center gap-2 text-red-600 focus:text-red-600"
+          >
             <Trash2 className="h-4 w-4" />
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <DeleteCustomerDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        customerName={customer.name}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }
