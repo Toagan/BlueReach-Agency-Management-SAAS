@@ -22,82 +22,165 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
-import { RefreshCw, Copy, Check, ExternalLink } from "lucide-react";
+import {
+  RefreshCw,
+  Copy,
+  Check,
+  ExternalLink,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+} from "lucide-react";
 
-interface InstantlyCampaign {
+type ProviderType = "instantly" | "smartlead";
+
+interface ProviderCampaign {
   id: string;
   name: string;
-  status: number | string;
+  status: "active" | "paused" | "draft" | "completed";
+  leadsCount?: number;
 }
 
 interface AddCampaignDialogProps {
   clientId: string;
 }
 
+const PROVIDERS: { value: ProviderType; label: string; available: boolean }[] = [
+  { value: "instantly", label: "Instantly", available: true },
+  { value: "smartlead", label: "Smartlead", available: false },
+];
+
 export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
+  // Dialog state
   const [open, setOpen] = useState(false);
-  const [instantlyCampaigns, setInstantlyCampaigns] = useState<InstantlyCampaign[]>([]);
+  const [step, setStep] = useState<"provider" | "campaign" | "success">("provider");
+
+  // Provider selection
+  const [selectedProvider, setSelectedProvider] = useState<ProviderType>("instantly");
+
+  // API key
+  const [apiKey, setApiKey] = useState("");
+  const [apiKeyValid, setApiKeyValid] = useState<boolean | null>(null);
+  const [validatingKey, setValidatingKey] = useState(false);
+
+  // Campaigns
+  const [campaigns, setCampaigns] = useState<ProviderCampaign[]>([]);
   const [linkedCampaignIds, setLinkedCampaignIds] = useState<Set<string>>(new Set());
   const [selectedCampaignId, setSelectedCampaignId] = useState("");
   const [customName, setCustomName] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loadingCampaigns, setLoadingCampaigns] = useState(false);
+
+  // Submission
   const [isPending, startTransition] = useTransition();
-  const [showSuccess, setShowSuccess] = useState(false);
   const [linkedCampaignName, setLinkedCampaignName] = useState("");
   const [copied, setCopied] = useState(false);
+
   const router = useRouter();
   const supabase = createClient();
 
   // Generate webhook URL
-  const webhookUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/api/webhooks/instantly`
-    : "";
+  const webhookUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/api/webhooks/${selectedProvider}`
+      : "";
 
-  const fetchCampaigns = async () => {
-    setLoading(true);
+  // Validate API key
+  const validateApiKey = async () => {
+    if (!apiKey.trim()) return;
+
+    setValidatingKey(true);
+    setApiKeyValid(null);
+
     try {
-      // Fetch Instantly campaigns
-      const res = await fetch("/api/instantly/campaigns");
+      const res = await fetch(`/api/providers/${selectedProvider}/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: apiKey.trim() }),
+      });
       const data = await res.json();
-      setInstantlyCampaigns(data.campaigns || []);
+      setApiKeyValid(data.valid);
+    } catch (error) {
+      console.error("Error validating API key:", error);
+      setApiKeyValid(false);
+    } finally {
+      setValidatingKey(false);
+    }
+  };
+
+  // Fetch campaigns from provider
+  const fetchCampaigns = async () => {
+    if (!apiKey.trim() || !apiKeyValid) return;
+
+    setLoadingCampaigns(true);
+    try {
+      const res = await fetch(`/api/providers/${selectedProvider}/campaigns`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: apiKey.trim() }),
+      });
+      const data = await res.json();
+      setCampaigns(data.campaigns || []);
 
       // Fetch already linked campaigns
       const { data: linked } = await supabase
         .from("campaigns")
-        .select("instantly_campaign_id")
-        .not("instantly_campaign_id", "is", null);
+        .select("provider_campaign_id, instantly_campaign_id")
+        .eq("provider_type", selectedProvider);
 
-      const linkedIds = new Set(
-        (linked || []).map((c) => c.instantly_campaign_id).filter(Boolean)
-      );
-      setLinkedCampaignIds(linkedIds as Set<string>);
+      const linkedIds = new Set<string>();
+      (linked || []).forEach((c) => {
+        if (c.provider_campaign_id) linkedIds.add(c.provider_campaign_id);
+        if (c.instantly_campaign_id) linkedIds.add(c.instantly_campaign_id);
+      });
+      setLinkedCampaignIds(linkedIds);
     } catch (error) {
       console.error("Error fetching campaigns:", error);
     } finally {
-      setLoading(false);
+      setLoadingCampaigns(false);
     }
   };
 
+  // When API key becomes valid, fetch campaigns
   useEffect(() => {
-    if (open) {
+    if (apiKeyValid === true) {
       fetchCampaigns();
     }
-  }, [open]);
+  }, [apiKeyValid]);
 
-  const selectedCampaign = instantlyCampaigns.find((c) => c.id === selectedCampaignId);
+  // Reset state when provider changes
+  useEffect(() => {
+    setApiKey("");
+    setApiKeyValid(null);
+    setCampaigns([]);
+    setSelectedCampaignId("");
+  }, [selectedProvider]);
+
+  const selectedCampaign = campaigns.find((c) => c.id === selectedCampaignId);
+  const availableCampaigns = campaigns.filter((c) => !linkedCampaignIds.has(c.id));
+
+  const handleContinueToSelect = () => {
+    if (apiKeyValid && campaigns.length > 0) {
+      setStep("campaign");
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!selectedCampaignId) return;
+    if (!selectedCampaignId || !apiKey.trim()) return;
 
     const campaignName = customName.trim() || selectedCampaign?.name || "Unnamed Campaign";
 
     const { error } = await supabase.from("campaigns").insert({
       client_id: clientId,
       name: campaignName,
-      instantly_campaign_id: selectedCampaignId,
-      is_active: selectedCampaign?.status === 1 || selectedCampaign?.status === "active",
+      original_name: selectedCampaign?.name,
+      provider_type: selectedProvider,
+      provider_campaign_id: selectedCampaignId,
+      // For backwards compatibility
+      instantly_campaign_id: selectedProvider === "instantly" ? selectedCampaignId : null,
+      api_key_encrypted: apiKey.trim(), // Store the API key
+      is_active: selectedCampaign?.status === "active",
     });
 
     if (error) {
@@ -108,7 +191,7 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
 
     // Show success with webhook URL
     setLinkedCampaignName(campaignName);
-    setShowSuccess(true);
+    setStep("success");
 
     startTransition(() => {
       router.refresh();
@@ -117,10 +200,17 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
 
   const handleClose = () => {
     setOpen(false);
-    setShowSuccess(false);
-    setSelectedCampaignId("");
-    setCustomName("");
-    setCopied(false);
+    // Reset after animation
+    setTimeout(() => {
+      setStep("provider");
+      setSelectedProvider("instantly");
+      setApiKey("");
+      setApiKeyValid(null);
+      setCampaigns([]);
+      setSelectedCampaignId("");
+      setCustomName("");
+      setCopied(false);
+    }, 200);
   };
 
   const copyWebhookUrl = async () => {
@@ -129,17 +219,24 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const availableCampaigns = instantlyCampaigns.filter(
-    (c) => !linkedCampaignIds.has(c.id)
-  );
+  const getProviderSettingsUrl = () => {
+    switch (selectedProvider) {
+      case "instantly":
+        return "https://app.instantly.ai/app/settings/integrations";
+      case "smartlead":
+        return "https://app.smartlead.ai/settings/integrations";
+      default:
+        return "#";
+    }
+  };
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => isOpen ? setOpen(true) : handleClose()}>
+    <Dialog open={open} onOpenChange={(isOpen) => (isOpen ? setOpen(true) : handleClose())}>
       <DialogTrigger asChild>
         <Button onClick={() => setOpen(true)}>Link Campaign</Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
-        {showSuccess ? (
+        {step === "success" ? (
           // Success state with webhook URL
           <>
             <DialogHeader>
@@ -151,78 +248,74 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
             <div className="py-4 space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <h4 className="font-medium text-blue-900 mb-2">
-                  Set up Webhook in Instantly
+                  Set up Webhook in {selectedProvider === "instantly" ? "Instantly" : "Smartlead"}
                 </h4>
                 <p className="text-sm text-blue-800 mb-3">
-                  To receive real-time updates (opens, clicks, replies), add this webhook URL in your Instantly campaign settings:
+                  To receive real-time updates (opens, clicks, replies), add this webhook URL in your{" "}
+                  {selectedProvider === "instantly" ? "Instantly" : "Smartlead"} campaign settings:
                 </p>
                 <div className="flex gap-2">
-                  <Input
-                    value={webhookUrl}
-                    readOnly
-                    className="bg-white text-sm font-mono"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={copyWebhookUrl}
-                  >
-                    {copied ? (
-                      <Check className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
+                  <Input value={webhookUrl} readOnly className="bg-white text-sm font-mono" />
+                  <Button type="button" variant="outline" size="icon" onClick={copyWebhookUrl}>
+                    {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>
               </div>
 
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <h4 className="font-medium text-yellow-900 mb-2">
-                  Webhook Events to Enable
-                </h4>
+                <h4 className="font-medium text-yellow-900 mb-2">Webhook Events to Enable</h4>
                 <ul className="text-sm text-yellow-800 space-y-1">
-                  <li>• <strong>reply_received</strong> - When lead replies</li>
-                  <li>• <strong>lead_interested</strong> - Positive reply detected</li>
-                  <li>• <strong>email_opened</strong> - When email is opened</li>
-                  <li>• <strong>link_clicked</strong> - When link is clicked</li>
+                  <li>
+                    - <strong>reply_received</strong> - When lead replies
+                  </li>
+                  <li>
+                    - <strong>lead_interested</strong> - Positive reply detected
+                  </li>
+                  <li>
+                    - <strong>email_opened</strong> - When email is opened
+                  </li>
+                  <li>
+                    - <strong>link_clicked</strong> - When link is clicked
+                  </li>
+                  <li>
+                    - <strong>email_sent</strong> - When email is sent
+                  </li>
                 </ul>
               </div>
 
               <a
-                href="https://app.instantly.ai/app/settings/integrations"
+                href={getProviderSettingsUrl()}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-sm text-blue-600 hover:underline"
               >
                 <ExternalLink className="h-4 w-4" />
-                Open Instantly Webhook Settings
+                Open {selectedProvider === "instantly" ? "Instantly" : "Smartlead"} Webhook Settings
               </a>
             </div>
             <DialogFooter>
-              <Button onClick={handleClose}>
-                Done
-              </Button>
+              <Button onClick={handleClose}>Done</Button>
             </DialogFooter>
           </>
-        ) : (
-          // Form state
+        ) : step === "campaign" ? (
+          // Campaign selection
           <form onSubmit={handleSubmit}>
             <DialogHeader>
-              <DialogTitle>Link Instantly Campaign</DialogTitle>
+              <DialogTitle>Select Campaign</DialogTitle>
               <DialogDescription>
-                Select a campaign from Instantly to link to this client.
+                Choose a campaign from {selectedProvider === "instantly" ? "Instantly" : "Smartlead"} to
+                link to this client.
               </DialogDescription>
             </DialogHeader>
             <div className="py-4 space-y-4">
-              {loading ? (
+              {loadingCampaigns ? (
                 <div className="flex items-center justify-center py-8">
                   <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
                 </div>
               ) : availableCampaigns.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <p>No unlinked campaigns available.</p>
-                  <p className="text-sm mt-1">All your Instantly campaigns are already linked to clients.</p>
+                  <p className="text-sm mt-1">All campaigns from this API key are already linked.</p>
                 </div>
               ) : (
                 <>
@@ -238,12 +331,13 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
                             <div className="flex items-center gap-2">
                               <span
                                 className={`w-2 h-2 rounded-full ${
-                                  campaign.status === 1 || campaign.status === "active"
-                                    ? "bg-green-500"
-                                    : "bg-gray-400"
+                                  campaign.status === "active" ? "bg-green-500" : "bg-gray-400"
                                 }`}
                               />
                               {campaign.name}
+                              {campaign.leadsCount !== undefined && (
+                                <span className="text-gray-400 text-xs">({campaign.leadsCount} leads)</span>
+                              )}
                             </div>
                           </SelectItem>
                         ))}
@@ -262,11 +356,114 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
                         className="mt-1"
                       />
                       <p className="text-xs text-gray-500 mt-1">
-                        Leave empty to use the Instantly campaign name
+                        Leave empty to use the original campaign name
                       </p>
                     </div>
                   )}
                 </>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setStep("provider")}>
+                Back
+              </Button>
+              <Button type="submit" disabled={isPending || !selectedCampaignId || loadingCampaigns}>
+                {isPending ? "Linking..." : "Link Campaign"}
+              </Button>
+            </DialogFooter>
+          </form>
+        ) : (
+          // Provider and API key selection
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleContinueToSelect();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Link Campaign</DialogTitle>
+              <DialogDescription>
+                Select your email provider and enter the API key for the campaign.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              {/* Provider Selection */}
+              <div>
+                <Label>Email Provider</Label>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  {PROVIDERS.map((provider) => (
+                    <button
+                      key={provider.value}
+                      type="button"
+                      disabled={!provider.available}
+                      onClick={() => setSelectedProvider(provider.value)}
+                      className={`p-3 rounded-lg border text-left transition-colors ${
+                        selectedProvider === provider.value
+                          ? "border-blue-500 bg-blue-50 text-blue-700"
+                          : provider.available
+                          ? "border-gray-200 hover:border-gray-300"
+                          : "border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed"
+                      }`}
+                    >
+                      <div className="font-medium">{provider.label}</div>
+                      {!provider.available && <div className="text-xs">Coming soon</div>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* API Key Input */}
+              <div>
+                <Label htmlFor="apiKey">API Key *</Label>
+                <div className="flex gap-2 mt-1">
+                  <div className="relative flex-1">
+                    <Input
+                      id="apiKey"
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => {
+                        setApiKey(e.target.value);
+                        setApiKeyValid(null);
+                      }}
+                      placeholder={`Enter your ${
+                        selectedProvider === "instantly" ? "Instantly" : "Smartlead"
+                      } API key`}
+                      className="pr-10"
+                    />
+                    {apiKeyValid !== null && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        {apiKeyValid ? (
+                          <CheckCircle2 className="h-5 w-5 text-green-500" />
+                        ) : (
+                          <XCircle className="h-5 w-5 text-red-500" />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={validateApiKey}
+                    disabled={!apiKey.trim() || validatingKey}
+                  >
+                    {validatingKey ? <Loader2 className="h-4 w-4 animate-spin" /> : "Validate"}
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  {selectedProvider === "instantly"
+                    ? "Find your API key in Instantly Settings > Integrations > API"
+                    : "Find your API key in Smartlead Settings > API"}
+                </p>
+                {apiKeyValid === false && (
+                  <p className="text-xs text-red-500 mt-1">Invalid API key. Please check and try again.</p>
+                )}
+              </div>
+
+              {/* Campaign count indicator */}
+              {apiKeyValid && campaigns.length > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
+                  Found {campaigns.length} campaigns ({availableCampaigns.length} available to link)
+                </div>
               )}
             </div>
             <DialogFooter>
@@ -275,9 +472,16 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
               </Button>
               <Button
                 type="submit"
-                disabled={isPending || !selectedCampaignId || loading}
+                disabled={!apiKeyValid || availableCampaigns.length === 0 || loadingCampaigns}
               >
-                {isPending ? "Linking..." : "Link Campaign"}
+                {loadingCampaigns ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Loading...
+                  </>
+                ) : (
+                  "Continue"
+                )}
               </Button>
             </DialogFooter>
           </form>
