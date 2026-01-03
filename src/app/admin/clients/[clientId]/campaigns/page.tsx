@@ -5,6 +5,7 @@ import { getCampaigns } from "@/lib/queries/campaigns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AddCampaignDialog } from "./add-campaign-dialog";
+import { SyncButton } from "./sync-button";
 import Link from "next/link";
 
 interface PageProps {
@@ -97,6 +98,9 @@ export default async function CampaignsPage({ params }: PageProps) {
                     </p>
                   </div>
                 )}
+                <div className="mt-4 pt-3 border-t">
+                  <SyncButton campaignId={campaign.id} />
+                </div>
               </CardContent>
             </Card>
           ))}
