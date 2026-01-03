@@ -76,6 +76,7 @@ interface ClientData {
   website?: string;
   notes?: string;
   product_service?: string;
+  icp?: string;
   acv?: number;
   tcv?: number;
   verticals?: string[];
@@ -478,107 +479,122 @@ export default function ClientDashboardPage() {
         </div>
       )}
 
-      {/* Client Intelligence - at the top */}
-      {(client?.notes || client?.product_service || client?.acv || client?.tcv || client?.verticals?.length || client?.tam) && (
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Lightbulb className="h-5 w-5 text-yellow-500" />
-                Client Intelligence
-              </CardTitle>
-              {isAdmin && (
-                <Link href={`/admin/clients/${clientId}/settings`}>
-                  <Button variant="ghost" size="sm">
-                    <Settings className="h-4 w-4 mr-1" />
-                    Edit
-                  </Button>
-                </Link>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Notes */}
-            {client.notes && (
-              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <p className="text-sm font-medium text-blue-700 dark:text-blue-300 mb-2 flex items-center gap-2">
-                  <MessageSquareText className="h-4 w-4" />
-                  Notes
+      {/* Client Overview Hero Card */}
+      {(client?.tam || client?.product_service || client?.icp) && (
+        <Card className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 border-slate-200 dark:border-slate-700 overflow-hidden">
+          <CardContent className="p-0">
+            <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 dark:divide-slate-700">
+              {/* TAM Section */}
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                      <Target className="h-5 w-5 text-blue-500" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Addressable Market</p>
+                      <p className="text-2xl font-bold text-foreground">
+                        {client?.tam ? client.tam.toLocaleString() : "—"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {client?.tam ? "potential leads in target market" : "TAM not defined yet"}
                 </p>
-                <p className="text-sm text-blue-600 dark:text-blue-400 whitespace-pre-wrap">{client.notes}</p>
               </div>
-            )}
 
-            {/* Product/Service */}
-            {client.product_service && (
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Product/Service</p>
-                <p className="text-foreground">{client.product_service}</p>
+              {/* Offer Section */}
+              <div className="p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <Lightbulb className="h-5 w-5 text-emerald-500" />
+                  </div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">The Offer</p>
+                </div>
+                {client?.product_service ? (
+                  <p className="text-sm text-foreground leading-relaxed line-clamp-4">
+                    {client.product_service}
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">
+                    No offer description defined yet
+                  </p>
+                )}
               </div>
-            )}
 
-            {/* Key Metrics Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {client.tam && (
-                <div className="bg-muted/50 rounded-lg p-3">
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-                    <Target className="h-3 w-3" />
-                    TAM
+              {/* ICP Section */}
+              <div className="p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                    <Users className="h-5 w-5 text-purple-500" />
                   </div>
-                  <p className="font-semibold text-foreground">
-                    {client.tam.toLocaleString()} leads
-                  </p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Ideal Customer Profile</p>
                 </div>
-              )}
-              {client.acv && (
-                <div className="bg-muted/50 rounded-lg p-3">
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-                    <DollarSign className="h-3 w-3" />
-                    ACV
-                  </div>
-                  <p className="font-semibold text-foreground">
-                    ${client.acv.toLocaleString()}
+                {client?.icp ? (
+                  <p className="text-sm text-foreground leading-relaxed line-clamp-4">
+                    {client.icp}
                   </p>
-                </div>
-              )}
-              {client.tcv && (
-                <div className="bg-muted/50 rounded-lg p-3">
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-                    <DollarSign className="h-3 w-3" />
-                    TCV
-                  </div>
-                  <p className="font-semibold text-foreground">
-                    ${client.tcv.toLocaleString()}
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">
+                    No ICP defined yet
                   </p>
-                </div>
-              )}
-              {client.target_daily_emails && (
-                <div className="bg-muted/50 rounded-lg p-3">
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-                    <Mail className="h-3 w-3" />
-                    Daily Target
-                  </div>
-                  <p className="font-semibold text-foreground">
-                    {client.target_daily_emails.toLocaleString()} emails
-                  </p>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
-            {/* Verticals */}
-            {client.verticals && client.verticals.length > 0 && (
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1">
-                  <Building2 className="h-3 w-3" />
-                  Target Verticals
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {client.verticals.map((vertical, index) => (
-                    <Badge key={index} variant="secondary">
-                      {vertical}
-                    </Badge>
-                  ))}
+            {/* Additional Details Bar */}
+            {(client?.verticals?.length || client?.acv || client?.tcv || client?.notes) && (
+              <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-100/50 dark:bg-slate-800/50 px-6 py-4">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                  {client?.verticals && client.verticals.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                      <div className="flex flex-wrap gap-1">
+                        {client.verticals.slice(0, 3).map((vertical, index) => (
+                          <Badge key={index} variant="secondary" className="text-xs">
+                            {vertical}
+                          </Badge>
+                        ))}
+                        {client.verticals.length > 3 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{client.verticals.length - 3} more
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {client?.acv && (
+                    <div className="flex items-center gap-1.5 text-sm">
+                      <DollarSign className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">ACV:</span>
+                      <span className="font-medium">${client.acv.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {client?.tcv && (
+                    <div className="flex items-center gap-1.5 text-sm">
+                      <DollarSign className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">TCV:</span>
+                      <span className="font-medium">${client.tcv.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {isAdmin && (
+                    <Link href={`/admin/clients/${clientId}/settings`} className="ml-auto">
+                      <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                        <Settings className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                    </Link>
+                  )}
                 </div>
+                {client?.notes && (
+                  <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                    <div className="flex items-start gap-2">
+                      <MessageSquareText className="h-4 w-4 text-muted-foreground mt-0.5" />
+                      <p className="text-sm text-muted-foreground">{client.notes}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

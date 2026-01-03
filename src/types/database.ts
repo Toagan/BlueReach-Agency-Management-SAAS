@@ -9,6 +9,7 @@ export type TeamRole = "owner" | "manager" | "member" | "viewer";
 export type ActivityType = "call" | "meeting" | "email" | "note" | "status_change" | "task" | "other";
 export type EmailEventType = "sent" | "opened" | "clicked" | "replied" | "bounced" | "unsubscribed" | "spam_complaint";
 export type AuditAction = "create" | "update" | "delete";
+export type BillingCycle = "monthly" | "yearly" | "quarterly" | "weekly" | "custom";
 
 // ============================================
 // CORE TABLES
@@ -28,6 +29,7 @@ export interface Client {
   website?: string | null;
   notes?: string | null;
   product_service?: string | null;
+  icp?: string | null;
   acv?: number | null;
   tcv?: number | null;
   verticals?: string[] | null;
@@ -48,6 +50,11 @@ export interface Campaign {
   copy_body: string | null;
   is_active: boolean;
   last_synced_at: string | null;
+  // Per-campaign API key fields
+  api_key_encrypted: string | null;
+  api_key_label: string | null;
+  webhook_secret: string | null;
+  last_lead_sync_at: string | null;
 }
 
 export interface Lead {
@@ -77,6 +84,9 @@ export interface Lead {
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  // Multi-provider support
+  provider_type: ProviderType | null;
+  provider_lead_id: string | null;
 }
 
 export interface ClientUser {
@@ -228,6 +238,9 @@ export interface EmailEvent {
   link_clicked: string | null;
   timestamp: string;
   metadata: Record<string, unknown>;
+  // Multi-provider support
+  provider_type: ProviderType | null;
+  provider_event_id: string | null;
 }
 
 export interface TeamMember {
@@ -253,6 +266,102 @@ export interface AuditLog {
   ip_address: string | null;
   user_agent: string | null;
   created_at: string;
+}
+
+export interface Subscription {
+  id: string;
+  name: string;
+  url: string | null;
+  username: string | null;
+  password: string | null;
+  cost: number;
+  billing_cycle: BillingCycle;
+  renewal_date: string | null;
+  credits_balance: number;
+  credits_limit: number;
+  category: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================
+// INFRASTRUCTURE HEALTH TYPES
+// ============================================
+
+export type EmailAccountStatus = "active" | "error" | "disconnected" | "paused";
+export type EmailAccountProvider = "instantly" | "smartlead";
+export type DmarcPolicy = "none" | "quarantine" | "reject";
+
+export interface EmailAccount {
+  id: string;
+  provider_type: EmailAccountProvider;
+  provider_account_id: string | null;
+  email: string;
+  client_id: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  domain: string;
+  status: EmailAccountStatus;
+  error_message: string | null;
+  warmup_enabled: boolean;
+  warmup_reputation: number | null;
+  warmup_emails_sent: number;
+  warmup_emails_received: number;
+  warmup_saved_from_spam: number;
+  daily_limit: number | null;
+  emails_sent_today: number;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailAccountHealthHistory {
+  id: string;
+  email_account_id: string;
+  snapshot_date: string;
+  status: string | null;
+  warmup_reputation: number | null;
+  warmup_emails_sent: number | null;
+  warmup_emails_received: number | null;
+  emails_sent_today: number;
+  emails_bounced_today: number;
+  created_at: string;
+}
+
+export interface DomainHealth {
+  id: string;
+  domain: string;
+  has_spf: boolean;
+  spf_record: string | null;
+  spf_valid: boolean;
+  has_dkim: boolean;
+  dkim_selector: string | null;
+  dkim_record: string | null;
+  dkim_valid: boolean;
+  has_dmarc: boolean;
+  dmarc_record: string | null;
+  dmarc_policy: DmarcPolicy | null;
+  dmarc_valid: boolean;
+  health_score: number;
+  last_checked_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailAccountWithHealth extends EmailAccount {
+  client_name: string | null;
+  domain_health_score: number | null;
+  spf_valid: boolean | null;
+  dkim_valid: boolean | null;
+  dmarc_valid: boolean | null;
+  dmarc_policy: DmarcPolicy | null;
+}
+
+export interface DomainSummary extends DomainHealth {
+  account_count: number;
+  client_count: number;
 }
 
 // ============================================
@@ -373,6 +482,15 @@ export interface Database {
         };
         Update: never; // Audit logs should never be updated
       };
+      subscriptions: {
+        Row: Subscription;
+        Insert: Omit<Subscription, "id" | "created_at" | "updated_at"> & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<Subscription, "id" | "created_at">>;
+      };
     };
     Views: {
       positive_replies: {
@@ -402,6 +520,7 @@ export interface Database {
       activity_type: ActivityType;
       email_event_type: EmailEventType;
       audit_action: AuditAction;
+      billing_cycle: BillingCycle;
     };
   };
 }

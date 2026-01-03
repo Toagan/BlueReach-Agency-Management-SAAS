@@ -19,6 +19,7 @@ interface ClientData {
   website?: string;
   notes?: string;
   product_service?: string;
+  icp?: string;
   acv?: number;
   tcv?: number;
   verticals?: string[];
@@ -65,6 +66,7 @@ export default function ClientSettingsPage() {
 
   // Client Intelligence fields
   const [productService, setProductService] = useState("");
+  const [icp, setIcp] = useState("");
   const [acv, setAcv] = useState("");
   const [tcv, setTcv] = useState("");
   const [verticals, setVerticals] = useState("");
@@ -202,6 +204,7 @@ export default function ClientSettingsPage() {
         }
         // Load Client Intelligence fields
         setProductService(clientData.product_service || "");
+        setIcp(clientData.icp || "");
         setAcv(clientData.acv ? String(clientData.acv) : "");
         setTcv(clientData.tcv ? String(clientData.tcv) : "");
         setVerticals(clientData.verticals ? clientData.verticals.join(", ") : "");
@@ -300,6 +303,7 @@ export default function ClientSettingsPage() {
           website: website.trim() || null,
           notes: notes.trim() || null,
           product_service: productService.trim() || null,
+          icp: icp.trim() || null,
           acv: acv ? parseFloat(acv) : null,
           tcv: tcv ? parseFloat(tcv) : null,
           verticals: verticalsArray.length > 0 ? verticalsArray : null,
@@ -497,14 +501,27 @@ export default function ClientSettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="productService">Product/Service</Label>
+            <Label htmlFor="productService">The Offer (Product/Service)</Label>
             <Textarea
               id="productService"
               value={productService}
               onChange={(e) => setProductService(e.target.value)}
-              placeholder="Describe the product or service being sold..."
+              placeholder="Describe what you're offering - the core value proposition..."
               rows={3}
             />
+            <p className="text-xs text-muted-foreground">What problem does this solve? What&apos;s the main benefit?</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="icp">Ideal Customer Profile (ICP)</Label>
+            <Textarea
+              id="icp"
+              value={icp}
+              onChange={(e) => setIcp(e.target.value)}
+              placeholder="e.g., B2B SaaS companies with 50-500 employees, Series A-C funded, in the US/EU, looking to scale their sales team..."
+              rows={4}
+            />
+            <p className="text-xs text-muted-foreground">Describe the ideal target customer: company size, industry, geography, pain points, etc.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
