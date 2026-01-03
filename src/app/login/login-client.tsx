@@ -47,7 +47,6 @@ export function LoginClient() {
   useEffect(() => {
     if (errorParam) {
       setMessage({ type: "error", text: errorParam });
-      // Clear the error from URL without triggering a reload
       const url = new URL(window.location.href);
       url.searchParams.delete("error");
       window.history.replaceState({}, "", url.toString());
@@ -112,7 +111,7 @@ export function LoginClient() {
 
   return (
     <div className="min-h-screen flex bg-[#050508] overflow-hidden">
-      {/* Left Panel - Branding & Value Prop */}
+      {/* Left Panel - Client-focused Value Prop */}
       <div className="hidden lg:flex lg:w-[58%] relative">
         {/* Layered gradient background */}
         <div className="absolute inset-0 bg-gradient-to-br from-[#050508] via-[#0a1628] to-[#050508]" />
@@ -158,28 +157,28 @@ export function LoginClient() {
           <div className="space-y-12 max-w-xl">
             {/* Headline */}
             <div className="space-y-6">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/10 border border-blue-500/20 rounded-full">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
                 <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-                <span className="text-sm text-blue-300 font-medium">Built for lead gen agencies</span>
+                <span className="text-sm text-emerald-300 font-medium">Your client portal is ready</span>
               </div>
 
               <h1 className="text-5xl xl:text-6xl font-bold text-white leading-[1.08] tracking-tight">
-                Your outreach
+                See your outreach
                 <span className="block mt-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-emerald-400">
-                  command center
+                  results in real-time
                 </span>
               </h1>
 
               <p className="text-xl text-zinc-400 leading-relaxed max-w-lg">
-                Track campaigns, manage leads, and give clients real-time visibility into their pipeline. All in one place.
+                Track your email campaigns, monitor lead responses, and see your pipeline grow. Full transparency into your outbound performance.
               </p>
             </div>
 
             {/* Value Props */}
             <div className="flex items-center gap-6 xl:gap-10">
               {[
-                { icon: "M13 10V3L4 14h7v7l9-11h-7z", label: "Real-time sync" },
-                { icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z", label: "Client portals" },
+                { icon: "M13 10V3L4 14h7v7l9-11h-7z", label: "Live updates" },
+                { icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z", label: "Full visibility" },
                 { icon: "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z", label: "Secure access" },
               ].map((item, i) => (
                 <div key={i} className="flex items-center gap-2 text-zinc-400">
@@ -191,31 +190,31 @@ export function LoginClient() {
               ))}
             </div>
 
-            {/* Feature Cards */}
+            {/* Feature Cards - Client focused */}
             <div className="grid grid-cols-2 gap-4">
               {[
                 {
-                  icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
-                  title: "Real-time Analytics",
-                  desc: "Live campaign metrics",
+                  icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
+                  title: "Campaign Performance",
+                  desc: "Emails sent, opened & replied",
                   color: "blue"
                 },
                 {
                   icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z",
-                  title: "Lead Pipeline",
-                  desc: "Track every opportunity",
+                  title: "Lead Responses",
+                  desc: "Track interested prospects",
                   color: "cyan"
                 },
                 {
-                  icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
-                  title: "Email Integration",
-                  desc: "Instantly & Smartlead",
+                  icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+                  title: "Meetings Booked",
+                  desc: "See your calendar fill up",
                   color: "indigo"
                 },
                 {
-                  icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z",
-                  title: "Client Portal",
-                  desc: "White-label dashboards",
+                  icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
+                  title: "Pipeline Value",
+                  desc: "Track your deal progress",
                   color: "emerald"
                 },
               ].map((feature, i) => (
@@ -248,7 +247,7 @@ export function LoginClient() {
           {/* Footer */}
           <div className="flex items-center justify-between">
             <div className="text-zinc-600 text-sm">
-              &copy; 2025 Blue Reach Agency
+              Powered by Blue Reach
             </div>
             <div className="flex items-center gap-6 text-sm text-zinc-600">
               <a href="#" className="hover:text-zinc-400 transition-colors">Privacy</a>
@@ -283,29 +282,29 @@ export function LoginClient() {
           {/* Header */}
           <div className="text-center lg:text-left space-y-3">
             <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
-              {inviteToken ? "You're invited" : "Welcome back"}
+              {inviteToken ? "You're invited!" : "Welcome back"}
             </h2>
             <p className="text-zinc-400 text-lg">
               {inviteToken
-                ? "Sign in to accept your invitation"
-                : "Sign in to your dashboard"
+                ? "Sign in to access your outreach dashboard"
+                : "Sign in to view your campaign results"
               }
             </p>
           </div>
 
           {/* Invite Banner */}
           {inviteToken && (
-            <div className="relative overflow-hidden bg-gradient-to-r from-blue-500/10 via-cyan-500/10 to-blue-500/10 border border-blue-500/20 rounded-2xl p-5">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-transparent animate-shimmer" />
+            <div className="relative overflow-hidden bg-gradient-to-r from-emerald-500/10 via-cyan-500/10 to-emerald-500/10 border border-emerald-500/20 rounded-2xl p-5">
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-transparent animate-shimmer" />
               <div className="relative flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/30 to-cyan-500/20 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/30 to-cyan-500/20 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
                 <div>
-                  <p className="font-semibold text-white">Invitation ready</p>
-                  <p className="text-sm text-zinc-400">Sign in to access your dashboard</p>
+                  <p className="font-semibold text-white">Your dashboard is ready</p>
+                  <p className="text-sm text-zinc-400">Sign in to see your campaign performance</p>
                 </div>
               </div>
             </div>
@@ -421,15 +420,15 @@ export function LoginClient() {
               </div>
               <div className="flex items-center gap-1.5">
                 <svg className="w-3.5 h-3.5 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span>Hosted on Vercel</span>
+                <span>Real-time data</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <svg className="w-3.5 h-3.5 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                <span>Supabase DB</span>
+                <span>Always up-to-date</span>
               </div>
             </div>
           </div>
@@ -446,7 +445,7 @@ export function LoginClient() {
 
           {/* Mobile footer */}
           <div className="lg:hidden text-center text-xs text-zinc-600 pt-4">
-            &copy; 2025 Blue Reach Agency
+            Powered by Blue Reach
           </div>
         </div>
       </div>
