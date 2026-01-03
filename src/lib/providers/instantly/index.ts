@@ -155,7 +155,7 @@ export class InstantlyProvider implements EmailCampaignProvider {
       );
       const campaigns = response.items || [];
 
-      allCampaigns.push(...campaigns.map(this.mapCampaign));
+      allCampaigns.push(...campaigns.map((c) => this.mapCampaign(c)));
 
       if (campaigns.length < limit) {
         break;
@@ -190,7 +190,7 @@ export class InstantlyProvider implements EmailCampaignProvider {
   private mapCampaignDetails(c: InstantlyCampaign): ProviderCampaignDetails {
     return {
       ...this.mapCampaign(c),
-      sequences: c.sequences?.map(this.mapSequence) || [],
+      sequences: c.sequences?.map((s) => this.mapSequence(s)) || [],
       emailGap: c.email_gap,
       dailyLimit: c.daily_limit,
       stopOnReply: c.stop_on_reply,
