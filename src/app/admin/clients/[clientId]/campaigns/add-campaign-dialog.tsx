@@ -47,7 +47,7 @@ interface AddCampaignDialogProps {
 
 const PROVIDERS: { value: ProviderType; label: string; available: boolean }[] = [
   { value: "instantly", label: "Instantly", available: true },
-  { value: "smartlead", label: "Smartlead", available: false },
+  { value: "smartlead", label: "Smartlead", available: true },
 ];
 
 export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
@@ -264,23 +264,46 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
 
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                 <h4 className="font-medium text-yellow-900 mb-2">Webhook Events to Enable</h4>
-                <ul className="text-sm text-yellow-800 space-y-1">
-                  <li>
-                    - <strong>reply_received</strong> - When lead replies
-                  </li>
-                  <li>
-                    - <strong>lead_interested</strong> - Positive reply detected
-                  </li>
-                  <li>
-                    - <strong>email_opened</strong> - When email is opened
-                  </li>
-                  <li>
-                    - <strong>link_clicked</strong> - When link is clicked
-                  </li>
-                  <li>
-                    - <strong>email_sent</strong> - When email is sent
-                  </li>
-                </ul>
+                {selectedProvider === "instantly" ? (
+                  <ul className="text-sm text-yellow-800 space-y-1">
+                    <li>
+                      - <strong>reply_received</strong> - When lead replies
+                    </li>
+                    <li>
+                      - <strong>lead_interested</strong> - Positive reply detected
+                    </li>
+                    <li>
+                      - <strong>email_opened</strong> - When email is opened
+                    </li>
+                    <li>
+                      - <strong>link_clicked</strong> - When link is clicked
+                    </li>
+                    <li>
+                      - <strong>email_sent</strong> - When email is sent
+                    </li>
+                  </ul>
+                ) : (
+                  <ul className="text-sm text-yellow-800 space-y-1">
+                    <li>
+                      - <strong>EMAIL_REPLY</strong> - When lead replies
+                    </li>
+                    <li>
+                      - <strong>LEAD_CATEGORY_UPDATED</strong> - Interest status changes
+                    </li>
+                    <li>
+                      - <strong>EMAIL_OPEN</strong> - When email is opened
+                    </li>
+                    <li>
+                      - <strong>EMAIL_LINK_CLICK</strong> - When link is clicked
+                    </li>
+                    <li>
+                      - <strong>EMAIL_SENT</strong> - When email is sent
+                    </li>
+                    <li>
+                      - <strong>LEAD_UNSUBSCRIBED</strong> - When lead unsubscribes
+                    </li>
+                  </ul>
+                )}
               </div>
 
               <a

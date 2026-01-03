@@ -5,12 +5,14 @@ import { createClient } from "@supabase/supabase-js";
 import type { EmailCampaignProvider, ProviderType } from "./types";
 import { ProviderError } from "./types";
 import { InstantlyProvider } from "./instantly";
+import { SmartleadProvider } from "./smartlead";
 
 // Re-export types
 export * from "./types";
 
 // Re-export providers
 export { InstantlyProvider } from "./instantly";
+export { SmartleadProvider } from "./smartlead";
 
 // ============================================
 // PROVIDER FACTORY
@@ -27,11 +29,7 @@ export function createProvider(
     case "instantly":
       return new InstantlyProvider(apiKey);
     case "smartlead":
-      // TODO: Implement SmartleadProvider
-      throw new ProviderError(
-        "Smartlead integration coming soon",
-        "smartlead"
-      );
+      return new SmartleadProvider(apiKey);
     case "lemlist":
       throw new ProviderError(
         "Lemlist integration not yet implemented",
@@ -175,7 +173,7 @@ export async function validateProviderApiKey(
 export function getSupportedProviders(): { type: ProviderType; name: string; available: boolean }[] {
   return [
     { type: "instantly", name: "Instantly", available: true },
-    { type: "smartlead", name: "Smartlead", available: false },
+    { type: "smartlead", name: "Smartlead", available: true },
     { type: "lemlist", name: "Lemlist", available: false },
     { type: "apollo", name: "Apollo", available: false },
   ];

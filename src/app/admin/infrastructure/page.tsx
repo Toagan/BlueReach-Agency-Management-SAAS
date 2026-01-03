@@ -1,37 +1,50 @@
-"use client";
+import { Suspense } from "react";
+import InfrastructureView from "./infrastructure-view";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Server } from "lucide-react";
-import Link from "next/link";
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
 
-export default function InfrastructurePage() {
+export default async function InfrastructurePage({ searchParams }: PageProps) {
+  const params = await searchParams;
+
+  return (
+    <Suspense fallback={<InfrastructureLoadingSkeleton />}>
+      <InfrastructureView searchParams={params} />
+    </Suspense>
+  );
+}
+
+function InfrastructureLoadingSkeleton() {
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/admin"
-          className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-2"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Command Center
-        </Link>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Server className="h-6 w-6" />
-          Infrastructure Health
-        </h1>
-        <p className="text-muted-foreground">Monitor your system health and performance</p>
+        <div className="h-4 w-40 bg-muted animate-pulse rounded mb-2" />
+        <div className="h-8 w-64 bg-muted animate-pulse rounded mb-1" />
+        <div className="h-4 w-80 bg-muted animate-pulse rounded" />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Coming Soon</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">
-            Infrastructure monitoring features will be available here.
-          </p>
-        </CardContent>
-      </Card>
+      {/* Stats Cards Skeleton */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="border rounded-lg p-6">
+            <div className="h-4 w-24 bg-muted animate-pulse rounded mb-2" />
+            <div className="h-8 w-16 bg-muted animate-pulse rounded" />
+          </div>
+        ))}
+      </div>
+
+      {/* Table Skeleton */}
+      <div className="border rounded-lg">
+        <div className="p-4 border-b">
+          <div className="h-6 w-40 bg-muted animate-pulse rounded" />
+        </div>
+        <div className="p-4 space-y-4">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="h-12 bg-muted animate-pulse rounded" />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
