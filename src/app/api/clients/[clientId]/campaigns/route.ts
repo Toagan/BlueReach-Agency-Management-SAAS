@@ -106,6 +106,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       emails_sent: number;
       bounced: number;
       open_count: number;
+      reply_count: number;
     }>();
 
     if (source === "instantly") {
@@ -113,12 +114,48 @@ export async function GET(request: Request, { params }: RouteParams) {
       if (instantlyClient.isConfigured()) {
         try {
           const analyticsData = await getCampaignAnalytics();
+          console.log("[Campaigns API] Fetched Instantly analytics for", analyticsData.length, "campaigns");
+
+          // Log what campaign IDs we have in local DB
+          const localInstantlyIds = campaigns
+            .filter(c => c.instantly_campaign_id)
+            .map(c => ({ name: c.name, instantly_id: c.instantly_campaign_id }));
+          console.log("[Campaigns API] Local campaigns with Instantly IDs:", JSON.stringify(localInstantlyIds));
+
+          // Log what campaign IDs came from Instantly
+          const instantlyIds = analyticsData.map(a => ({
+            id: a.campaign_id,
+            name: a.campaign_name,
+            sent: a.emails_sent_count
+          }));
+          console.log("[Campaigns API] Instantly API returned:", JSON.stringify(instantlyIds));
+
           for (const a of analyticsData) {
             instantlyAnalyticsMap.set(a.campaign_id, {
               emails_sent: a.emails_sent_count || 0,
               bounced: a.bounced_count || 0,
               open_count: a.open_count_unique || 0,
+              reply_count: a.reply_count || 0,
             });
+          }
+
+          // Cache the analytics in the campaigns table for faster local access
+          for (const campaign of campaigns) {
+            if (campaign.instantly_campaign_id) {
+              const stats = instantlyAnalyticsMap.get(campaign.instantly_campaign_id);
+              if (stats) {
+                await supabase
+                  .from("campaigns")
+                  .update({
+                    cached_emails_sent: stats.emails_sent,
+                    cached_emails_bounced: stats.bounced,
+                    cached_emails_opened: stats.open_count,
+                    cached_reply_count: stats.reply_count,
+                    cache_updated_at: new Date().toISOString(),
+                  })
+                  .eq("id", campaign.id);
+              }
+            }
           }
         } catch (e) {
           console.error("Failed to fetch Instantly analytics:", e);
@@ -138,18 +175,40 @@ export async function GET(request: Request, { params }: RouteParams) {
         ? instantlyAnalyticsMap.get(campaign.instantly_campaign_id)
         : null;
 
-      // Merge local + Instantly data
+      // Log match/mismatch for debugging
+      if (source === "instantly" && campaign.instantly_campaign_id) {
+        if (instantlyStats) {
+          console.log(`[Campaigns API] ✓ Matched "${campaign.name}" with Instantly data: ${instantlyStats.emails_sent} sent`);
+        } else {
+          console.log(`[Campaigns API] ✗ No match for "${campaign.name}" (instantly_id: ${campaign.instantly_campaign_id})`);
+        }
+      }
+
+      // Use Instantly data for emails_sent, bounced, opened
+      // Fallback to cached values, then to local leads_count
+      const emailsSent = instantlyStats?.emails_sent
+        || campaign.cached_emails_sent
+        || localStats.leads_count;
+      const repliesCount = instantlyStats?.reply_count
+        || campaign.cached_reply_count
+        || localStats.replied_count;
+      const bounced = instantlyStats?.bounced
+        || campaign.cached_emails_bounced
+        || 0;
+      const opened = instantlyStats?.open_count
+        || campaign.cached_emails_opened
+        || 0;
+
       const analytics = {
         leads_count: localStats.leads_count,
-        emails_sent: instantlyStats?.emails_sent || localStats.leads_count,
-        emails_replied: localStats.replied_count,
-        emails_bounced: instantlyStats?.bounced || 0,
-        emails_opened: instantlyStats?.open_count || 0,
+        emails_sent: emailsSent,
+        emails_replied: repliesCount,
+        emails_bounced: bounced,
+        emails_opened: opened,
         total_opportunities: localStats.positive_count,
-        contacted_count: instantlyStats?.emails_sent || localStats.leads_count,
-        reply_rate: localStats.leads_count > 0
-          ? localStats.replied_count / localStats.leads_count
-          : 0,
+        contacted_count: emailsSent,
+        reply_rate: emailsSent > 0 ? repliesCount / emailsSent : 0,
+        bounce_rate: emailsSent > 0 ? bounced / emailsSent : 0,
       };
 
       return {

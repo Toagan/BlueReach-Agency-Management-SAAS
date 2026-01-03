@@ -443,3 +443,10 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- Add cached analytics columns to campaigns table
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS cached_emails_sent integer;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS cached_emails_bounced integer;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS cached_emails_opened integer;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS cached_reply_count integer;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS cache_updated_at timestamp with time zone;
