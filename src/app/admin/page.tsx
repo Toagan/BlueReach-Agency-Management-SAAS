@@ -11,14 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { AddCustomerDialog } from "@/components/admin/add-customer-dialog";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -84,8 +77,6 @@ export default function AdminCommandCenter() {
 
   // New customer dialog state
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [newCustomerName, setNewCustomerName] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
 
   const fetchData = useCallback(async (force = false) => {
     if (hasFetched.current && !force) return;
@@ -134,33 +125,6 @@ export default function AdminCommandCenter() {
 
     return () => clearInterval(interval);
   }, [fetchData, timeRange]);
-
-  const handleCreateCustomer = async () => {
-    if (!newCustomerName.trim()) return;
-
-    setIsCreating(true);
-    try {
-      const res = await fetch("/api/admin/customers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ name: newCustomerName.trim() }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to create customer");
-      }
-
-      setNewCustomerName("");
-      setIsAddDialogOpen(false);
-      fetchData(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create customer");
-    } finally {
-      setIsCreating(false);
-    }
-  };
 
   const filteredCustomers = customers.filter((customer) => {
     const matchesFilter =
@@ -340,39 +304,15 @@ export default function AdminCommandCenter() {
                   className="pl-9 w-64"
                 />
               </div>
-              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Customer
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add New Customer</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 pt-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Customer Name</Label>
-                      <Input
-                        id="name"
-                        placeholder="Enter customer name"
-                        value={newCustomerName}
-                        onChange={(e) => setNewCustomerName(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleCreateCustomer()}
-                      />
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button onClick={handleCreateCustomer} disabled={isCreating}>
-                        {isCreating ? "Creating..." : "Create Customer"}
-                      </Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
+              <Button onClick={() => setIsAddDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                New Customer
+              </Button>
+              <AddCustomerDialog
+                open={isAddDialogOpen}
+                onOpenChange={setIsAddDialogOpen}
+                onSuccess={() => fetchData(true)}
+              />
             </div>
           </div>
 

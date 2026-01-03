@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -131,6 +132,7 @@ export default function ClientDashboardPage() {
   const clientId = params.clientId as string;
   const hasFetched = useRef(false);
 
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [client, setClient] = useState<ClientData | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   // Client-wide stats from the API (more reliable than summing by campaign)
@@ -361,6 +363,23 @@ export default function ClientDashboardPage() {
     }
   }, [clientId]);
 
+  // Check if user is admin
+  useEffect(() => {
+    const checkUserRole = async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+        setIsAdmin(profile?.role === "admin");
+      }
+    };
+    checkUserRole();
+  }, []);
+
   useEffect(() => {
     fetchClientData();
     fetchPositiveLeads();
@@ -404,13 +423,15 @@ export default function ClientDashboardPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-          <Link
-            href="/admin"
-            className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Command Center
-          </Link>
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Command Center
+            </Link>
+          )}
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center overflow-hidden">
               {client?.logo_url ? (
@@ -466,12 +487,14 @@ export default function ClientDashboardPage() {
                 <Lightbulb className="h-5 w-5 text-yellow-500" />
                 Client Intelligence
               </CardTitle>
-              <Link href={`/admin/clients/${clientId}/settings`}>
-                <Button variant="ghost" size="sm">
-                  <Settings className="h-4 w-4 mr-1" />
-                  Edit
-                </Button>
-              </Link>
+              {isAdmin && (
+                <Link href={`/admin/clients/${clientId}/settings`}>
+                  <Button variant="ghost" size="sm">
+                    <Settings className="h-4 w-4 mr-1" />
+                    Edit
+                  </Button>
+                </Link>
+              )}
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1087,12 +1110,14 @@ export default function ClientDashboardPage() {
             <BarChart3 className="h-5 w-5" />
             Campaign Performance
           </CardTitle>
-          <Link href={`/admin/clients/${clientId}/campaigns`}>
-            <Button size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              Link Campaign
-            </Button>
-          </Link>
+          {isAdmin && (
+            <Link href={`/admin/clients/${clientId}/campaigns`}>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Link Campaign
+              </Button>
+            </Link>
+          )}
         </CardHeader>
         <CardContent>
           {campaigns.length === 0 ? (
@@ -1100,14 +1125,18 @@ export default function ClientDashboardPage() {
               <BarChart3 className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
               <p className="font-medium">No campaigns linked yet</p>
               <p className="text-sm mt-1">
-                Link an Instantly campaign to start tracking performance.
+                {isAdmin
+                  ? "Link an Instantly campaign to start tracking performance."
+                  : "No campaigns have been linked to your account yet."}
               </p>
-              <Link href={`/admin/clients/${clientId}/campaigns`}>
-                <Button className="mt-4" variant="outline">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Link Your First Campaign
-                </Button>
-              </Link>
+              {isAdmin && (
+                <Link href={`/admin/clients/${clientId}/campaigns`}>
+                  <Button className="mt-4" variant="outline">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Link Your First Campaign
+                  </Button>
+                </Link>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
@@ -1118,6 +1147,7 @@ export default function ClientDashboardPage() {
                   clientId={clientId}
                   onDelete={() => handleDeleteCampaign(campaign.id, campaign.name)}
                   isDeleting={deletingCampaignId === campaign.id}
+                  isAdmin={isAdmin === true}
                 />
               ))}
             </div>
@@ -1140,11 +1170,13 @@ function CampaignCard({
   clientId,
   onDelete,
   isDeleting,
+  isAdmin,
 }: {
   campaign: Campaign;
   clientId: string;
   onDelete: () => void;
   isDeleting: boolean;
+  isAdmin: boolean;
 }) {
   const [showWebhook, setShowWebhook] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1252,21 +1284,23 @@ function CampaignCard({
           )}
         </div>
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          disabled={isDeleting}
-          className="text-muted-foreground hover:text-red-500 disabled:opacity-50"
-          title="Unlink campaign"
-        >
-          {isDeleting ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
-          ) : (
-            <Trash2 className="h-4 w-4" />
-          )}
-        </button>
+        {isAdmin && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            disabled={isDeleting}
+            className="text-muted-foreground hover:text-red-500 disabled:opacity-50"
+            title="Unlink campaign"
+          >
+            {isDeleting ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+          </button>
+        )}
       </div>
 
       {/* Progress bar: leads contacted vs total leads */}
@@ -1355,7 +1389,7 @@ function CampaignCard({
             </div>
 
             {/* Delete from Instantly - Admin Only */}
-            {campaign.instantly_campaign_id && (
+            {isAdmin && campaign.instantly_campaign_id && (
               <div className="mt-4 pt-4 border-t border-border">
                 {!showInstantlyDeleteConfirm ? (
                   <Button

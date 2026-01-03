@@ -26,9 +26,10 @@ export default async function AdminLayout({
     .eq("id", user.id)
     .single();
 
-  if (profile?.role !== "admin") {
-    redirect("/dashboard");
-  }
+  const isAdmin = profile?.role === "admin";
+
+  // Non-admins can only access their specific client pages
+  // The middleware handles the detailed access control
 
   return (
     <div className="min-h-screen bg-background">
