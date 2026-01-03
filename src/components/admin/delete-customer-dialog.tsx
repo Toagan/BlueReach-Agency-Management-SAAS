@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AlertTriangle, Trash2, Users, Mail, BarChart3 } from "lucide-react";
+import { AlertTriangle, Trash2, Users, Mail, BarChart3, CheckCircle2, Shield } from "lucide-react";
 
 interface DeleteCustomerDialogProps {
   open: boolean;
@@ -72,27 +72,45 @@ export function DeleteCustomerDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* What will be deleted */}
-          <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-lg p-4 space-y-3">
-            <p className="text-sm font-medium text-red-800 dark:text-red-300">
-              This will permanently delete:
+          {/* What will be preserved */}
+          <div className="bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-900 rounded-lg p-4 space-y-3">
+            <p className="text-sm font-medium text-green-800 dark:text-green-300 flex items-center gap-2">
+              <Shield className="h-4 w-4" />
+              Your data is safe
             </p>
             <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
+              <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
+                <CheckCircle2 className="h-4 w-4" />
+                <span>All leads preserved with full history</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
+                <CheckCircle2 className="h-4 w-4" />
+                <span>Positive replies and email threads kept</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
+                <CheckCircle2 className="h-4 w-4" />
+                <span>Analytics and performance data retained</span>
+              </div>
+            </div>
+          </div>
+
+          {/* What will be deleted */}
+          <div className="bg-muted/50 border border-border rounded-lg p-4 space-y-3">
+            <p className="text-sm font-medium text-muted-foreground">
+              Will be removed:
+            </p>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <BarChart3 className="h-4 w-4" />
-                <span>All campaigns and analytics</span>
+                <span>Campaign configurations</span>
               </div>
-              <div className="flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Users className="h-4 w-4" />
-                <span>All leads and their data</span>
+                <span>Client user access</span>
               </div>
-              <div className="flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Mail className="h-4 w-4" />
-                <span>Email history and sequences</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
-                <Trash2 className="h-4 w-4" />
-                <span>User access and invitations</span>
+                <span>Pending invitations</span>
               </div>
             </div>
           </div>

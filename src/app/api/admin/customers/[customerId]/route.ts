@@ -209,7 +209,51 @@ export async function DELETE(
       .delete()
       .eq("client_id", customerId);
 
-    // Delete the client (cascades to client_users, campaigns, leads via FK constraints)
+    // Get all campaigns for this client
+    const { data: campaigns } = await serviceSupabase
+      .from("campaigns")
+      .select("id")
+      .eq("client_id", customerId);
+
+    // PRESERVE LEADS: Unlink leads from campaigns (set campaign_id to NULL)
+    // The denormalized fields (client_id, client_name, campaign_name) are preserved
+    if (campaigns && campaigns.length > 0) {
+      const campaignIds = campaigns.map(c => c.id);
+
+      console.log(`[Customer Delete] Preserving leads for ${campaignIds.length} campaigns`);
+
+      // Unlink leads from campaigns - they keep their denormalized data
+      await serviceSupabase
+        .from("leads")
+        .update({ campaign_id: null })
+        .in("campaign_id", campaignIds);
+
+      // Delete lead_emails campaign reference (preserve the emails themselves)
+      await serviceSupabase
+        .from("lead_emails")
+        .update({ campaign_id: null })
+        .in("campaign_id", campaignIds);
+
+      // Delete campaign sequences
+      await serviceSupabase
+        .from("campaign_sequences")
+        .delete()
+        .in("campaign_id", campaignIds);
+
+      // Delete campaigns
+      await serviceSupabase
+        .from("campaigns")
+        .delete()
+        .eq("client_id", customerId);
+    }
+
+    // Delete client_users links
+    await serviceSupabase
+      .from("client_users")
+      .delete()
+      .eq("client_id", customerId);
+
+    // Delete the client
     const { error } = await serviceSupabase
       .from("clients")
       .delete()
