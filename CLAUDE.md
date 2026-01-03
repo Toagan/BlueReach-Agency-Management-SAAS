@@ -8,9 +8,10 @@ This file provides context for Claude Code when working on this project.
 
 ### Key Features
 - Multi-tenant client portal with role-based access
-- Instantly.ai campaign integration with real-time webhooks
+- Instantly.ai + Smartlead campaign integration with real-time webhooks
 - Lead workflow management (contacted → replied → booked → won/lost)
 - Email thread viewing and sync
+- Infrastructure health monitoring (email accounts, DNS checks, warmup tracking)
 - Dark mode modern UI for clients
 - Admin command center for agency staff
 
@@ -79,6 +80,8 @@ src/
 │   └── ui/                       # shadcn/ui components
 ├── lib/
 │   ├── instantly/                # Instantly API client
+│   ├── smartlead/                # Smartlead API client
+│   ├── dns/                      # DNS health checker (SPF/DKIM/DMARC)
 │   ├── queries/                  # Database query functions
 │   └── supabase/                 # Supabase client setup
 └── types/
@@ -259,6 +262,61 @@ instantly_event_id  text
 timestamp           timestamptz
 ```
 
+### Infrastructure Health Tables
+
+#### `email_accounts`
+Central registry of email accounts from Instantly and Smartlead.
+```sql
+id                    uuid PRIMARY KEY
+provider_type         text NOT NULL ('instantly'|'smartlead')
+provider_account_id   text
+email                 text NOT NULL
+client_id             uuid REFERENCES clients(id)  -- Manual assignment
+domain                text GENERATED              -- Extracted from email
+status                text ('active'|'error'|'disconnected'|'paused')
+warmup_enabled        boolean
+warmup_reputation     integer                     -- 0-100 score
+warmup_emails_sent    integer
+warmup_emails_received integer
+daily_limit           integer
+last_synced_at        timestamptz
+UNIQUE(provider_type, email)
+```
+
+#### `email_account_health_history`
+Daily snapshots for trend analysis.
+```sql
+id                    uuid PRIMARY KEY
+email_account_id      uuid REFERENCES email_accounts(id)
+snapshot_date         date NOT NULL
+status                text
+warmup_reputation     integer
+warmup_emails_sent    integer
+warmup_emails_received integer
+emails_sent_today     integer
+UNIQUE(email_account_id, snapshot_date)
+```
+
+#### `domain_health`
+DNS validation cache for SPF/DKIM/DMARC.
+```sql
+id                uuid PRIMARY KEY
+domain            text NOT NULL UNIQUE
+has_spf           boolean
+spf_record        text
+spf_valid         boolean
+has_dkim          boolean
+dkim_selector     text
+dkim_record       text
+dkim_valid        boolean
+has_dmarc         boolean
+dmarc_record      text
+dmarc_policy      text ('none'|'quarantine'|'reject')
+dmarc_valid       boolean
+health_score      integer GENERATED  -- 0-100 based on DNS records
+last_checked_at   timestamptz
+```
+
 ### Row Level Security (RLS)
 - All tables have RLS enabled
 - Admin users can access all data
@@ -292,6 +350,51 @@ Real-time sync to dashboard
 - `email_opened` → Increment open count
 - `email_replied` → Update `has_replied`, `replied_at`
 
+## Smartlead API Integration
+
+### Authentication
+Smartlead uses query parameter auth: `?api_key=YOUR_API_KEY`
+
+### API Functions (`src/lib/smartlead/`)
+- `client.ts` - Base HTTP client with query param auth
+- `types.ts` - SmartleadAccount, SmartleadWarmupStats interfaces
+- `accounts.ts` - Fetch accounts and warmup analytics
+
+### Key Endpoints Used
+- `GET /api/v1/email-accounts` - List all email accounts
+- `GET /api/v1/email-accounts/{id}/warmup-stats` - Warmup analytics
+
+## Infrastructure Health Feature
+
+### Overview
+Monitor email account health across providers with DNS validation.
+
+### API Routes (`/api/admin/infrastructure/`)
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/stats` | GET | Dashboard statistics |
+| `/accounts` | GET | List accounts with filters |
+| `/accounts/[id]` | PATCH | Assign client to account |
+| `/sync` | POST | Sync from Instantly/Smartlead |
+| `/dns` | GET | Get cached domain health |
+| `/dns` | POST | Check specific domains |
+| `/dns` | PATCH | Refresh all domains |
+| `/history` | GET | Historical snapshots |
+| `/history` | POST | Create daily snapshot |
+
+### DNS Health Checker (`src/lib/dns/`)
+Uses DNS-over-HTTPS (Google DoH) for server-side lookups:
+- SPF record validation
+- DKIM selector probing (common selectors: google, default, selector1, etc.)
+- DMARC policy detection
+
+### UI Features (`/admin/infrastructure`)
+- Stats cards: Total accounts, active count, avg reputation, domain count
+- Accounts table with client filter, provider filter, status filter
+- Client assignment dialog for manual account-to-client mapping
+- Domain health section with SPF/DKIM/DMARC status
+- Auto-refresh every 30 seconds
+
 ## Key Workflows
 
 ### Lead Workflow (Client Dashboard)
@@ -324,6 +427,9 @@ SUPABASE_SERVICE_ROLE_KEY=
 # Instantly
 INSTANTLY_API_KEY=
 INSTANTLY_WEBHOOK_SECRET=
+
+# Smartlead
+SMARTLEAD_API_KEY=
 
 # OAuth (configured in Supabase dashboard)
 # Google and Microsoft providers
