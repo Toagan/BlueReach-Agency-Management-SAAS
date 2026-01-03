@@ -167,13 +167,33 @@ export async function POST(request: Request) {
         .update({ accepted_at: new Date().toISOString() })
         .eq("id", invitation.id);
 
+      // Send notification email to existing user using magic link
+      // This lets them know they have access to a new client
+      console.log("[Invitation] Sending notification email to existing user:", email);
+      const { error: magicLinkError } = await serviceSupabase.auth.signInWithOtp({
+        email: email,
+        options: {
+          emailRedirectTo: `${baseUrl}/auth/callback?next=/admin/clients/${client_id}`,
+          data: {
+            client_id: client_id,
+            client_name: client.name,
+          },
+        },
+      });
+
+      if (magicLinkError) {
+        console.error("[Invitation] Error sending magic link to existing user:", magicLinkError);
+      } else {
+        console.log("[Invitation] Magic link sent to existing user");
+      }
+
       return NextResponse.json({
         success: true,
         invitation,
         invite_url: inviteUrl,
-        email_sent: false,
+        email_sent: !magicLinkError,
         user_linked: true,
-        message: "User already exists and has been linked to the client",
+        message: "User already exists and has been linked to the client. Notification email sent.",
       });
     }
 
