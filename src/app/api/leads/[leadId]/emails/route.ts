@@ -84,7 +84,9 @@ export async function POST(
     }
 
     // Get the Instantly campaign ID from the joined data
-    const instantlyCampaignId = (lead.campaigns as { instantly_campaign_id: string | null } | null)?.instantly_campaign_id;
+    // The campaigns relation returns an object when using .single() on leads
+    const campaignData = lead.campaigns as unknown as { instantly_campaign_id: string | null } | null;
+    const instantlyCampaignId = campaignData?.instantly_campaign_id;
 
     console.log(`[Email Sync] Lead: ${lead.email}, Instantly Campaign: ${instantlyCampaignId}`);
 
