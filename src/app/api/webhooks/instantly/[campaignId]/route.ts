@@ -150,6 +150,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isPositive = positiveEvents.includes(eventType);
     const isNegative = negativeEvents.includes(eventType);
     const isReply = eventType === "reply_received" || eventType === "auto_reply_received";
+    const isEmailSent = eventType === "email_sent";
+    const isBounced = eventType === "email_bounced";
+    const isOpened = eventType === "email_opened";
+    const isClicked = eventType === "link_clicked";
 
     // Get client_id from campaign for creating new leads
     const { data: campaignWithClient } = await supabase
@@ -171,11 +175,20 @@ export async function POST(request: Request, { params }: RouteParams) {
       clientName = clientData?.name || "";
     }
 
+    // Try to find existing lead first
+    const { data: existingLead } = await supabase
+      .from("leads")
+      .select("id, email_open_count, email_click_count, status")
+      .eq("campaign_id", campaignId)
+      .eq("email", leadEmail)
+      .maybeSingle();
+
     // Build update data based on event type
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
 
+    // Handle different event types
     if (isPositive) {
       updateData.is_positive_reply = true;
       updateData.has_replied = true;
@@ -189,16 +202,41 @@ export async function POST(request: Request, { params }: RouteParams) {
       updateData.status = "replied";
     }
 
-    // Try to update existing lead first
-    const { data: existingLead, error: findError } = await supabase
-      .from("leads")
-      .select("id")
-      .eq("campaign_id", campaignId)
-      .eq("email", leadEmail)
-      .maybeSingle();
+    if (isEmailSent) {
+      // Mark lead as contacted
+      if (!existingLead || existingLead.status === "new") {
+        updateData.status = "contacted";
+      }
+      // Increment campaign's cached_emails_sent
+      await supabase.rpc("increment_campaign_emails_sent", { campaign_uuid: campaignId }).catch(() => {
+        // RPC might not exist, update directly
+        supabase
+          .from("campaigns")
+          .update({ cached_emails_sent: (campaign as { cached_emails_sent?: number }).cached_emails_sent ? (campaign as { cached_emails_sent?: number }).cached_emails_sent! + 1 : 1 })
+          .eq("id", campaignId);
+      });
+    }
 
+    if (isBounced) {
+      updateData.status = "bounced";
+      // Increment campaign's cached_emails_bounced
+      const currentBounced = (campaign as { cached_emails_bounced?: number }).cached_emails_bounced || 0;
+      await supabase
+        .from("campaigns")
+        .update({ cached_emails_bounced: currentBounced + 1 })
+        .eq("id", campaignId);
+    }
+
+    if (isOpened && existingLead) {
+      updateData.email_open_count = (existingLead.email_open_count || 0) + 1;
+    }
+
+    if (isClicked && existingLead) {
+      updateData.email_click_count = (existingLead.email_click_count || 0) + 1;
+    }
+
+    // Update or create lead
     if (existingLead) {
-      // Update existing lead
       const { error: updateError } = await supabase
         .from("leads")
         .update(updateData)
@@ -209,8 +247,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       } else {
         console.log(`[Webhook] Updated lead ${leadEmail} - event: ${eventType}`);
       }
-    } else if (clientId && (isPositive || isReply)) {
-      // Create new lead if it doesn't exist and this is a positive/reply event
+    } else if (clientId && (isPositive || isReply || isEmailSent)) {
+      // Create new lead if it doesn't exist and this is a meaningful event
       const { error: insertError } = await supabase
         .from("leads")
         .insert({
@@ -221,7 +259,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           campaign_name: campaign.name,
           is_positive_reply: isPositive,
           has_replied: isReply || isPositive,
-          status: "replied",
+          status: isPositive || isReply ? "replied" : "contacted",
           ...updateData,
         });
 
