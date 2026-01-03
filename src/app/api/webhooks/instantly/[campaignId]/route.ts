@@ -208,13 +208,16 @@ export async function POST(request: Request, { params }: RouteParams) {
         updateData.status = "contacted";
       }
       // Increment campaign's cached_emails_sent
-      await supabase.rpc("increment_campaign_emails_sent", { campaign_uuid: campaignId }).catch(() => {
+      try {
+        await supabase.rpc("increment_campaign_emails_sent", { campaign_uuid: campaignId });
+      } catch {
         // RPC might not exist, update directly
-        supabase
+        const currentSent = (campaign as { cached_emails_sent?: number }).cached_emails_sent || 0;
+        await supabase
           .from("campaigns")
-          .update({ cached_emails_sent: (campaign as { cached_emails_sent?: number }).cached_emails_sent ? (campaign as { cached_emails_sent?: number }).cached_emails_sent! + 1 : 1 })
+          .update({ cached_emails_sent: currentSent + 1 })
           .eq("id", campaignId);
-      });
+      }
     }
 
     if (isBounced) {
