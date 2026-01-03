@@ -108,6 +108,10 @@ export default function CampaignDetailPage() {
   // Sequences sync state
   const [isSyncingSequences, setIsSyncingSequences] = useState(false);
 
+  // Leads sync state
+  const [isSyncingLeads, setIsSyncingLeads] = useState(false);
+  const [syncLeadsResult, setSyncLeadsResult] = useState<string | null>(null);
+
   // Preview mode state - default to true to show filled-in variables
   const [isPreviewMode, setIsPreviewMode] = useState(true);
   const [previewLeadId, setPreviewLeadId] = useState<string | null>(null);
@@ -315,6 +319,34 @@ export default function CampaignDetailPage() {
     }
   };
 
+  // Sync leads from provider
+  const handleSyncLeads = async () => {
+    setIsSyncingLeads(true);
+    setSyncLeadsResult(null);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/sync-leads`, {
+        method: "POST",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to sync leads");
+      }
+
+      setSyncLeadsResult(`Synced ${data.inserted} new, ${data.updated} updated`);
+      // Refresh data to show new leads
+      await fetchData();
+    } catch (err) {
+      console.error("Lead sync error:", err);
+      setError(err instanceof Error ? err.message : "Failed to sync leads");
+    } finally {
+      setIsSyncingLeads(false);
+    }
+  };
+
   // Sync sequences from Instantly
   const handleSyncSequences = async () => {
     setIsSyncingSequences(true);
@@ -476,6 +508,15 @@ export default function CampaignDetailPage() {
             </a>
           )}
           <Button
+            variant="default"
+            size="sm"
+            onClick={handleSyncLeads}
+            disabled={isSyncingLeads}
+          >
+            <Download className={`h-4 w-4 mr-2 ${isSyncingLeads ? "animate-spin" : ""}`} />
+            {isSyncingLeads ? "Syncing Leads..." : "Sync Leads"}
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             onClick={fetchData}
@@ -486,6 +527,14 @@ export default function CampaignDetailPage() {
           </Button>
         </div>
       </div>
+
+      {/* Sync Result Message */}
+      {syncLeadsResult && (
+        <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 px-4 py-3 rounded-lg flex items-center gap-2">
+          <Check className="h-4 w-4" />
+          {syncLeadsResult}
+        </div>
+      )}
 
       {/* Campaign Progress */}
       {analytics && analytics.leads_count > 0 && (

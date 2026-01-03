@@ -241,14 +241,16 @@ export class InstantlyProvider implements EmailCampaignProvider {
     campaignId: string,
     options?: { limit?: number; offset?: number }
   ): Promise<ProviderLead[]> {
+    console.log(`[InstantlyProvider] Fetching leads for campaign ${campaignId}`);
     const response = await this.client.post<{ items: InstantlyLead[] }>(
       "/leads/list",
       {
-        campaign: campaignId,
+        campaign_id: campaignId,
         limit: options?.limit || 100,
         skip: options?.offset || 0,
       }
     );
+    console.log(`[InstantlyProvider] Got ${response.items?.length || 0} leads`);
     return (response.items || []).map((l) => this.mapLead(l));
   }
 

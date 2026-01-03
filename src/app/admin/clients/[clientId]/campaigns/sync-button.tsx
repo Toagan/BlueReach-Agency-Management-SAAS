@@ -21,13 +21,21 @@ export function SyncButton({ campaignId, onSyncComplete }: SyncButtonProps) {
     setResult(null);
 
     try {
+      // Add timeout to prevent infinite waiting
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 min timeout
+
       const res = await fetch(`/api/campaigns/${campaignId}/sync-leads`, {
         method: "POST",
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
+
       const data = await res.json();
 
       if (data.error) {
         setResult({ success: false, message: data.error });
+        setSyncing(false);
       } else {
         setResult({
           success: true,
@@ -35,14 +43,20 @@ export function SyncButton({ campaignId, onSyncComplete }: SyncButtonProps) {
         });
         onSyncComplete?.();
         // Refresh the page to show updated counts
-        window.location.reload();
+        setTimeout(() => window.location.reload(), 1000);
       }
     } catch (error) {
-      setResult({
-        success: false,
-        message: error instanceof Error ? error.message : "Sync failed",
-      });
-    } finally {
+      if (error instanceof Error && error.name === 'AbortError') {
+        setResult({
+          success: false,
+          message: "Sync timed out after 2 minutes. Check server logs.",
+        });
+      } else {
+        setResult({
+          success: false,
+          message: error instanceof Error ? error.message : "Sync failed",
+        });
+      }
       setSyncing(false);
     }
   };
