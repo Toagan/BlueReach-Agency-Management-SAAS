@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
 import {
-  RefreshCw,
   Copy,
   Check,
   ExternalLink,
@@ -53,7 +52,7 @@ const PROVIDERS: { value: ProviderType; label: string; available: boolean }[] = 
 export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
   // Dialog state
   const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<"provider" | "campaign" | "success">("provider");
+  const [step, setStep] = useState<"select" | "success">("select");
 
   // Provider selection
   const [selectedProvider, setSelectedProvider] = useState<ProviderType>("instantly");
@@ -61,14 +60,14 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
   // API key
   const [apiKey, setApiKey] = useState("");
   const [apiKeyValid, setApiKeyValid] = useState<boolean | null>(null);
-  const [validatingKey, setValidatingKey] = useState(false);
+  const [loadingCampaigns, setLoadingCampaigns] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Campaigns
   const [campaigns, setCampaigns] = useState<ProviderCampaign[]>([]);
   const [linkedCampaignIds, setLinkedCampaignIds] = useState<Set<string>>(new Set());
   const [selectedCampaignId, setSelectedCampaignId] = useState("");
   const [customName, setCustomName] = useState("");
-  const [loadingCampaigns, setLoadingCampaigns] = useState(false);
 
   // Submission
   const [isPending, startTransition] = useTransition();
@@ -84,41 +83,48 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
       ? `${window.location.origin}/api/webhooks/${selectedProvider}`
       : "";
 
-  // Validate API key
-  const validateApiKey = async () => {
+  // Load campaigns (validates API key and fetches campaigns in one step)
+  const loadCampaigns = async () => {
     if (!apiKey.trim()) return;
 
-    setValidatingKey(true);
+    setLoadingCampaigns(true);
     setApiKeyValid(null);
+    setLoadError(null);
+    setCampaigns([]);
+    setSelectedCampaignId("");
 
     try {
-      const res = await fetch(`/api/providers/${selectedProvider}/validate`, {
+      // First validate the API key
+      const validateRes = await fetch(`/api/providers/${selectedProvider}/validate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiKey: apiKey.trim() }),
       });
-      const data = await res.json();
-      setApiKeyValid(data.valid);
-    } catch (error) {
-      console.error("Error validating API key:", error);
-      setApiKeyValid(false);
-    } finally {
-      setValidatingKey(false);
-    }
-  };
+      const validateData = await validateRes.json();
 
-  // Fetch campaigns from provider
-  const fetchCampaigns = async () => {
-    if (!apiKey.trim() || !apiKeyValid) return;
+      if (!validateData.valid) {
+        setApiKeyValid(false);
+        setLoadError("Invalid API key. Please check and try again.");
+        setLoadingCampaigns(false);
+        return;
+      }
 
-    setLoadingCampaigns(true);
-    try {
+      setApiKeyValid(true);
+
+      // Fetch campaigns
       const res = await fetch(`/api/providers/${selectedProvider}/campaigns`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiKey: apiKey.trim() }),
       });
       const data = await res.json();
+
+      if (data.error) {
+        setLoadError(data.error);
+        setLoadingCampaigns(false);
+        return;
+      }
+
       setCampaigns(data.campaigns || []);
 
       // Fetch already linked campaigns
@@ -133,36 +139,31 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
         if (c.instantly_campaign_id) linkedIds.add(c.instantly_campaign_id);
       });
       setLinkedCampaignIds(linkedIds);
+
+      if ((data.campaigns || []).length === 0) {
+        setLoadError("No campaigns found in this account.");
+      }
     } catch (error) {
-      console.error("Error fetching campaigns:", error);
+      console.error("Error loading campaigns:", error);
+      setLoadError("Failed to connect. Please check your API key.");
+      setApiKeyValid(false);
     } finally {
       setLoadingCampaigns(false);
     }
   };
 
-  // When API key becomes valid, fetch campaigns
-  useEffect(() => {
-    if (apiKeyValid === true) {
-      fetchCampaigns();
-    }
-  }, [apiKeyValid]);
-
-  // Reset state when provider changes
-  useEffect(() => {
+  // Reset when provider changes
+  const handleProviderChange = (provider: ProviderType) => {
+    setSelectedProvider(provider);
     setApiKey("");
     setApiKeyValid(null);
     setCampaigns([]);
     setSelectedCampaignId("");
-  }, [selectedProvider]);
+    setLoadError(null);
+  };
 
   const selectedCampaign = campaigns.find((c) => c.id === selectedCampaignId);
   const availableCampaigns = campaigns.filter((c) => !linkedCampaignIds.has(c.id));
-
-  const handleContinueToSelect = () => {
-    if (apiKeyValid && campaigns.length > 0) {
-      setStep("campaign");
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -177,9 +178,8 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
       original_name: selectedCampaign?.name,
       provider_type: selectedProvider,
       provider_campaign_id: selectedCampaignId,
-      // For backwards compatibility
       instantly_campaign_id: selectedProvider === "instantly" ? selectedCampaignId : null,
-      api_key_encrypted: apiKey.trim(), // Store the API key
+      api_key_encrypted: apiKey.trim(),
       is_active: selectedCampaign?.status === "active",
     });
 
@@ -189,7 +189,6 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
       return;
     }
 
-    // Show success with webhook URL
     setLinkedCampaignName(campaignName);
     setStep("success");
 
@@ -200,9 +199,8 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
 
   const handleClose = () => {
     setOpen(false);
-    // Reset after animation
     setTimeout(() => {
-      setStep("provider");
+      setStep("select");
       setSelectedProvider("instantly");
       setApiKey("");
       setApiKeyValid(null);
@@ -210,6 +208,7 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
       setSelectedCampaignId("");
       setCustomName("");
       setCopied(false);
+      setLoadError(null);
     }, 200);
   };
 
@@ -237,7 +236,6 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         {step === "success" ? (
-          // Success state with webhook URL
           <>
             <DialogHeader>
               <DialogTitle className="text-green-600">Campaign Linked!</DialogTitle>
@@ -266,42 +264,20 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
                 <h4 className="font-medium text-yellow-900 mb-2">Webhook Events to Enable</h4>
                 {selectedProvider === "instantly" ? (
                   <ul className="text-sm text-yellow-800 space-y-1">
-                    <li>
-                      - <strong>reply_received</strong> - When lead replies
-                    </li>
-                    <li>
-                      - <strong>lead_interested</strong> - Positive reply detected
-                    </li>
-                    <li>
-                      - <strong>email_opened</strong> - When email is opened
-                    </li>
-                    <li>
-                      - <strong>link_clicked</strong> - When link is clicked
-                    </li>
-                    <li>
-                      - <strong>email_sent</strong> - When email is sent
-                    </li>
+                    <li>- <strong>reply_received</strong> - When lead replies</li>
+                    <li>- <strong>lead_interested</strong> - Positive reply detected</li>
+                    <li>- <strong>email_opened</strong> - When email is opened</li>
+                    <li>- <strong>link_clicked</strong> - When link is clicked</li>
+                    <li>- <strong>email_sent</strong> - When email is sent</li>
                   </ul>
                 ) : (
                   <ul className="text-sm text-yellow-800 space-y-1">
-                    <li>
-                      - <strong>EMAIL_REPLY</strong> - When lead replies
-                    </li>
-                    <li>
-                      - <strong>LEAD_CATEGORY_UPDATED</strong> - Interest status changes
-                    </li>
-                    <li>
-                      - <strong>EMAIL_OPEN</strong> - When email is opened
-                    </li>
-                    <li>
-                      - <strong>EMAIL_LINK_CLICK</strong> - When link is clicked
-                    </li>
-                    <li>
-                      - <strong>EMAIL_SENT</strong> - When email is sent
-                    </li>
-                    <li>
-                      - <strong>LEAD_UNSUBSCRIBED</strong> - When lead unsubscribes
-                    </li>
+                    <li>- <strong>EMAIL_REPLY</strong> - When lead replies</li>
+                    <li>- <strong>LEAD_CATEGORY_UPDATED</strong> - Interest status changes</li>
+                    <li>- <strong>EMAIL_OPEN</strong> - When email is opened</li>
+                    <li>- <strong>EMAIL_LINK_CLICK</strong> - When link is clicked</li>
+                    <li>- <strong>EMAIL_SENT</strong> - When email is sent</li>
+                    <li>- <strong>LEAD_UNSUBSCRIBED</strong> - When lead unsubscribes</li>
                   </ul>
                 )}
               </div>
@@ -320,93 +296,12 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
               <Button onClick={handleClose}>Done</Button>
             </DialogFooter>
           </>
-        ) : step === "campaign" ? (
-          // Campaign selection
-          <form onSubmit={handleSubmit}>
-            <DialogHeader>
-              <DialogTitle>Select Campaign</DialogTitle>
-              <DialogDescription>
-                Choose a campaign from {selectedProvider === "instantly" ? "Instantly" : "Smartlead"} to
-                link to this client.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4 space-y-4">
-              {loadingCampaigns ? (
-                <div className="flex items-center justify-center py-8">
-                  <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
-                </div>
-              ) : availableCampaigns.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <p>No unlinked campaigns available.</p>
-                  <p className="text-sm mt-1">All campaigns from this API key are already linked.</p>
-                </div>
-              ) : (
-                <>
-                  <div>
-                    <Label htmlFor="campaign">Select Campaign *</Label>
-                    <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Choose a campaign..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableCampaigns.map((campaign) => (
-                          <SelectItem key={campaign.id} value={campaign.id}>
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={`w-2 h-2 rounded-full ${
-                                  campaign.status === "active" ? "bg-green-500" : "bg-gray-400"
-                                }`}
-                              />
-                              {campaign.name}
-                              {campaign.leadsCount !== undefined && (
-                                <span className="text-gray-400 text-xs">({campaign.leadsCount} leads)</span>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {selectedCampaign && (
-                    <div>
-                      <Label htmlFor="customName">Display Name (Optional)</Label>
-                      <Input
-                        id="customName"
-                        value={customName}
-                        onChange={(e) => setCustomName(e.target.value)}
-                        placeholder={selectedCampaign.name}
-                        className="mt-1"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Leave empty to use the original campaign name
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setStep("provider")}>
-                Back
-              </Button>
-              <Button type="submit" disabled={isPending || !selectedCampaignId || loadingCampaigns}>
-                {isPending ? "Linking..." : "Link Campaign"}
-              </Button>
-            </DialogFooter>
-          </form>
         ) : (
-          // Provider and API key selection
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleContinueToSelect();
-            }}
-          >
+          <form onSubmit={handleSubmit}>
             <DialogHeader>
               <DialogTitle>Link Campaign</DialogTitle>
               <DialogDescription>
-                Select your email provider and enter the API key for the campaign.
+                Connect a campaign from your email provider to this client.
               </DialogDescription>
             </DialogHeader>
             <div className="py-4 space-y-4">
@@ -419,7 +314,7 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
                       key={provider.value}
                       type="button"
                       disabled={!provider.available}
-                      onClick={() => setSelectedProvider(provider.value)}
+                      onClick={() => handleProviderChange(provider.value)}
                       className={`p-3 rounded-lg border text-left transition-colors ${
                         selectedProvider === provider.value
                           ? "border-blue-500 bg-blue-50 text-blue-700"
@@ -447,13 +342,15 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
                       onChange={(e) => {
                         setApiKey(e.target.value);
                         setApiKeyValid(null);
+                        setCampaigns([]);
+                        setLoadError(null);
                       }}
                       placeholder={`Enter your ${
                         selectedProvider === "instantly" ? "Instantly" : "Smartlead"
                       } API key`}
                       className="pr-10"
                     />
-                    {apiKeyValid !== null && (
+                    {apiKeyValid !== null && !loadingCampaigns && (
                       <div className="absolute right-3 top-1/2 -translate-y-1/2">
                         {apiKeyValid ? (
                           <CheckCircle2 className="h-5 w-5 text-green-500" />
@@ -465,11 +362,14 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
                   </div>
                   <Button
                     type="button"
-                    variant="outline"
-                    onClick={validateApiKey}
-                    disabled={!apiKey.trim() || validatingKey}
+                    onClick={loadCampaigns}
+                    disabled={!apiKey.trim() || loadingCampaigns}
                   >
-                    {validatingKey ? <Loader2 className="h-4 w-4 animate-spin" /> : "Validate"}
+                    {loadingCampaigns ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Load Campaigns"
+                    )}
                   </Button>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
@@ -477,16 +377,65 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
                     ? "Find your API key in Instantly Settings > Integrations > API"
                     : "Find your API key in Smartlead Settings > API"}
                 </p>
-                {apiKeyValid === false && (
-                  <p className="text-xs text-red-500 mt-1">Invalid API key. Please check and try again.</p>
+                {loadError && (
+                  <p className="text-xs text-red-500 mt-1">{loadError}</p>
                 )}
               </div>
 
-              {/* Campaign count indicator */}
+              {/* Campaign Selection - shows after loading */}
               {apiKeyValid && campaigns.length > 0 && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
-                  Found {campaigns.length} campaigns ({availableCampaigns.length} available to link)
-                </div>
+                <>
+                  <div className="border-t pt-4">
+                    <Label htmlFor="campaign">Select Campaign *</Label>
+                    {availableCampaigns.length === 0 ? (
+                      <div className="mt-2 p-3 bg-gray-50 rounded-lg text-sm text-gray-500">
+                        All campaigns from this account are already linked.
+                      </div>
+                    ) : (
+                      <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Choose a campaign..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableCampaigns.map((campaign) => (
+                            <SelectItem key={campaign.id} value={campaign.id}>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`w-2 h-2 rounded-full ${
+                                    campaign.status === "active" ? "bg-green-500" : "bg-gray-400"
+                                  }`}
+                                />
+                                {campaign.name}
+                                {campaign.leadsCount !== undefined && (
+                                  <span className="text-gray-400 text-xs">({campaign.leadsCount} leads)</span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <p className="text-xs text-gray-500 mt-1">
+                      Found {campaigns.length} campaigns ({availableCampaigns.length} available)
+                    </p>
+                  </div>
+
+                  {selectedCampaign && (
+                    <div>
+                      <Label htmlFor="customName">Display Name (Optional)</Label>
+                      <Input
+                        id="customName"
+                        value={customName}
+                        onChange={(e) => setCustomName(e.target.value)}
+                        placeholder={selectedCampaign.name}
+                        className="mt-1"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Leave empty to use the original campaign name
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
             <DialogFooter>
@@ -495,16 +444,9 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
               </Button>
               <Button
                 type="submit"
-                disabled={!apiKeyValid || availableCampaigns.length === 0 || loadingCampaigns}
+                disabled={isPending || !selectedCampaignId || !apiKeyValid}
               >
-                {loadingCampaigns ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Loading...
-                  </>
-                ) : (
-                  "Continue"
-                )}
+                {isPending ? "Linking..." : "Link Campaign"}
               </Button>
             </DialogFooter>
           </form>
