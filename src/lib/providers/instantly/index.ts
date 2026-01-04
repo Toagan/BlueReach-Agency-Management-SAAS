@@ -61,6 +61,9 @@ interface InstantlyLead {
   campaign_id?: string;
   status?: string;
   interest_status?: string;
+  // Note: lt_interest_status is the actual field returned by Instantly API v2
+  // Values: 1=Interested, -1=Not Interested, -2=Other, 0=Neutral, undefined=No status
+  lt_interest_status?: number;
   lead_data?: Record<string, string>;
   created_at?: string;
   updated_at?: string;
@@ -336,44 +339,53 @@ export class InstantlyProvider implements EmailCampaignProvider {
     return allLeads;
   }
 
-  // Fetch only positive/interested leads (all positive statuses)
+  // Fetch only positive/interested leads using client-side filtering
+  // NOTE: The Instantly API v2 interest_status filter parameter is broken and ignores all values.
+  // We must fetch all leads and filter client-side by lt_interest_status field.
   async fetchPositiveLeads(campaignId: string): Promise<ProviderLead[]> {
+    console.log(`[InstantlyProvider] Fetching all leads to filter for positive (lt_interest_status=1) for campaign ${campaignId}`);
+
     const allPositiveLeads: ProviderLead[] = [];
+    let skip = 0;
     const limit = 100;
+    let totalScanned = 0;
 
-    // Instantly interest_status values:
-    // 1 = Interested, 3 = Meeting Booked, 4 = Meeting Completed, 5 = Closed
-    const positiveStatuses = [1, 3, 4, 5];
-
-    for (const status of positiveStatuses) {
-      let skip = 0;
-      console.log(`[InstantlyProvider] Fetching leads with interest_status=${status} for campaign ${campaignId}`);
-
-      while (true) {
-        // Note: Instantly API v2 uses "campaign" not "campaign_id"
-        const response = await this.client.post<{ items: InstantlyLead[] }>(
-          "/leads/list",
-          {
-            campaign: campaignId,
-            interest_status: status,
-            limit,
-            skip,
-          }
-        );
-        const leads = (response.items || []).map((l) => ({
-          ...this.mapLead(l),
-          interestStatus: this.mapInterestStatus(status),
-        }));
-        allPositiveLeads.push(...leads);
-
-        if (leads.length < limit) {
-          break;
+    while (true) {
+      const response = await this.client.post<{ items: InstantlyLead[] }>(
+        "/leads/list",
+        {
+          campaign: campaignId,
+          limit,
+          skip,
         }
-        skip += limit;
+      );
+
+      const leads = response.items || [];
+      totalScanned += leads.length;
+
+      // Filter client-side for lt_interest_status = 1 (Interested)
+      // This is the ONLY reliable way to identify positive leads in Instantly API v2
+      for (const lead of leads) {
+        if (lead.lt_interest_status === 1) {
+          allPositiveLeads.push({
+            ...this.mapLead(lead),
+            interestStatus: "interested",
+          });
+        }
+      }
+
+      if (leads.length < limit) {
+        break;
+      }
+      skip += limit;
+
+      // Progress logging every 2000 leads
+      if (skip % 2000 === 0) {
+        console.log(`[InstantlyProvider] Scanned ${skip} leads, found ${allPositiveLeads.length} positive so far...`);
       }
     }
 
-    console.log(`[InstantlyProvider] Found ${allPositiveLeads.length} total positive leads`);
+    console.log(`[InstantlyProvider] Scanned ${totalScanned} total leads, found ${allPositiveLeads.length} positive (lt_interest_status=1)`);
     return allPositiveLeads;
   }
 
@@ -538,22 +550,48 @@ export class InstantlyProvider implements EmailCampaignProvider {
     campaignId: string,
     leadEmail: string
   ): Promise<ProviderEmail[]> {
-    const response = await this.client.get<
-      { items?: InstantlyEmail[]; data?: InstantlyEmail[] } | InstantlyEmail[]
-    >("/emails", {
-      campaign_id: campaignId,
-      search: leadEmail,
-      limit: 100,
-    });
+    const allEmails: InstantlyEmail[] = [];
+    let skip = 0;
+    const limit = 100;
 
-    let emails: InstantlyEmail[];
-    if (Array.isArray(response)) {
-      emails = response;
-    } else {
-      emails = response.items || response.data || [];
+    console.log(`[InstantlyProvider] Fetching emails for lead ${leadEmail} in campaign ${campaignId}`);
+
+    while (true) {
+      const response = await this.client.get<
+        { items?: InstantlyEmail[]; data?: InstantlyEmail[] } | InstantlyEmail[]
+      >("/emails", {
+        campaign_id: campaignId,
+        search: leadEmail,
+        limit,
+        skip,
+      });
+
+      let emails: InstantlyEmail[];
+      if (Array.isArray(response)) {
+        emails = response;
+      } else {
+        emails = response.items || response.data || [];
+      }
+
+      allEmails.push(...emails);
+
+      // If we got fewer than limit, we've reached the end
+      if (emails.length < limit) {
+        break;
+      }
+
+      skip += limit;
+
+      // Safety cap at 1000 emails per lead
+      if (skip >= 1000) {
+        console.warn(`[InstantlyProvider] Hit 1000 email cap for lead ${leadEmail}`);
+        break;
+      }
     }
 
-    return emails
+    console.log(`[InstantlyProvider] Fetched ${allEmails.length} emails for lead ${leadEmail}`);
+
+    return allEmails
       .map((e) => this.mapEmail(e))
       .sort((a, b) => a.sentAt.localeCompare(b.sentAt));
   }

@@ -240,6 +240,8 @@ export async function POST(request: Request, { params }: RouteParams) {
 
 
     // Update or create lead
+    let leadDbId: string | null = null;
+
     if (existingLead) {
       const { error: updateError } = await supabase
         .from("leads")
@@ -250,10 +252,11 @@ export async function POST(request: Request, { params }: RouteParams) {
         console.error("[Webhook] Error updating lead:", updateError);
       } else {
         console.log(`[Webhook] Updated lead ${leadEmail} - event: ${eventType}`);
+        leadDbId = existingLead.id;
       }
     } else if (clientId && (isPositive || isReply || isEmailSent)) {
       // Create new lead if it doesn't exist and this is a meaningful event
-      const { error: insertError } = await supabase
+      const { data: insertedLead, error: insertError } = await supabase
         .from("leads")
         .insert({
           email: leadEmail,
@@ -265,15 +268,79 @@ export async function POST(request: Request, { params }: RouteParams) {
           has_replied: isReply || isPositive,
           status: isPositive || isReply ? "replied" : "contacted",
           ...updateData,
-        });
+        })
+        .select("id")
+        .single();
 
       if (insertError) {
         console.error("[Webhook] Error creating lead:", insertError);
       } else {
         console.log(`[Webhook] Created new lead ${leadEmail} from webhook event: ${eventType}`);
+        leadDbId = insertedLead?.id || null;
       }
     } else {
       console.warn(`[Webhook] Lead not found and not creating for event ${eventType}: ${leadEmail}`);
+    }
+
+    // Save email content to lead_emails table for reply_received and email_sent events
+    if (leadDbId && (isReply || isEmailSent)) {
+      const emailId = payload.email_id || `webhook-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const emailAccount = payload.email_account || "";
+
+      // Determine content based on event type
+      let subject: string | null = null;
+      let bodyText: string | null = null;
+      let bodyHtml: string | null = null;
+      let direction: "outbound" | "inbound" = "outbound";
+      let fromEmail = emailAccount;
+      let toEmail = leadEmail;
+
+      if (isReply) {
+        // Inbound reply from lead
+        direction = "inbound";
+        subject = payload.reply_subject || payload.email_subject || null;
+        bodyText = payload.reply_text || payload.email_text || null;
+        bodyHtml = payload.reply_html || payload.email_html || null;
+        fromEmail = leadEmail;
+        toEmail = emailAccount;
+      } else if (isEmailSent) {
+        // Outbound email to lead
+        direction = "outbound";
+        subject = payload.email_subject || null;
+        bodyText = payload.email_text || null;
+        bodyHtml = payload.email_html || null;
+      }
+
+      // Only save if we have some content
+      if (subject || bodyText || bodyHtml) {
+        const emailRecord = {
+          lead_id: leadDbId,
+          campaign_id: campaignId,
+          provider_email_id: emailId,
+          direction,
+          from_email: fromEmail,
+          to_email: toEmail,
+          subject,
+          body_text: bodyText,
+          body_html: bodyHtml,
+          sequence_step: payload.step || null,
+          is_auto_reply: eventType === "auto_reply_received",
+          sent_at: payload.timestamp || new Date().toISOString(),
+        };
+
+        const { error: emailError } = await supabase
+          .from("lead_emails")
+          .upsert(emailRecord, {
+            onConflict: "provider_email_id",
+            ignoreDuplicates: false,
+          });
+
+        if (emailError) {
+          console.error("[Webhook] Error saving email:", emailError);
+        } else {
+          console.log(`[Webhook] Saved ${direction} email for ${leadEmail}`);
+        }
+      }
     }
 
     const duration = Date.now() - startTime;

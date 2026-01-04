@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { fetchEmailsForLead, getInstantlyClient } from "@/lib/instantly";
+import { getProviderForCampaign } from "@/lib/providers";
 
 function getSupabase() {
   return createClient(
@@ -17,17 +17,6 @@ export async function GET(
   try {
     const { leadId } = await params;
     const supabase = getSupabase();
-
-    // Get lead to find the email
-    const { data: lead, error: leadError } = await supabase
-      .from("leads")
-      .select("id, email, campaign_id")
-      .eq("id", leadId)
-      .single();
-
-    if (leadError || !lead) {
-      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
-    }
 
     // Fetch emails from database
     const { data: emails, error: emailsError } = await supabase
@@ -54,7 +43,7 @@ export async function GET(
   }
 }
 
-// POST - Sync emails from Instantly for a lead
+// POST - Sync emails from Instantly for a lead (using per-campaign API key)
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ leadId: string }> }
@@ -63,19 +52,10 @@ export async function POST(
     const { leadId } = await params;
     const supabase = getSupabase();
 
-    // Check if Instantly is configured
-    const client = getInstantlyClient();
-    if (!client.isConfigured()) {
-      return NextResponse.json(
-        { error: "Instantly API not configured" },
-        { status: 503 }
-      );
-    }
-
-    // Get lead info with campaign's Instantly ID
+    // Get lead info with campaign's provider_campaign_id
     const { data: lead, error: leadError } = await supabase
       .from("leads")
-      .select("id, email, campaign_id, campaigns(instantly_campaign_id)")
+      .select("id, email, campaign_id, campaigns(id, provider_campaign_id, instantly_campaign_id, api_key_encrypted)")
       .eq("id", leadId)
       .single();
 
@@ -83,63 +63,69 @@ export async function POST(
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
-    // Get the Instantly campaign ID from the joined data
-    // The campaigns relation returns an object when using .single() on leads
-    const campaignData = lead.campaigns as unknown as { instantly_campaign_id: string | null } | null;
-    const instantlyCampaignId = campaignData?.instantly_campaign_id;
+    // Get campaign info from the joined data
+    const campaignData = lead.campaigns as unknown as {
+      id: string;
+      provider_campaign_id: string | null;
+      instantly_campaign_id: string | null;
+      api_key_encrypted: string | null;
+    } | null;
 
-    console.log(`[Email Sync] Lead: ${lead.email}, Instantly Campaign: ${instantlyCampaignId}`);
+    if (!campaignData?.api_key_encrypted) {
+      return NextResponse.json(
+        { error: "Campaign has no API key configured" },
+        { status: 400 }
+      );
+    }
 
-    // Fetch emails from Instantly - pass campaign ID for more accurate results
-    const instantlyEmails = await fetchEmailsForLead(lead.email, instantlyCampaignId || undefined);
+    const providerCampaignId = campaignData.provider_campaign_id || campaignData.instantly_campaign_id;
+    if (!providerCampaignId) {
+      return NextResponse.json(
+        { error: "Campaign has no provider campaign ID" },
+        { status: 400 }
+      );
+    }
+
+    console.log(`[Email Sync] Lead: ${lead.email}, Campaign: ${campaignData.id}`);
+
+    // Get provider with per-campaign API key
+    const provider = await getProviderForCampaign(campaignData.id);
+
+    // Fetch emails from provider
+    const providerEmails = await provider.fetchEmailsForLead(providerCampaignId, lead.email);
 
     let imported = 0;
     let skipped = 0;
 
-    for (const email of instantlyEmails) {
-      // Check if email already exists
-      const { data: existing } = await supabase
+    for (const email of providerEmails) {
+      // Upsert email by provider_email_id
+      const { error: upsertError } = await supabase
         .from("lead_emails")
-        .select("id")
-        .eq("lead_id", leadId)
-        .eq("provider_email_id", email.id)
-        .single();
+        .upsert({
+          lead_id: leadId,
+          campaign_id: lead.campaign_id,
+          provider_email_id: email.id,
+          provider_thread_id: email.threadId || null,
+          direction: email.isReply ? "inbound" : "outbound",
+          from_email: email.fromEmail || "",
+          to_email: email.toEmail || lead.email,
+          subject: email.subject || null,
+          body_text: email.bodyText || null,
+          body_html: email.bodyHtml || null,
+          sequence_step: null,
+          is_auto_reply: false,
+          sent_at: email.sentAt || null,
+        }, {
+          onConflict: "provider_email_id",
+          ignoreDuplicates: false,
+        });
 
-      if (existing) {
-        skipped++;
-        continue;
-      }
-
-      // Determine direction based on from/to emails
-      const isOutbound = email.from_address_email !== lead.email;
-      const toEmail = email.to_address_email_list?.[0] || lead.email;
-
-      // Insert email
-      const { error: insertError } = await supabase.from("lead_emails").insert({
-        lead_id: leadId,
-        campaign_id: lead.campaign_id,
-        provider_email_id: email.id,
-        provider_thread_id: email.thread_id || null,
-        direction: isOutbound ? "outbound" : "inbound",
-        from_email: email.from_address_email || "",
-        to_email: toEmail,
-        subject: email.subject || null,
-        body_text: email.body?.text || null,
-        body_html: email.body?.html || email.body?.text || null,
-        sequence_step: null,
-        is_auto_reply: false,
-        sent_at: email.timestamp_email || email.timestamp_created || null,
-        metadata: {
-          instantly_data: {
-            campaign_id: email.i_campaign,
-            eaccount: email.eaccount,
-            is_reply: email.is_reply,
-          },
-        },
-      });
-
-      if (insertError) {
-        console.error("Failed to insert email:", insertError);
+      if (upsertError) {
+        if (upsertError.code === "23505") {
+          skipped++;
+        } else {
+          console.error("Failed to upsert email:", upsertError);
+        }
       } else {
         imported++;
       }
@@ -149,7 +135,7 @@ export async function POST(
       success: true,
       imported,
       skipped,
-      total: instantlyEmails.length,
+      total: providerEmails.length,
     });
   } catch (error) {
     console.error("Error in POST /api/leads/[leadId]/emails:", error);

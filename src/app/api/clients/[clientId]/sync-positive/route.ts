@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getProviderForCampaign } from "@/lib/providers";
+import type { ProviderEmail } from "@/lib/providers/types";
 
 function getSupabase() {
   return createClient(
@@ -34,6 +35,7 @@ export async function POST(
 
     let totalSynced = 0;
     let totalCreated = 0;
+    let totalEmailsSynced = 0;
     let campaignsProcessed = 0;
     let campaignsWithoutApiKey = 0;
     const errors: string[] = [];
@@ -155,6 +157,8 @@ export async function POST(
             }
           }
 
+          let leadDbId: string | null = null;
+
           if (existingLead) {
             // Build update payload
             const updatePayload: Record<string, unknown> = {
@@ -182,13 +186,14 @@ export async function POST(
               console.error(`[Sync Positive] Error updating lead ${normalizedEmail}:`, updateError);
             } else {
               totalCreated++;
+              leadDbId = existingLead.id;
             }
           } else {
             // WARNING: Creating new lead - this means the initial import was incomplete
             console.warn(`[Sync Positive] WARNING: Lead ${normalizedEmail} not found in DB, creating new record`);
 
             // Create new lead if it doesn't exist
-            const { error: insertError } = await supabase
+            const { data: insertedLead, error: insertError } = await supabase
               .from("leads")
               .insert({
                 email: normalizedEmail,
@@ -205,12 +210,29 @@ export async function POST(
                 instantly_lead_id: providerLeadId || null,
                 provider_lead_id: providerLeadId || null,
                 provider_type: "instantly",
-              });
+              })
+              .select("id")
+              .single();
 
             if (insertError) {
               console.error(`[Sync Positive] Error inserting lead ${normalizedEmail}:`, insertError);
             } else {
               totalCreated++;
+              leadDbId = insertedLead?.id || null;
+            }
+          }
+
+          // Fetch and store email thread for this positive lead
+          if (leadDbId) {
+            try {
+              const emails = await provider.fetchEmailsForLead(providerCampaignId, normalizedEmail);
+              if (emails.length > 0) {
+                const { inserted } = await upsertLeadEmails(supabase, leadDbId, campaign.id, emails);
+                totalEmailsSynced += inserted;
+                console.log(`[Sync Positive] Synced ${inserted} emails for ${normalizedEmail}`);
+              }
+            } catch (emailErr) {
+              console.error(`[Sync Positive] Error fetching emails for ${normalizedEmail}:`, emailErr);
             }
           }
 
@@ -223,7 +245,7 @@ export async function POST(
       }
     }
 
-    console.log(`[Sync Positive] Complete - ${totalSynced} synced, ${totalCreated} updated, ${campaignsProcessed} campaigns processed`);
+    console.log(`[Sync Positive] Complete - ${totalSynced} leads synced, ${totalCreated} updated, ${totalEmailsSynced} emails synced, ${campaignsProcessed} campaigns processed`);
 
     // Build informative message
     let message = "";
@@ -237,12 +259,15 @@ export async function POST(
       }
     } else if (totalSynced === 0) {
       message = `Checked ${campaignsProcessed} campaign(s) - no positive leads found in Instantly`;
+    } else {
+      message = `Synced ${totalSynced} positive leads and ${totalEmailsSynced} emails`;
     }
 
     return NextResponse.json({
       success: true,
       synced: totalSynced,
       upserted: totalCreated,
+      emailsSynced: totalEmailsSynced,
       campaignsProcessed,
       campaignsWithoutApiKey,
       totalCampaigns: (campaigns || []).length,
@@ -270,4 +295,59 @@ function mapInterestStatusToStatus(interestStatus?: string): string {
     default:
       return "replied";
   }
+}
+
+// Upsert emails into lead_emails table
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function upsertLeadEmails(
+  supabase: any,
+  leadId: string,
+  campaignId: string,
+  emails: ProviderEmail[]
+): Promise<{ inserted: number; skipped: number }> {
+  let inserted = 0;
+  let skipped = 0;
+
+  for (const email of emails) {
+    // Determine direction based on isReply flag
+    const direction = email.isReply ? "inbound" : "outbound";
+
+    const emailRecord = {
+      lead_id: leadId,
+      campaign_id: campaignId,
+      provider_email_id: email.id,
+      provider_thread_id: email.threadId || null,
+      direction,
+      from_email: email.fromEmail,
+      to_email: email.toEmail,
+      cc_emails: email.ccEmails || null,
+      bcc_emails: email.bccEmails || null,
+      subject: email.subject,
+      body_text: email.bodyText || null,
+      body_html: email.bodyHtml || null,
+      sent_at: email.sentAt,
+      is_auto_reply: false,
+    };
+
+    // Upsert by provider_email_id (unique constraint)
+    const { error } = await supabase
+      .from("lead_emails")
+      .upsert(emailRecord, {
+        onConflict: "provider_email_id",
+        ignoreDuplicates: false,
+      });
+
+    if (error) {
+      // Check if it's a duplicate key error (already exists)
+      if (error.code === "23505") {
+        skipped++;
+      } else {
+        console.error(`[Sync Positive] Error upserting email ${email.id}:`, error);
+      }
+    } else {
+      inserted++;
+    }
+  }
+
+  return { inserted, skipped };
 }
