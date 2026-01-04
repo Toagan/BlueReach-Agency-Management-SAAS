@@ -210,32 +210,50 @@ export async function POST(
       `[SyncLeads] ${leadsToInsert.length} new leads, ${leadsToUpdate.length} to update`
     );
 
-    // Insert new leads in batches
+    // Deduplicate leads by email (Instantly API can return duplicates)
+    const deduplicatedLeads = new Map<string, Record<string, unknown>>();
+    for (const lead of leadsToInsert) {
+      const emailKey = (lead.email as string).toLowerCase();
+      // Keep the last occurrence (most recent data)
+      deduplicatedLeads.set(emailKey, lead);
+    }
+    const uniqueLeadsToInsert = Array.from(deduplicatedLeads.values());
+
+    console.log(`[SyncLeads] Deduplicated ${leadsToInsert.length} -> ${uniqueLeadsToInsert.length} unique leads`);
+
+    // Insert/upsert new leads in batches
     let insertedCount = 0;
     const insertBatchSize = 100;
-    const totalBatches = Math.ceil(leadsToInsert.length / insertBatchSize);
+    const totalBatches = Math.ceil(uniqueLeadsToInsert.length / insertBatchSize);
 
-    console.log(`[SyncLeads] Inserting ${leadsToInsert.length} leads in ${totalBatches} batches...`);
+    console.log(`[SyncLeads] Upserting ${uniqueLeadsToInsert.length} leads in ${totalBatches} batches...`);
 
-    for (let i = 0; i < leadsToInsert.length; i += insertBatchSize) {
-      const batch = leadsToInsert.slice(i, i + insertBatchSize);
+    for (let i = 0; i < uniqueLeadsToInsert.length; i += insertBatchSize) {
+      const batch = uniqueLeadsToInsert.slice(i, i + insertBatchSize);
       const batchNum = Math.floor(i / insertBatchSize) + 1;
 
-      const { error: insertError } = await supabase.from("leads").insert(batch);
+      // Use upsert with onConflict to handle duplicates gracefully
+      const { error: upsertError, count } = await supabase
+        .from("leads")
+        .upsert(batch, {
+          onConflict: "campaign_id,email",
+          ignoreDuplicates: false,
+        })
+        .select("id", { count: "exact", head: true });
 
-      if (insertError) {
-        console.error(`[SyncLeads] Insert batch ${batchNum}/${totalBatches} error:`, insertError);
+      if (upsertError) {
+        console.error(`[SyncLeads] Upsert batch ${batchNum}/${totalBatches} error:`, upsertError);
       } else {
         insertedCount += batch.length;
       }
 
       // Log progress every 50 batches
       if (batchNum % 50 === 0) {
-        console.log(`[SyncLeads] Inserted ${insertedCount}/${leadsToInsert.length} leads...`);
+        console.log(`[SyncLeads] Upserted ${insertedCount}/${uniqueLeadsToInsert.length} leads...`);
       }
     }
 
-    console.log(`[SyncLeads] Finished inserting ${insertedCount} leads`);
+    console.log(`[SyncLeads] Finished upserting ${insertedCount} leads`);
 
     // Update existing leads in batches
     let updatedCount = 0;
