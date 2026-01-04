@@ -165,6 +165,9 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
   const selectedCampaign = campaigns.find((c) => c.id === selectedCampaignId);
   const availableCampaigns = campaigns.filter((c) => !linkedCampaignIds.has(c.id));
 
+  // State for background sync
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -172,7 +175,8 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
 
     const campaignName = customName.trim() || selectedCampaign?.name || "Unnamed Campaign";
 
-    const { error } = await supabase.from("campaigns").insert({
+    // Insert campaign and get the new ID
+    const { data: newCampaign, error } = await supabase.from("campaigns").insert({
       client_id: clientId,
       name: campaignName,
       original_name: selectedCampaign?.name,
@@ -181,11 +185,11 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
       instantly_campaign_id: selectedProvider === "instantly" ? selectedCampaignId : null,
       api_key_encrypted: apiKey.trim(),
       is_active: selectedCampaign?.status === "active",
-    });
+    }).select("id").single();
 
-    if (error) {
+    if (error || !newCampaign) {
       console.error("Error creating campaign:", error);
-      alert("Failed to link campaign: " + error.message);
+      alert("Failed to link campaign: " + error?.message);
       return;
     }
 
@@ -195,6 +199,27 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
     startTransition(() => {
       router.refresh();
     });
+
+    // Chain automatic syncs in the background
+    // 1. Sync all leads from provider
+    setSyncStatus("Syncing leads...");
+    try {
+      await fetch(`/api/campaigns/${newCampaign.id}/sync-leads`, {
+        method: "POST",
+      });
+
+      // 2. Sync positive leads to mark is_positive_reply correctly
+      setSyncStatus("Syncing positive replies...");
+      await fetch(`/api/clients/${clientId}/sync-positive`, {
+        method: "POST",
+      });
+
+      setSyncStatus("Sync complete!");
+      setTimeout(() => setSyncStatus(null), 3000);
+    } catch (syncError) {
+      console.error("Background sync error:", syncError);
+      setSyncStatus("Sync failed - click 'Sync from Instantly' manually");
+    }
   };
 
   const handleClose = () => {
@@ -209,6 +234,7 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
       setCustomName("");
       setCopied(false);
       setLoadError(null);
+      setSyncStatus(null);
     }, 200);
   };
 
@@ -243,6 +269,18 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
                 <strong>{linkedCampaignName}</strong> has been linked successfully.
               </DialogDescription>
             </DialogHeader>
+            {syncStatus && (
+              <div className="flex items-center gap-2 py-2 px-3 bg-gray-100 rounded-lg text-sm">
+                {syncStatus.includes("complete") ? (
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                ) : syncStatus.includes("failed") ? (
+                  <XCircle className="h-4 w-4 text-red-500" />
+                ) : (
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                )}
+                <span>{syncStatus}</span>
+              </div>
+            )}
             <div className="py-4 space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <h4 className="font-medium text-blue-900 mb-2">
