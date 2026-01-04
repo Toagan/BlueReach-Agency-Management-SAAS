@@ -242,10 +242,11 @@ export class InstantlyProvider implements EmailCampaignProvider {
     options?: { limit?: number; offset?: number }
   ): Promise<ProviderLead[]> {
     console.log(`[InstantlyProvider] Fetching leads for campaign ${campaignId}`);
+    // Note: Instantly API v2 uses "campaign" not "campaign_id" for /leads/list
     const response = await this.client.post<{ items: InstantlyLead[] }>(
       "/leads/list",
       {
-        campaign_id: campaignId,
+        campaign: campaignId,
         limit: options?.limit || 100,
         skip: options?.offset || 0,
       }
@@ -349,10 +350,11 @@ export class InstantlyProvider implements EmailCampaignProvider {
       console.log(`[InstantlyProvider] Fetching leads with interest_status=${status} for campaign ${campaignId}`);
 
       while (true) {
+        // Note: Instantly API v2 uses "campaign" not "campaign_id"
         const response = await this.client.post<{ items: InstantlyLead[] }>(
           "/leads/list",
           {
-            campaign_id: campaignId,
+            campaign: campaignId,
             interest_status: status,
             limit,
             skip,
