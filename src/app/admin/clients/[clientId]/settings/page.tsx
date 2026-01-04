@@ -636,14 +636,14 @@ export default function ClientSettingsPage() {
             )}
 
             {inviteLink && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-2">
-                    <Mail className="h-5 w-5 text-blue-600 mt-0.5" />
+                    <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium text-blue-800">Share this link with the user</p>
-                      <p className="text-xs text-blue-600 mt-1">
-                        Copy and send this link via email, Slack, or any messaging app.
+                      <p className="text-sm font-medium text-amber-800">Manual invite required</p>
+                      <p className="text-xs text-amber-700 mt-1">
+                        Automated emails are not configured yet. Please copy this link and send it manually via email, Slack, or any messaging app.
                       </p>
                     </div>
                   </div>
@@ -652,7 +652,7 @@ export default function ClientSettingsPage() {
                     variant="ghost"
                     size="sm"
                     onClick={dismissInviteLink}
-                    className="text-blue-600 hover:text-blue-800 hover:bg-blue-100 -mr-2 -mt-2"
+                    className="text-amber-600 hover:text-amber-800 hover:bg-amber-100 -mr-2 -mt-2"
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -667,7 +667,7 @@ export default function ClientSettingsPage() {
                     type="button"
                     variant="outline"
                     onClick={copyInviteLink}
-                    className="shrink-0"
+                    className="shrink-0 border-amber-300 hover:bg-amber-100"
                   >
                     Copy Link
                   </Button>

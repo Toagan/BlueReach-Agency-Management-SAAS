@@ -43,18 +43,18 @@ export async function GET(request: Request, { params }: RouteParams) {
       });
     }
 
-    // Count positive replies for client
+    // Count positive replies for client (query via campaign_ids since leads link to campaigns, not clients directly)
     const { count: clientPositive } = await supabase
       .from("leads")
       .select("*", { count: "exact", head: true })
-      .eq("client_id", clientId)
+      .in("campaign_id", campaignIds)
       .eq("is_positive_reply", true);
 
-    // Count all replied leads
+    // Count all replied leads (same - query via campaign_ids)
     const { count: clientReplied } = await supabase
       .from("leads")
       .select("*", { count: "exact", head: true })
-      .eq("client_id", clientId)
+      .in("campaign_id", campaignIds)
       .or("has_replied.eq.true,status.eq.replied,status.eq.booked,status.eq.won,status.eq.lost");
 
     // Build stats map using COUNT queries (more efficient than fetching all leads)
@@ -108,8 +108,9 @@ export async function GET(request: Request, { params }: RouteParams) {
       const repliesCount = campaign.cached_reply_count || localStats.replied_count;
       const bounced = campaign.cached_emails_bounced || 0;
       const opened = campaign.cached_emails_opened || 0;
-      // Use cached positive count from provider, fallback to local leads count
-      const positiveCount = campaign.cached_positive_count || localStats.positive_count;
+      // For positive count: prefer local DB count (actual synced leads) over cached value
+      // This ensures stats match the Lead Workflow which shows actual DB leads
+      const positiveCount = localStats.positive_count;
 
       const analytics = {
         leads_count: localStats.leads_count,

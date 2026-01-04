@@ -597,12 +597,20 @@ export class InstantlyProvider implements EmailCampaignProvider {
   }
 
   private mapEmail(e: InstantlyEmail): ProviderEmail {
+    // Ensure CC/BCC are always arrays (API sometimes returns strings)
+    const normalizeEmailList = (list: string[] | string | undefined): string[] | undefined => {
+      if (!list) return undefined;
+      if (Array.isArray(list)) return list;
+      if (typeof list === "string") return [list];
+      return undefined;
+    };
+
     return {
       id: e.id,
       fromEmail: e.from_address_email,
       toEmail: e.to_address_email_list?.[0] || "",
-      ccEmails: e.cc_address_email_list,
-      bccEmails: e.bcc_address_email_list,
+      ccEmails: normalizeEmailList(e.cc_address_email_list as string[] | string | undefined),
+      bccEmails: normalizeEmailList(e.bcc_address_email_list as string[] | string | undefined),
       subject: e.subject,
       bodyText: e.body?.text,
       bodyHtml: e.body?.html,

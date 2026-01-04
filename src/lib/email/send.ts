@@ -1,5 +1,7 @@
 import { Resend } from "resend";
+import { render } from "@react-email/render";
 import { createClient } from "@supabase/supabase-js";
+import { InvitationEmail, generatePlainText } from "./templates/Invitation";
 
 function getSupabase() {
   return createClient(
@@ -11,6 +13,7 @@ function getSupabase() {
 interface BrandingSettings {
   agencyName: string;
   agencyLogoUrl: string | null;
+  agencyWebsiteUrl: string | null;
   primaryColor: string;
   senderName: string;
   senderEmail: string;
@@ -25,6 +28,7 @@ async function getBrandingSettings(): Promise<BrandingSettings> {
     .in("key", [
       "agency_name",
       "agency_logo_url",
+      "agency_website_url",
       "agency_primary_color",
       "agency_sender_name",
       "agency_sender_email",
@@ -32,42 +36,72 @@ async function getBrandingSettings(): Promise<BrandingSettings> {
 
   const settingsMap = new Map(settings?.map((s) => [s.key, s.value]) || []);
 
+  const agencyName = settingsMap.get("agency_name") || "BlueReach";
+
+  // Default sender name: "Tilman Schepke | BlueReach" format
+  // Avoids redundancy like "BlueReach via BlueReach"
+  let senderName = settingsMap.get("agency_sender_name");
+  if (!senderName) {
+    senderName = agencyName === "BlueReach"
+      ? "Tilman Schepke | BlueReach"
+      : `${agencyName} | BlueReach`;
+  }
+
   return {
-    agencyName: settingsMap.get("agency_name") || "BlueReach",
+    agencyName,
     agencyLogoUrl: settingsMap.get("agency_logo_url") || null,
-    primaryColor: settingsMap.get("agency_primary_color") || "#2563eb",
-    senderName: settingsMap.get("agency_sender_name") || "BlueReach Team",
-    senderEmail: settingsMap.get("agency_sender_email") || "noreply@bluereach.com",
+    agencyWebsiteUrl: settingsMap.get("agency_website_url") || "https://blue-reach.com",
+    primaryColor: settingsMap.get("agency_primary_color") || "#4F46E5",
+    senderName,
+    // Default to Resend test domain until custom domain is verified
+    senderEmail: settingsMap.get("agency_sender_email") || "onboarding@resend.dev",
   };
 }
 
-async function getResendClient(): Promise<Resend | null> {
-  const supabase = getSupabase();
+// Mask API key for logging (show first 6 and last 3 chars)
+function maskApiKey(key: string): string {
+  if (key.length <= 8) return "***";
+  return `${key.substring(0, 6)}...${key.substring(key.length - 3)}`;
+}
 
+async function getResendClient(): Promise<Resend | null> {
+  // First, try to get API key from database settings
+  const supabase = getSupabase();
   const { data: setting } = await supabase
     .from("settings")
     .select("value")
     .eq("key", "resend_api_key")
     .single();
 
-  if (!setting?.value) {
-    console.log("[Email] Resend API key not configured");
+  let apiKey = setting?.value;
+  let source = "database";
+
+  // Fallback to environment variable if database setting is empty
+  if (!apiKey) {
+    apiKey = process.env.RESEND_API_KEY;
+    source = "environment";
+  }
+
+  if (!apiKey) {
+    console.log("[Email] Resend API key not configured (checked database and RESEND_API_KEY env var)");
     return null;
   }
 
-  return new Resend(setting.value);
+  console.log(`[Email] Using Resend API key from ${source}: ${maskApiKey(apiKey)}`);
+  return new Resend(apiKey);
 }
 
-interface SendInvitationEmailParams {
+export interface SendInvitationEmailParams {
   to: string;
   inviteeName: string;
+  inviterName?: string;
   clientName: string;
   loginUrl: string;
 }
 
 export async function sendInvitationEmail(
   params: SendInvitationEmailParams
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; emailId?: string }> {
   const resend = await getResendClient();
 
   if (!resend) {
@@ -76,17 +110,32 @@ export async function sendInvitationEmail(
 
   const branding = await getBrandingSettings();
 
-  const emailHtml = generateInvitationEmailHtml({
-    ...params,
-    branding,
-  });
+  // Build template props
+  const templateProps = {
+    inviteeName: params.inviteeName,
+    inviterName: params.inviterName || "Your account manager",
+    clientName: params.clientName,
+    agencyName: branding.agencyName,
+    agencyLogoUrl: branding.agencyLogoUrl,
+    agencyWebsiteUrl: branding.agencyWebsiteUrl || undefined,
+    loginUrl: params.loginUrl,
+    recipientEmail: params.to,
+    primaryColor: branding.primaryColor,
+  };
+
+  // Render HTML and plain text versions
+  const emailHtml = await render(InvitationEmail(templateProps));
+  const emailText = generatePlainText(templateProps);
 
   try {
-    const { error } = await resend.emails.send({
+    console.log(`[Email] Sending invitation to ${params.to} for client "${params.clientName}"`);
+
+    const { data, error } = await resend.emails.send({
       from: `${branding.senderName} <${branding.senderEmail}>`,
       to: params.to,
-      subject: `You've been invited to ${params.clientName} Dashboard`,
+      subject: `You've been invited to your ${branding.agencyName} Dashboard`,
       html: emailHtml,
+      text: emailText,
     });
 
     if (error) {
@@ -94,7 +143,8 @@ export async function sendInvitationEmail(
       return { success: false, error: error.message };
     }
 
-    return { success: true };
+    console.log(`[Email] Successfully sent invitation (ID: ${data?.id})`);
+    return { success: true, emailId: data?.id };
   } catch (err) {
     console.error("[Email] Error sending invitation:", err);
     return {
@@ -102,98 +152,6 @@ export async function sendInvitationEmail(
       error: err instanceof Error ? err.message : "Failed to send email",
     };
   }
-}
-
-interface GenerateEmailHtmlParams extends SendInvitationEmailParams {
-  branding: BrandingSettings;
-}
-
-function generateInvitationEmailHtml(params: GenerateEmailHtmlParams): string {
-  const { inviteeName, clientName, loginUrl, branding } = params;
-  const firstName = inviteeName.split(" ")[0] || "there";
-
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>You're Invited</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4f5;">
-  <table role="presentation" style="width: 100%; border-collapse: collapse;">
-    <tr>
-      <td align="center" style="padding: 40px 20px;">
-        <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse;">
-          <!-- Header -->
-          <tr>
-            <td align="center" style="padding-bottom: 30px;">
-              ${branding.agencyLogoUrl
-                ? `<img src="${branding.agencyLogoUrl}" alt="${branding.agencyName}" style="height: 50px; max-width: 200px;">`
-                : `<h1 style="margin: 0; color: ${branding.primaryColor}; font-size: 28px; font-weight: 700;">${branding.agencyName}</h1>`
-              }
-            </td>
-          </tr>
-
-          <!-- Main Content -->
-          <tr>
-            <td style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
-              <h2 style="margin: 0 0 20px 0; color: #18181b; font-size: 24px; font-weight: 600;">
-                Hi ${firstName}!
-              </h2>
-
-              <p style="margin: 0 0 20px 0; color: #52525b; font-size: 16px; line-height: 1.6;">
-                You've been invited to access the <strong style="color: #18181b;">${clientName}</strong> dashboard. This is where you can track your campaign performance and see real-time analytics.
-              </p>
-
-              <p style="margin: 0 0 30px 0; color: #52525b; font-size: 16px; line-height: 1.6;">
-                Click the button below to create your account and get started:
-              </p>
-
-              <!-- CTA Button -->
-              <table role="presentation" style="width: 100%; border-collapse: collapse;">
-                <tr>
-                  <td align="center">
-                    <a href="${loginUrl}" style="display: inline-block; padding: 16px 32px; background-color: ${branding.primaryColor}; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600; border-radius: 8px;">
-                      Access Your Dashboard
-                    </a>
-                  </td>
-                </tr>
-              </table>
-
-              <p style="margin: 30px 0 0 0; color: #a1a1aa; font-size: 14px; line-height: 1.6;">
-                Or copy and paste this link into your browser:
-              </p>
-              <p style="margin: 10px 0 0 0; color: ${branding.primaryColor}; font-size: 14px; word-break: break-all;">
-                ${loginUrl}
-              </p>
-
-              <hr style="margin: 30px 0; border: none; border-top: 1px solid #e4e4e7;">
-
-              <p style="margin: 0; color: #a1a1aa; font-size: 14px;">
-                This invitation will expire in 7 days. If you didn't expect this invitation, you can safely ignore this email.
-              </p>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td align="center" style="padding: 30px 20px;">
-              <p style="margin: 0; color: #a1a1aa; font-size: 14px;">
-                Sent by ${branding.agencyName}
-              </p>
-              <p style="margin: 10px 0 0 0; color: #d4d4d8; font-size: 12px;">
-                Powered by BlueReach Agency Management
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-`;
 }
 
 export { getBrandingSettings };

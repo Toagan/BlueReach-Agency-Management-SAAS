@@ -164,9 +164,10 @@ export default function ClientDashboardPage() {
       }
     });
 
-    // Use client-wide stats for replies and positive (more reliable), fallback to aggregated campaign stats
-    const totalReplies = clientStats.replied > 0 ? clientStats.replied : totalRepliesFromCampaigns;
-    const totalPositiveReplies = clientStats.positive > 0 ? clientStats.positive : totalPositiveFromCampaigns;
+    // Use campaign-level cached stats (from Instantly) as primary source - more reliable than leads table
+    // The leads table may not have has_replied/status properly set for all replied leads
+    const totalReplies = totalRepliesFromCampaigns > 0 ? totalRepliesFromCampaigns : clientStats.replied;
+    const totalPositiveReplies = totalPositiveFromCampaigns > 0 ? totalPositiveFromCampaigns : clientStats.positive;
 
     const openRate = totalEmailsSent > 0 ? (totalOpened / totalEmailsSent) * 100 : 0;
     const replyRate = totalEmailsSent > 0 ? (totalReplies / totalEmailsSent) * 100 : 0;

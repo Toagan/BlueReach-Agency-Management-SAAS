@@ -102,13 +102,16 @@ export async function POST(
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, full_name, email")
       .eq("id", user.id)
       .single();
 
     if (profile?.role !== "admin") {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
+
+    // Get inviter's display name for the email
+    const inviterName = profile?.full_name || profile?.email?.split("@")[0] || "Your account manager";
 
     const adminSupabase = getSupabaseAdmin();
 
@@ -174,8 +177,8 @@ export async function POST(
       });
     }
 
-    // Check for existing pending invitation
-    const { data: existingInvitation } = await adminSupabase
+    // Check for existing pending (non-expired) invitation
+    const { data: existingPendingInvitation } = await adminSupabase
       .from("client_invitations")
       .select("id")
       .eq("client_id", clientId)
@@ -184,26 +187,33 @@ export async function POST(
       .gt("expires_at", new Date().toISOString())
       .single();
 
-    if (existingInvitation) {
+    if (existingPendingInvitation) {
       return NextResponse.json(
         { error: "An invitation is already pending for this email" },
         { status: 400 }
       );
     }
 
+    // Delete any expired or accepted invitations to allow re-inviting
+    await adminSupabase
+      .from("client_invitations")
+      .delete()
+      .eq("client_id", clientId)
+      .eq("email", email.toLowerCase())
+      .or(`expires_at.lt.${new Date().toISOString()},accepted_at.not.is.null`);
+
     // Create invitation token
     const token = crypto.randomUUID();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiry
 
-    // Store invitation
+    // Store invitation (table has: id, client_id, email, first_name, token, invited_by, expires_at, accepted_at)
     const { error: inviteError } = await adminSupabase
       .from("client_invitations")
       .insert({
         client_id: clientId,
         email: email.toLowerCase(),
-        name: name || null,
-        role: role,
+        first_name: name || null,
         token: token,
         invited_by: user.id,
         expires_at: expiresAt.toISOString(),
@@ -229,6 +239,7 @@ export async function POST(
     const emailResult = await sendInvitationEmail({
       to: email.toLowerCase(),
       inviteeName: name || email.split("@")[0],
+      inviterName,
       clientName: client.name,
       loginUrl,
     });
