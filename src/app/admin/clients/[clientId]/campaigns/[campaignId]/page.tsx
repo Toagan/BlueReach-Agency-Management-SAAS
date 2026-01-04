@@ -736,37 +736,28 @@ export default function CampaignDetailPage() {
                               )}
                             </div>
 
-                            {/* Variables Mode - show raw template */}
-                            {!isPreviewMode && (
-                              <>
-                                {step.subject && (
-                                  <p className="font-medium text-sm mb-2">Subject: {step.subject}</p>
-                                )}
-                                <div
-                                  className="bg-muted/50 rounded-lg p-3 text-sm max-h-64 overflow-y-auto [&_div]:mb-1 [&_br]:block [&_a]:text-blue-600 [&_a]:underline"
-                                  dangerouslySetInnerHTML={{
-                                    __html: step.body_html || step.body_text || "<p>(No content)</p>"
-                                  }}
-                                />
-                              </>
-                            )}
+                            {/* Show email content - either preview mode with lead data, or raw template */}
+                            {(() => {
+                              const showPreview = isPreviewMode && previewLead;
+                              const subject = showPreview
+                                ? replaceTemplateVariables(step.subject || "", previewLead)
+                                : step.subject;
+                              const body = showPreview
+                                ? replaceTemplateVariables(step.body_html || step.body_text || "", previewLead)
+                                : (step.body_html || step.body_text || "<p>(No content)</p>");
 
-                            {/* Preview Mode - show single lead with same styling as variables */}
-                            {isPreviewMode && previewLead && (
-                              <>
-                                {step.subject && (
-                                  <p className="font-medium text-sm mb-2">
-                                    Subject: {replaceTemplateVariables(step.subject, previewLead)}
-                                  </p>
-                                )}
-                                <div
-                                  className="bg-muted/50 rounded-lg p-3 text-sm max-h-64 overflow-y-auto [&_div]:mb-1 [&_br]:block [&_a]:text-blue-600 [&_a]:underline"
-                                  dangerouslySetInnerHTML={{
-                                    __html: replaceTemplateVariables(step.body_html || step.body_text || "<p>(No content)</p>", previewLead)
-                                  }}
-                                />
-                              </>
-                            )}
+                              return (
+                                <>
+                                  {subject && (
+                                    <p className="font-medium text-sm mb-2">Subject: {subject}</p>
+                                  )}
+                                  <div
+                                    className="bg-muted/50 rounded-lg p-3 text-sm max-h-64 overflow-y-auto [&_div]:mb-1 [&_br]:block [&_a]:text-blue-600 [&_a]:underline"
+                                    dangerouslySetInnerHTML={{ __html: body }}
+                                  />
+                                </>
+                              );
+                            })()}
                           </div>
                         ))}
                     </div>
