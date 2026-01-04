@@ -38,20 +38,26 @@ export async function POST(
     let campaignsWithoutApiKey = 0;
     const errors: string[] = [];
 
-    // IMPORTANT: First reset ALL is_positive_reply=false for this client
-    // This ensures we start with a clean slate before marking only truly positive leads
-    console.log(`[Sync Positive] Resetting is_positive_reply for all leads of client ${clientId}...`);
-    const { error: resetAllError } = await supabase
-      .from("leads")
-      .update({ is_positive_reply: false })
-      .eq("client_id", clientId)
-      .eq("is_positive_reply", true);
-
-    if (resetAllError) {
-      console.error(`[Sync Positive] Error resetting leads:`, resetAllError);
-    } else {
-      console.log(`[Sync Positive] Reset all leads to is_positive_reply=false`);
-    }
+    // DISABLED: The Instantly API v2 interest_status filter is broken and returns ALL leads
+    // instead of just positive ones. Until Instantly fixes their API, we cannot reset here
+    // because we would lose all positive flags with no way to restore them.
+    //
+    // TODO: Re-enable once Instantly fixes the interest_status filter in /leads/list API
+    //
+    // Original code:
+    // console.log(`[Sync Positive] Resetting is_positive_reply for all leads of client ${clientId}...`);
+    // const { error: resetAllError } = await supabase
+    //   .from("leads")
+    //   .update({ is_positive_reply: false })
+    //   .eq("client_id", clientId)
+    //   .eq("is_positive_reply", true);
+    //
+    // if (resetAllError) {
+    //   console.error(`[Sync Positive] Error resetting leads:`, resetAllError);
+    // } else {
+    //   console.log(`[Sync Positive] Reset all leads to is_positive_reply=false`);
+    // }
+    console.log(`[Sync Positive] SKIPPING reset - Instantly API interest_status filter is broken`);
 
     // For each campaign, fetch positive leads using the per-campaign API key
     for (const campaign of campaigns || []) {

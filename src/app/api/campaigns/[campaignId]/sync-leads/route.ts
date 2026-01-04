@@ -298,18 +298,20 @@ export async function POST(
     try {
       // Check if provider has fetchPositiveLeads method (Instantly-specific)
       if ('fetchPositiveLeads' in provider && typeof provider.fetchPositiveLeads === 'function') {
-        console.log(`[SyncLeads] Resetting is_positive_reply for all leads in this campaign...`);
-
-        // Reset all leads in this campaign to not positive (clean slate)
-        const { error: resetError } = await supabase
-          .from("leads")
-          .update({ is_positive_reply: false })
-          .eq("campaign_id", campaignId)
-          .eq("is_positive_reply", true);
-
-        if (resetError) {
-          console.warn(`[SyncLeads] Error resetting positive leads:`, resetError);
-        }
+        // DISABLED: The Instantly API v2 interest_status filter is broken and returns ALL leads
+        // instead of just positive ones. Skipping reset to preserve manually set positive flags.
+        //
+        // Original code:
+        // console.log(`[SyncLeads] Resetting is_positive_reply for all leads in this campaign...`);
+        // const { error: resetError } = await supabase
+        //   .from("leads")
+        //   .update({ is_positive_reply: false })
+        //   .eq("campaign_id", campaignId)
+        //   .eq("is_positive_reply", true);
+        // if (resetError) {
+        //   console.warn(`[SyncLeads] Error resetting positive leads:`, resetError);
+        // }
+        console.log(`[SyncLeads] SKIPPING reset - Instantly API interest_status filter is broken`);
 
         console.log(`[SyncLeads] Fetching positive leads from provider...`);
         const positiveLeads = await (provider as { fetchPositiveLeads: (id: string) => Promise<ProviderLead[]> }).fetchPositiveLeads(providerCampaignId);
