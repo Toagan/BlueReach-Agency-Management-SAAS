@@ -73,8 +73,23 @@ export async function POST(
     // Get existing leads for this campaign
     const { data: existingLeads } = await supabase
       .from("leads")
-      .select("email, provider_lead_id, instantly_lead_id")
+      .select("email, provider_lead_id, instantly_lead_id, client_id")
       .eq("campaign_id", campaignId);
+
+    // Fix any leads with missing client_id
+    const leadsWithoutClientId = (existingLeads || []).filter(l => !l.client_id);
+    if (leadsWithoutClientId.length > 0 && campaign.client_id) {
+      console.log(`[SyncLeads] Fixing ${leadsWithoutClientId.length} leads with missing client_id`);
+      await supabase
+        .from("leads")
+        .update({
+          client_id: campaign.client_id,
+          client_name: client?.name,
+          campaign_name: campaign.name
+        })
+        .eq("campaign_id", campaignId)
+        .is("client_id", null);
+    }
 
     const existingByEmail = new Map<string, { provider_lead_id?: string; instantly_lead_id?: string }>();
     const existingByProviderId = new Map<string, boolean>();
@@ -109,7 +124,7 @@ export async function POST(
         company_domain: lead.companyDomain,
         phone: lead.phone,
         linkedin_url: lead.linkedinUrl,
-        website: lead.website,
+        // website field removed - not in leads table schema
         provider_type: provider.providerType,
         provider_lead_id: lead.id,
         email_open_count: lead.emailOpenCount || 0,
@@ -118,10 +133,16 @@ export async function POST(
         updated_at: new Date().toISOString(),
       };
 
-      // Map interest status to is_positive_reply
-      if (lead.interestStatus === "interested" || lead.interestStatus === "meeting_booked") {
-        leadData.is_positive_reply = true;
-      } else if (lead.interestStatus === "not_interested") {
+      // NOTE: We do NOT set is_positive_reply here because the Instantly /leads/list endpoint
+      // does NOT return interest_status for regular leads. We fetch positive leads separately
+      // at the end of this sync using fetchPositiveLeads() which filters by interest_status.
+      // Setting is_positive_reply based on non-existent data caused 11k+ false positives.
+
+      // We only set is_positive_reply = false for explicitly negative statuses
+      const interestStatus = lead.interestStatus;
+      const negativeStatuses = ["not_interested", 2, "2"];
+
+      if (negativeStatuses.includes(interestStatus as string | number)) {
         leadData.is_positive_reply = false;
       }
 
@@ -155,17 +176,29 @@ export async function POST(
     // Insert new leads in batches
     let insertedCount = 0;
     const insertBatchSize = 100;
+    const totalBatches = Math.ceil(leadsToInsert.length / insertBatchSize);
+
+    console.log(`[SyncLeads] Inserting ${leadsToInsert.length} leads in ${totalBatches} batches...`);
 
     for (let i = 0; i < leadsToInsert.length; i += insertBatchSize) {
       const batch = leadsToInsert.slice(i, i + insertBatchSize);
+      const batchNum = Math.floor(i / insertBatchSize) + 1;
+
       const { error: insertError } = await supabase.from("leads").insert(batch);
 
       if (insertError) {
-        console.error(`[SyncLeads] Insert batch error:`, insertError);
+        console.error(`[SyncLeads] Insert batch ${batchNum}/${totalBatches} error:`, insertError);
       } else {
         insertedCount += batch.length;
       }
+
+      // Log progress every 50 batches
+      if (batchNum % 50 === 0) {
+        console.log(`[SyncLeads] Inserted ${insertedCount}/${leadsToInsert.length} leads...`);
+      }
     }
+
+    console.log(`[SyncLeads] Finished inserting ${insertedCount} leads`);
 
     // Update existing leads in batches
     let updatedCount = 0;
@@ -188,6 +221,88 @@ export async function POST(
       .update({ last_lead_sync_at: new Date().toISOString() })
       .eq("id", campaignId);
 
+    // Also sync campaign analytics from the provider
+    let analyticsData = null;
+    try {
+      const analytics = await provider.fetchCampaignAnalytics(providerCampaignId);
+      if (analytics) {
+        analyticsData = {
+          emails_sent: analytics.emailsSentCount || 0,
+          emails_opened: analytics.openCountUnique || 0,
+          emails_replied: analytics.replyCount || 0,
+          emails_bounced: analytics.bouncedCount || 0,
+          total_opportunities: analytics.totalOpportunities || 0,
+          leads_count: analytics.leadsCount || 0,
+          contacted_count: analytics.contactedCount || 0,
+        };
+
+        await supabase
+          .from("campaigns")
+          .update({
+            cached_emails_sent: analytics.emailsSentCount || 0,
+            cached_emails_opened: analytics.openCountUnique || 0,
+            cached_reply_count: analytics.replyCount || 0,
+            cached_emails_bounced: analytics.bouncedCount || 0,
+            cached_positive_count: analytics.totalOpportunities || 0,
+            cache_updated_at: new Date().toISOString(),
+          })
+          .eq("id", campaignId);
+
+        console.log(`[SyncLeads] Synced analytics: ${analytics.emailsSentCount} sent, ${analytics.replyCount} replies`);
+      }
+    } catch (analyticsError) {
+      console.warn(`[SyncLeads] Could not sync analytics:`, analyticsError);
+    }
+
+    // Sync positive leads specifically (Instantly doesn't return interest_status in regular leads list)
+    // IMPORTANT: First reset all is_positive_reply to false, then mark only the truly positive ones
+    let positiveLeadsSynced = 0;
+    try {
+      // Check if provider has fetchPositiveLeads method (Instantly-specific)
+      if ('fetchPositiveLeads' in provider && typeof provider.fetchPositiveLeads === 'function') {
+        console.log(`[SyncLeads] Resetting is_positive_reply for all leads in this campaign...`);
+
+        // Reset all leads in this campaign to not positive (clean slate)
+        const { error: resetError } = await supabase
+          .from("leads")
+          .update({ is_positive_reply: false })
+          .eq("campaign_id", campaignId)
+          .eq("is_positive_reply", true);
+
+        if (resetError) {
+          console.warn(`[SyncLeads] Error resetting positive leads:`, resetError);
+        }
+
+        console.log(`[SyncLeads] Fetching positive leads from provider...`);
+        const positiveLeads = await (provider as { fetchPositiveLeads: (id: string) => Promise<ProviderLead[]> }).fetchPositiveLeads(providerCampaignId);
+
+        console.log(`[SyncLeads] Found ${positiveLeads.length} positive leads to sync`);
+
+        for (const lead of positiveLeads) {
+          const emailLower = lead.email.toLowerCase();
+
+          // Update existing lead to mark as positive
+          const { error: updateError } = await supabase
+            .from("leads")
+            .update({
+              is_positive_reply: true,
+              has_replied: true,
+              status: "replied",
+            })
+            .eq("campaign_id", campaignId)
+            .ilike("email", emailLower);
+
+          if (!updateError) {
+            positiveLeadsSynced++;
+          }
+        }
+
+        console.log(`[SyncLeads] Marked ${positiveLeadsSynced} leads as positive`);
+      }
+    } catch (positiveError) {
+      console.warn(`[SyncLeads] Could not sync positive leads:`, positiveError);
+    }
+
     console.log(
       `[SyncLeads] Completed: ${insertedCount} inserted, ${updatedCount} updated`
     );
@@ -198,6 +313,7 @@ export async function POST(
       inserted: insertedCount,
       updated: updatedCount,
       skipped: leadsToInsert.length - insertedCount,
+      analytics: analyticsData,
     });
   } catch (error) {
     console.error("[SyncLeads] Error:", error);
@@ -216,11 +332,14 @@ function mapLeadStatus(
   status?: string,
   interestStatus?: ProviderLead["interestStatus"]
 ): string {
-  // Interest status takes priority
-  if (interestStatus === "meeting_booked" || interestStatus === "meeting_completed") {
+  // Interest status takes priority (handle both string and numeric)
+  const positiveStatuses = ["interested", "meeting_booked", "meeting_completed", "closed", 1, 3, "1", "3"];
+  const bookedStatuses = ["meeting_booked", "meeting_completed", 3, "3"];
+
+  if (bookedStatuses.includes(interestStatus as string | number)) {
     return "booked";
   }
-  if (interestStatus === "interested") {
+  if (positiveStatuses.includes(interestStatus as string | number)) {
     return "replied";
   }
 

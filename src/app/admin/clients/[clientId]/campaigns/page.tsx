@@ -99,7 +99,11 @@ export default async function CampaignsPage({ params }: PageProps) {
                   </div>
                 )}
                 <div className="mt-4 pt-3 border-t">
-                  <SyncButton campaignId={campaign.id} />
+                  <SyncButton
+                    campaignId={campaign.id}
+                    leadsCount={countByCampaign?.[campaign.id] || 0}
+                    providerLeadsCount={campaign.cached_emails_sent || 0}
+                  />
                 </div>
               </CardContent>
             </Card>

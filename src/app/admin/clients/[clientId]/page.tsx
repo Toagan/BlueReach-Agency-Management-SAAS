@@ -51,7 +51,7 @@ interface CampaignAnalytics {
   emails_opened: number;
   emails_replied: number;
   emails_bounced: number;
-  open_rate: number;
+  open_rate?: number;
   reply_rate: number;
   bounce_rate: number;
   total_opportunities: number;
@@ -91,6 +91,7 @@ interface ClientStats {
   totalReplies: number;
   totalBounced: number;
   totalPositiveReplies: number;
+  totalLeadsCount: number;
   openRate: number;
   replyRate: number;
   bounceRate: number;
@@ -144,6 +145,9 @@ export default function ClientDashboardPage() {
     let totalEmailsSent = 0;
     let totalOpened = 0;
     let totalBounced = 0;
+    let totalLeadsCount = 0;
+    let totalRepliesFromCampaigns = 0;
+    let totalPositiveFromCampaigns = 0;
     let activeCampaigns = 0;
 
     campaigns.forEach((campaign) => {
@@ -154,12 +158,15 @@ export default function ClientDashboardPage() {
         totalEmailsSent += campaign.analytics.emails_sent || 0;
         totalOpened += campaign.analytics.emails_opened || 0;
         totalBounced += campaign.analytics.emails_bounced || 0;
+        totalLeadsCount += campaign.analytics.leads_count || 0;
+        totalRepliesFromCampaigns += campaign.analytics.emails_replied || 0;
+        totalPositiveFromCampaigns += campaign.analytics.total_opportunities || 0;
       }
     });
 
-    // Use client-wide stats for replies and positive (more reliable)
-    const totalReplies = clientStats.replied;
-    const totalPositiveReplies = clientStats.positive;
+    // Use client-wide stats for replies and positive (more reliable), fallback to aggregated campaign stats
+    const totalReplies = clientStats.replied > 0 ? clientStats.replied : totalRepliesFromCampaigns;
+    const totalPositiveReplies = clientStats.positive > 0 ? clientStats.positive : totalPositiveFromCampaigns;
 
     const openRate = totalEmailsSent > 0 ? (totalOpened / totalEmailsSent) * 100 : 0;
     const replyRate = totalEmailsSent > 0 ? (totalReplies / totalEmailsSent) * 100 : 0;
@@ -171,6 +178,7 @@ export default function ClientDashboardPage() {
       totalReplies,
       totalBounced,
       totalPositiveReplies,
+      totalLeadsCount,
       openRate,
       replyRate,
       bounceRate,
@@ -195,6 +203,7 @@ export default function ClientDashboardPage() {
   const [loadingEmailsForLead, setLoadingEmailsForLead] = useState<string | null>(null);
   const [syncingEmailsForLead, setSyncingEmailsForLead] = useState<string | null>(null);
   const [syncingPositiveLeads, setSyncingPositiveLeads] = useState(false);
+  const [syncPositiveResult, setSyncPositiveResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const fetchEmailsForLead = async (leadId: string) => {
     setLoadingEmailsForLead(leadId);
@@ -240,18 +249,42 @@ export default function ClientDashboardPage() {
 
   const syncPositiveLeads = async () => {
     setSyncingPositiveLeads(true);
+    setSyncPositiveResult(null);
     try {
       const res = await fetch(`/api/clients/${clientId}/sync-positive`, { method: "POST" });
-      if (res.ok) {
-        const data = await res.json();
-        console.log("Sync result:", data);
+      const data = await res.json();
+      console.log("Sync result:", data);
+
+      if (res.ok && data.success) {
+        if (data.synced > 0) {
+          setSyncPositiveResult({
+            success: true,
+            message: `Synced ${data.synced} leads (${data.upserted} updated)`,
+          });
+        } else {
+          setSyncPositiveResult({
+            success: false,
+            message: data.message || "No positive leads found in Instantly",
+          });
+        }
         // Refresh leads after sync
         await fetchPositiveLeads();
+      } else {
+        setSyncPositiveResult({
+          success: false,
+          message: data.error || "Sync failed",
+        });
       }
     } catch (err) {
       console.error("Failed to sync positive leads:", err);
+      setSyncPositiveResult({
+        success: false,
+        message: err instanceof Error ? err.message : "Sync failed",
+      });
     } finally {
       setSyncingPositiveLeads(false);
+      // Clear result after 5 seconds
+      setTimeout(() => setSyncPositiveResult(null), 5000);
     }
   };
 
@@ -602,7 +635,7 @@ export default function ClientDashboardPage() {
       )}
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
@@ -612,6 +645,7 @@ export default function ClientDashboardPage() {
             <div className="text-2xl font-bold text-foreground">
               {stats.totalEmailsSent.toLocaleString()}
             </div>
+            <p className="text-xs text-muted-foreground">{stats.totalLeadsCount.toLocaleString()} leads</p>
           </CardContent>
         </Card>
 
@@ -637,6 +671,19 @@ export default function ClientDashboardPage() {
             <div className="text-2xl font-bold text-green-600">
               {stats.totalPositiveReplies.toLocaleString()}
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-muted-foreground">Bounced</span>
+              <TrendingUp className="h-5 w-5 text-red-500" />
+            </div>
+            <div className="text-2xl font-bold text-red-500">
+              {stats.bounceRate.toFixed(1)}%
+            </div>
+            <p className="text-xs text-muted-foreground">{stats.totalBounced.toLocaleString()} bounced</p>
           </CardContent>
         </Card>
 
@@ -682,8 +729,18 @@ export default function ClientDashboardPage() {
                   ) : (
                     <Download className="h-4 w-4 mr-1" />
                   )}
-                  Sync
+                  Sync from Instantly
                 </Button>
+              )}
+              {syncPositiveResult && (
+                <span className={`text-xs flex items-center gap-1 ${syncPositiveResult.success ? "text-green-600" : "text-red-500"}`}>
+                  {syncPositiveResult.success ? (
+                    <CheckCircle className="h-3 w-3" />
+                  ) : (
+                    <XCircle className="h-3 w-3" />
+                  )}
+                  {syncPositiveResult.message}
+                </span>
               )}
               <Button
                 variant="ghost"
@@ -1164,6 +1221,7 @@ export default function ClientDashboardPage() {
                   onDelete={() => handleDeleteCampaign(campaign.id, campaign.name)}
                   isDeleting={deletingCampaignId === campaign.id}
                   isAdmin={isAdmin === true}
+                  onSyncComplete={() => fetchClientData(true)}
                 />
               ))}
             </div>
@@ -1187,19 +1245,52 @@ function CampaignCard({
   onDelete,
   isDeleting,
   isAdmin,
+  onSyncComplete,
 }: {
   campaign: Campaign;
   clientId: string;
   onDelete: () => void;
   isDeleting: boolean;
   isAdmin: boolean;
+  onSyncComplete?: () => void;
 }) {
   const [showWebhook, setShowWebhook] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showInstantlyDeleteConfirm, setShowInstantlyDeleteConfirm] = useState(false);
   const [deletingFromInstantly, setDeletingFromInstantly] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
   const analytics = campaign.analytics;
   const hasAnalytics = analytics && analytics.emails_sent > 0;
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch(`/api/campaigns/${campaign.id}/sync-leads`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.error) {
+        setSyncResult({ success: false, message: data.error });
+      } else {
+        setSyncResult({
+          success: true,
+          message: `Synced ${data.inserted} new, ${data.updated} updated`,
+        });
+        onSyncComplete?.();
+        // Reload page after short delay to show updated stats
+        setTimeout(() => window.location.reload(), 1500);
+      }
+    } catch (error) {
+      setSyncResult({
+        success: false,
+        message: error instanceof Error ? error.message : "Sync failed",
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleDeleteFromInstantly = async () => {
     if (!campaign.instantly_campaign_id) {
@@ -1287,7 +1378,7 @@ function CampaignCard({
               </div>
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Bounced</p>
-                <p className="text-lg font-semibold text-foreground">
+                <p className="text-lg font-semibold text-red-500">
                   {analytics.emails_bounced.toLocaleString()}
                   <span className="text-sm font-normal text-muted-foreground ml-1">
                     ({(analytics.bounce_rate * 100).toFixed(1)}%)
@@ -1296,7 +1387,34 @@ function CampaignCard({
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground mt-2">No analytics data available yet</p>
+            <div className="mt-3 flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSync}
+                disabled={syncing}
+              >
+                {syncing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Sync Leads
+                  </>
+                )}
+              </Button>
+              {syncResult && (
+                <span className={`text-xs ${syncResult.success ? "text-green-600" : "text-red-600"}`}>
+                  {syncResult.message}
+                </span>
+              )}
+              {!syncResult && !syncing && (
+                <span className="text-sm text-muted-foreground">Click to fetch data from Instantly</span>
+              )}
+            </div>
           )}
         </div>
 

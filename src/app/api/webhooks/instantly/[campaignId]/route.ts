@@ -152,8 +152,6 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isReply = eventType === "reply_received" || eventType === "auto_reply_received";
     const isEmailSent = eventType === "email_sent";
     const isBounced = eventType === "email_bounced";
-    const isOpened = eventType === "email_opened";
-    const isClicked = eventType === "link_clicked";
 
     // Get client_id from campaign for creating new leads
     const { data: campaignWithClient } = await supabase
@@ -200,6 +198,16 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (isReply) {
       updateData.has_replied = true;
       updateData.status = "replied";
+      // Increment campaign's cached_reply_count
+      const { data: campaignData } = await supabase
+        .from("campaigns")
+        .select("cached_reply_count")
+        .eq("id", campaignId)
+        .single();
+      await supabase
+        .from("campaigns")
+        .update({ cached_reply_count: (campaignData?.cached_reply_count || 0) + 1 })
+        .eq("id", campaignId);
     }
 
     if (isEmailSent) {
@@ -230,13 +238,6 @@ export async function POST(request: Request, { params }: RouteParams) {
         .eq("id", campaignId);
     }
 
-    if (isOpened && existingLead) {
-      updateData.email_open_count = (existingLead.email_open_count || 0) + 1;
-    }
-
-    if (isClicked && existingLead) {
-      updateData.email_click_count = (existingLead.email_click_count || 0) + 1;
-    }
 
     // Update or create lead
     if (existingLead) {

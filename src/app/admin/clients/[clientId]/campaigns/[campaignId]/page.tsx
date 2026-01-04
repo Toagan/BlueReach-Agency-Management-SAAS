@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -111,6 +111,49 @@ export default function CampaignDetailPage() {
   // Leads sync state
   const [isSyncingLeads, setIsSyncingLeads] = useState(false);
   const [syncLeadsResult, setSyncLeadsResult] = useState<string | null>(null);
+  const [syncElapsed, setSyncElapsed] = useState(0);
+  const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Email history sync state
+  const [isSyncingEmails, setIsSyncingEmails] = useState(false);
+  const [syncEmailsResult, setSyncEmailsResult] = useState<string | null>(null);
+
+  // Calculate estimated sync time based on lead count
+  const estimatedSyncTime = useMemo(() => {
+    const leadsCount = analytics?.leads_count || 0;
+    if (!leadsCount || leadsCount <= 0) return 30;
+    const pages = Math.ceil(leadsCount / 100);
+    const batches = Math.ceil(pages / 5);
+    const apiTime = batches * 1.2;
+    const dbTime = leadsCount / 500;
+    return Math.ceil(apiTime + dbTime);
+  }, [analytics?.leads_count]);
+
+  // Check if already synced (local count is within 5% of provider count)
+  const isAlreadySynced = useMemo(() => {
+    const providerCount = analytics?.leads_count || 0;
+    const localCount = leads.length;
+    return providerCount > 0 && localCount > 0 &&
+      Math.abs(localCount - providerCount) / providerCount < 0.05;
+  }, [analytics?.leads_count, leads.length]);
+
+  // Timer for sync progress
+  useEffect(() => {
+    if (isSyncingLeads) {
+      setSyncElapsed(0);
+      syncTimerRef.current = setInterval(() => {
+        setSyncElapsed((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (syncTimerRef.current) {
+        clearInterval(syncTimerRef.current);
+        syncTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (syncTimerRef.current) clearInterval(syncTimerRef.current);
+    };
+  }, [isSyncingLeads]);
 
   // Preview mode state - default to true to show filled-in variables
   const [isPreviewMode, setIsPreviewMode] = useState(true);
@@ -347,6 +390,34 @@ export default function CampaignDetailPage() {
     }
   };
 
+  // Sync email history from provider
+  const handleSyncEmails = async () => {
+    setIsSyncingEmails(true);
+    setSyncEmailsResult(null);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/sync-emails`, {
+        method: "POST",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to sync emails");
+      }
+
+      setSyncEmailsResult(`Synced ${data.emailsSynced} emails for ${data.leadsProcessed} leads`);
+    } catch (err) {
+      console.error("Email sync error:", err);
+      setError(err instanceof Error ? err.message : "Failed to sync emails");
+    } finally {
+      setIsSyncingEmails(false);
+      // Clear result after 5 seconds
+      setTimeout(() => setSyncEmailsResult(null), 5000);
+    }
+  };
+
   // Sync sequences from Instantly
   const handleSyncSequences = async () => {
     setIsSyncingSequences(true);
@@ -482,9 +553,15 @@ export default function CampaignDetailPage() {
             )}
             <Badge
               variant={campaign?.is_active ? "default" : "secondary"}
-              className={campaign?.is_active ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : ""}
+              className={
+                campaign?.is_active
+                  ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                  : progress >= 99.5
+                  ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                  : ""
+              }
             >
-              {campaign?.is_active ? "Active" : "Paused"}
+              {campaign?.is_active ? "Active" : progress >= 99.5 ? "Completed" : "Paused"}
             </Badge>
           </div>
           <p className="text-muted-foreground text-sm mt-1">
@@ -507,15 +584,62 @@ export default function CampaignDetailPage() {
               </Button>
             </a>
           )}
-          <Button
-            variant="default"
-            size="sm"
-            onClick={handleSyncLeads}
-            disabled={isSyncingLeads}
-          >
-            <Download className={`h-4 w-4 mr-2 ${isSyncingLeads ? "animate-spin" : ""}`} />
-            {isSyncingLeads ? "Syncing Leads..." : "Sync Leads"}
-          </Button>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleSyncLeads}
+                disabled={isSyncingLeads}
+              >
+                <Download className={`h-4 w-4 mr-2 ${isSyncingLeads ? "animate-spin" : ""}`} />
+                {isSyncingLeads ? "Syncing Leads..." : "Sync Leads"}
+              </Button>
+              {!isSyncingLeads && (
+                isAlreadySynced ? (
+                  <span className="text-xs text-green-600 flex items-center gap-1">
+                    <Check className="h-3 w-3" />
+                    Synced ({leads.length.toLocaleString()} leads)
+                  </span>
+                ) : analytics?.leads_count && analytics.leads_count > 0 ? (
+                  <span className="text-xs text-muted-foreground">
+                    {analytics.leads_count.toLocaleString()} leads (~{estimatedSyncTime}s)
+                  </span>
+                ) : null
+              )}
+            </div>
+            {isSyncingLeads && (
+              <div className="flex items-center gap-2 min-w-[200px]">
+                <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 transition-all duration-1000"
+                    style={{ width: `${Math.min((syncElapsed / estimatedSyncTime) * 100, 95)}%` }}
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {syncElapsed}s / ~{estimatedSyncTime}s
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSyncEmails}
+              disabled={isSyncingEmails || leads.length === 0}
+              title="Sync email history for leads with replies"
+            >
+              <Mail className={`h-4 w-4 mr-2 ${isSyncingEmails ? "animate-spin" : ""}`} />
+              {isSyncingEmails ? "Syncing..." : "Sync Emails"}
+            </Button>
+            {syncEmailsResult && (
+              <span className="text-xs text-green-600 flex items-center gap-1">
+                <Check className="h-3 w-3" />
+                {syncEmailsResult}
+              </span>
+            )}
+          </div>
           <Button
             variant="outline"
             size="sm"

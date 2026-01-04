@@ -43,16 +43,6 @@ export async function GET(request: Request, { params }: RouteParams) {
       });
     }
 
-    // Aggregate stats from leads table by campaign_id
-    const { data: leadStats, error: statsError } = await supabase
-      .from("leads")
-      .select("campaign_id, is_positive_reply, has_replied, status")
-      .in("campaign_id", campaignIds);
-
-    if (statsError) {
-      console.error("Error fetching lead stats:", statsError);
-    }
-
     // Count positive replies for client
     const { count: clientPositive } = await supabase
       .from("leads")
@@ -67,29 +57,43 @@ export async function GET(request: Request, { params }: RouteParams) {
       .eq("client_id", clientId)
       .or("has_replied.eq.true,status.eq.replied,status.eq.booked,status.eq.won,status.eq.lost");
 
-    // Build stats map from local leads data
+    // Build stats map using COUNT queries (more efficient than fetching all leads)
     const localStatsMap = new Map<string, {
       leads_count: number;
       replied_count: number;
       positive_count: number;
     }>();
 
-    for (const campaignId of campaignIds) {
-      localStatsMap.set(campaignId, { leads_count: 0, replied_count: 0, positive_count: 0 });
-    }
+    // Get counts for each campaign using parallel queries
+    await Promise.all(
+      campaignIds.map(async (campaignId) => {
+        const [totalResult, repliedResult, positiveResult] = await Promise.all([
+          // Total leads count
+          supabase
+            .from("leads")
+            .select("*", { count: "exact", head: true })
+            .eq("campaign_id", campaignId),
+          // Replied leads count
+          supabase
+            .from("leads")
+            .select("*", { count: "exact", head: true })
+            .eq("campaign_id", campaignId)
+            .or("has_replied.eq.true,status.eq.replied,status.eq.booked,status.eq.won,status.eq.lost"),
+          // Positive leads count
+          supabase
+            .from("leads")
+            .select("*", { count: "exact", head: true })
+            .eq("campaign_id", campaignId)
+            .eq("is_positive_reply", true),
+        ]);
 
-    for (const lead of leadStats || []) {
-      const stats = localStatsMap.get(lead.campaign_id);
-      if (stats) {
-        stats.leads_count++;
-        if (lead.has_replied || lead.status === "replied" || lead.status === "booked" || lead.status === "won" || lead.status === "lost") {
-          stats.replied_count++;
-        }
-        if (lead.is_positive_reply) {
-          stats.positive_count++;
-        }
-      }
-    }
+        localStatsMap.set(campaignId, {
+          leads_count: totalResult.count || 0,
+          replied_count: repliedResult.count || 0,
+          positive_count: positiveResult.count || 0,
+        });
+      })
+    );
 
     // Build campaigns with analytics - ALL FROM SUPABASE
     const campaignsWithAnalytics = campaigns.map((campaign) => {
@@ -104,6 +108,8 @@ export async function GET(request: Request, { params }: RouteParams) {
       const repliesCount = campaign.cached_reply_count || localStats.replied_count;
       const bounced = campaign.cached_emails_bounced || 0;
       const opened = campaign.cached_emails_opened || 0;
+      // Use cached positive count from provider, fallback to local leads count
+      const positiveCount = campaign.cached_positive_count || localStats.positive_count;
 
       const analytics = {
         leads_count: localStats.leads_count,
@@ -111,7 +117,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         emails_replied: repliesCount,
         emails_bounced: bounced,
         emails_opened: opened,
-        total_opportunities: localStats.positive_count,
+        total_opportunities: positiveCount,
         contacted_count: emailsSent,
         reply_rate: emailsSent > 0 ? repliesCount / emailsSent : 0,
         bounce_rate: emailsSent > 0 ? bounced / emailsSent : 0,

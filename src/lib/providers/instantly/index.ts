@@ -255,6 +255,69 @@ export class InstantlyProvider implements EmailCampaignProvider {
   }
 
   async fetchAllLeads(campaignId: string): Promise<ProviderLead[]> {
+    const limit = 100;
+    const concurrency = 5; // Stay well under 10 req/s rate limit
+
+    // First, get total count from analytics to know how many pages we need
+    let expectedLeads = 0;
+    try {
+      const analytics = await this.fetchCampaignAnalytics(campaignId);
+      expectedLeads = analytics.leadsCount || 0;
+      console.log(`[InstantlyProvider] Campaign ${campaignId} has ${expectedLeads} leads according to analytics`);
+    } catch (err) {
+      // If analytics fails, fall back to sequential fetching
+      console.log(`[InstantlyProvider] Could not get lead count, using sequential fetch. Error:`, err);
+      return this.fetchAllLeadsSequential(campaignId);
+    }
+
+    if (expectedLeads === 0) {
+      return [];
+    }
+
+    // Calculate total pages needed
+    const totalPages = Math.ceil(expectedLeads / limit);
+    // Safety cap: never fetch more than 1.1x the expected leads (allow 10% margin)
+    const maxLeads = Math.ceil(expectedLeads * 1.1);
+    console.log(`[InstantlyProvider] Fetching ${expectedLeads} leads in ${totalPages} pages (${concurrency} concurrent, max ${maxLeads})`);
+
+    // If only a few pages, just do sequential
+    if (totalPages <= 3) {
+      return this.fetchAllLeadsSequential(campaignId);
+    }
+
+    // Fetch in parallel batches
+    const allLeads: ProviderLead[] = [];
+    const pageOffsets = Array.from({ length: totalPages }, (_, i) => i * limit);
+
+    for (let i = 0; i < pageOffsets.length; i += concurrency) {
+      const batch = pageOffsets.slice(i, i + concurrency);
+      const batchPromises = batch.map((offset) =>
+        this.fetchLeads(campaignId, { limit, offset })
+      );
+
+      const batchResults = await Promise.all(batchPromises);
+      for (const leads of batchResults) {
+        allLeads.push(...leads);
+      }
+
+      // Safety check: stop if we've exceeded expected count
+      if (allLeads.length > maxLeads) {
+        console.warn(`[InstantlyProvider] WARNING: Fetched ${allLeads.length} leads, exceeds expected ${expectedLeads}. Stopping.`);
+        break;
+      }
+
+      // Small delay between batches to stay under rate limit
+      if (i + concurrency < pageOffsets.length) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
+
+    console.log(`[InstantlyProvider] Fetched ${allLeads.length} leads total (expected: ${expectedLeads})`);
+    return allLeads;
+  }
+
+  // Sequential fallback for when we can't determine total count
+  private async fetchAllLeadsSequential(campaignId: string): Promise<ProviderLead[]> {
     const allLeads: ProviderLead[] = [];
     let skip = 0;
     const limit = 100;
@@ -270,6 +333,57 @@ export class InstantlyProvider implements EmailCampaignProvider {
     }
 
     return allLeads;
+  }
+
+  // Fetch only positive/interested leads (all positive statuses)
+  async fetchPositiveLeads(campaignId: string): Promise<ProviderLead[]> {
+    const allPositiveLeads: ProviderLead[] = [];
+    const limit = 100;
+
+    // Instantly interest_status values:
+    // 1 = Interested, 3 = Meeting Booked, 4 = Meeting Completed, 5 = Closed
+    const positiveStatuses = [1, 3, 4, 5];
+
+    for (const status of positiveStatuses) {
+      let skip = 0;
+      console.log(`[InstantlyProvider] Fetching leads with interest_status=${status} for campaign ${campaignId}`);
+
+      while (true) {
+        const response = await this.client.post<{ items: InstantlyLead[] }>(
+          "/leads/list",
+          {
+            campaign_id: campaignId,
+            interest_status: status,
+            limit,
+            skip,
+          }
+        );
+        const leads = (response.items || []).map((l) => ({
+          ...this.mapLead(l),
+          interestStatus: this.mapInterestStatus(status),
+        }));
+        allPositiveLeads.push(...leads);
+
+        if (leads.length < limit) {
+          break;
+        }
+        skip += limit;
+      }
+    }
+
+    console.log(`[InstantlyProvider] Found ${allPositiveLeads.length} total positive leads`);
+    return allPositiveLeads;
+  }
+
+  private mapInterestStatus(status: number): ProviderLead["interestStatus"] {
+    switch (status) {
+      case 1: return "interested";
+      case 2: return "not_interested";
+      case 3: return "meeting_booked";
+      case 4: return "meeting_completed";
+      case 5: return "closed";
+      default: return undefined;
+    }
   }
 
   async createLead(
