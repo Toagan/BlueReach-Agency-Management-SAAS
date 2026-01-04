@@ -75,11 +75,11 @@ export async function POST(
         const provider = await getProviderForCampaign(campaign.id);
 
         // Fetch only positive leads (uses interest_status filter)
-        let positiveLeads: { email: string; firstName?: string; lastName?: string; companyName?: string; interestStatus?: string }[] = [];
+        let positiveLeads: { id?: string; email: string; firstName?: string; lastName?: string; companyName?: string; interestStatus?: string }[] = [];
 
         if ('fetchPositiveLeads' in provider && typeof provider.fetchPositiveLeads === 'function') {
           console.log(`[Sync Positive] Using fetchPositiveLeads for ${campaign.name}`);
-          positiveLeads = await (provider as { fetchPositiveLeads: (id: string) => Promise<{ email: string; firstName?: string; lastName?: string; companyName?: string; interestStatus?: string }[]> }).fetchPositiveLeads(providerCampaignId);
+          positiveLeads = await (provider as { fetchPositiveLeads: (id: string) => Promise<{ id?: string; email: string; firstName?: string; lastName?: string; companyName?: string; interestStatus?: string }[]> }).fetchPositiveLeads(providerCampaignId);
         } else {
           // Fallback for providers without fetchPositiveLeads - THIS SHOULD NOT HAPPEN FOR INSTANTLY
           console.warn(`[Sync Positive] WARNING: Using fallback (fetchAllLeads) for ${campaign.name} - provider type: ${provider.providerType}`);
@@ -106,29 +106,70 @@ export async function POST(
         for (const lead of positiveLeads) {
           // Normalize email to handle case sensitivity and whitespace
           const normalizedEmail = lead.email.toLowerCase().trim();
+          const providerLeadId = lead.id; // instantly_lead_id from provider
 
           // Map interest status to our status field
           const leadStatus = mapInterestStatusToStatus(lead.interestStatus);
 
-          // First, try to find and update existing lead (case-insensitive email match)
-          const { data: existingLead } = await supabase
-            .from("leads")
-            .select("id")
-            .eq("campaign_id", campaign.id)
-            .ilike("email", normalizedEmail)
-            .single();
+          // MATCHING STRATEGY: ID-first with email fallback
+          // 1. Try to match by instantly_lead_id (most accurate)
+          // 2. Fall back to case-insensitive email match
+          // 3. Backfill ID if matched by email but ID was missing
+
+          let existingLead: { id: string; instantly_lead_id?: string | null } | null = null;
+          let matchedBy: "id" | "email" | null = null;
+
+          // Step 1: Try matching by provider lead ID
+          if (providerLeadId) {
+            const { data: idMatch } = await supabase
+              .from("leads")
+              .select("id, instantly_lead_id")
+              .eq("campaign_id", campaign.id)
+              .eq("instantly_lead_id", providerLeadId)
+              .single();
+
+            if (idMatch) {
+              existingLead = idMatch;
+              matchedBy = "id";
+            }
+          }
+
+          // Step 2: Fall back to email matching if no ID match
+          if (!existingLead) {
+            const { data: emailMatch } = await supabase
+              .from("leads")
+              .select("id, instantly_lead_id")
+              .eq("campaign_id", campaign.id)
+              .ilike("email", normalizedEmail)
+              .single();
+
+            if (emailMatch) {
+              existingLead = emailMatch;
+              matchedBy = "email";
+            }
+          }
 
           if (existingLead) {
+            // Build update payload
+            const updatePayload: Record<string, unknown> = {
+              is_positive_reply: true,
+              has_replied: true,
+              status: leadStatus,
+              client_id: clientId,
+              client_name: clientName,
+            };
+
+            // ID Backfill: If matched by email but ID was missing, add it now
+            if (matchedBy === "email" && providerLeadId && !existingLead.instantly_lead_id) {
+              updatePayload.instantly_lead_id = providerLeadId;
+              updatePayload.provider_lead_id = providerLeadId;
+              console.log(`[Sync Positive] Backfilling instantly_lead_id for ${normalizedEmail}`);
+            }
+
             // Update existing lead to mark as positive
             const { error: updateError } = await supabase
               .from("leads")
-              .update({
-                is_positive_reply: true,
-                has_replied: true,
-                status: leadStatus,
-                client_id: clientId,
-                client_name: clientName,
-              })
+              .update(updatePayload)
               .eq("id", existingLead.id);
 
             if (updateError) {
@@ -137,6 +178,9 @@ export async function POST(
               totalCreated++;
             }
           } else {
+            // WARNING: Creating new lead - this means the initial import was incomplete
+            console.warn(`[Sync Positive] WARNING: Lead ${normalizedEmail} not found in DB, creating new record`);
+
             // Create new lead if it doesn't exist
             const { error: insertError } = await supabase
               .from("leads")
@@ -152,6 +196,9 @@ export async function POST(
                 is_positive_reply: true,
                 has_replied: true,
                 status: leadStatus,
+                instantly_lead_id: providerLeadId || null,
+                provider_lead_id: providerLeadId || null,
+                provider_type: "instantly",
               });
 
             if (insertError) {
