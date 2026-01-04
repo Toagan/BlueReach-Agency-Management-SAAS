@@ -239,7 +239,7 @@ export async function POST(
           onConflict: "campaign_id,email",
           ignoreDuplicates: false,
         })
-        .select("id", { count: "exact", head: true });
+        .select("*", { count: "exact", head: true });
 
       if (upsertError) {
         console.error(`[SyncLeads] Upsert batch ${batchNum}/${totalBatches} error:`, upsertError);
