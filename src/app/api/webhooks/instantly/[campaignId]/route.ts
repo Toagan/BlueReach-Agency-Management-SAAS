@@ -356,11 +356,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
   } catch (error) {
+    // Log error but return 200 to prevent Instantly from retrying
+    // Webhooks should acknowledge receipt even on processing failures
     console.error("[Webhook] Error processing webhook:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to process webhook" },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to process webhook",
+      acknowledged: true,
+    });
   }
 }
 
