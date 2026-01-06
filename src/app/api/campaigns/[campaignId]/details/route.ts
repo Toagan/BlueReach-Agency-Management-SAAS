@@ -63,20 +63,19 @@ export async function GET(request: Request, { params }: RouteParams) {
         campaign.cached_emails_sent > 0
           ? (campaign.cached_emails_bounced || 0) / campaign.cached_emails_sent
           : 0,
-      leads_count: campaign.cached_emails_sent || 0, // Fallback estimate
-      contacted_count: campaign.cached_emails_sent || 0,
+      leads_count: campaign.cached_leads_count || 0,
+      contacted_count: campaign.cached_contacted_count || campaign.cached_emails_sent || 0,
       total_opportunities: campaign.cached_positive_count || 0,
     } : null;
 
-    // Get accurate leads_count from database
-    const { count: leadsCount } = await supabase
+    // Get local leads_count from database (for comparison/fallback)
+    const { count: localLeadsCount } = await supabase
       .from("leads")
       .select("*", { count: "exact", head: true })
       .eq("campaign_id", campaignId);
 
-    if (analytics) {
-      analytics.leads_count = leadsCount || 0;
-    }
+    // Note: We'll prefer provider leads_count over local count when available
+    // Local count is only used as fallback or for "synced" status comparison
 
     let updatedCampaign = campaign;
     const providerCampaignId = campaign.provider_campaign_id || campaign.instantly_campaign_id;
@@ -130,7 +129,7 @@ export async function GET(request: Request, { params }: RouteParams) {
               providerAnalytics.emailsSentCount > 0
                 ? (providerAnalytics.bouncedCount || 0) / providerAnalytics.emailsSentCount
                 : 0,
-            leads_count: providerAnalytics.leadsCount || leadsCount || 0,
+            leads_count: providerAnalytics.leadsCount || localLeadsCount || 0,
             contacted_count: providerAnalytics.contactedCount || 0,
             total_opportunities: providerAnalytics.totalOpportunities || 0,
           };
@@ -144,6 +143,8 @@ export async function GET(request: Request, { params }: RouteParams) {
               cached_reply_count: providerAnalytics.replyCount || 0,
               cached_emails_bounced: providerAnalytics.bouncedCount || 0,
               cached_positive_count: providerAnalytics.totalOpportunities || 0,
+              cached_leads_count: providerAnalytics.leadsCount || 0,
+              cached_contacted_count: providerAnalytics.contactedCount || 0,
               cache_updated_at: new Date().toISOString(),
             })
             .eq("id", campaignId);
@@ -162,6 +163,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     return NextResponse.json({
       campaign: updatedCampaign,
       analytics,
+      localLeadsCount: localLeadsCount || 0,
       cacheInfo: {
         isCached: !shouldRefresh,
         lastUpdated: campaign.cache_updated_at,

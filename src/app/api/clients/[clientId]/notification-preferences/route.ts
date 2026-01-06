@@ -24,25 +24,31 @@ export async function GET(request: Request, { params }: RouteParams) {
       .select("id, email, full_name, role")
       .eq("role", "admin");
 
-    // Get users linked to this specific client
+    // Get users linked to this specific client with their client-specific role
     const { data: clientUsers } = await supabase
       .from("client_users")
-      .select("user_id, profiles(id, email, full_name, role)")
+      .select("user_id, role, profiles(id, email, full_name, role)")
       .eq("client_id", clientId);
 
     // Combine admin users and client-specific users (avoiding duplicates)
-    const userMap = new Map<string, { id: string; email: string; full_name: string | null; role: string }>();
+    // Store both profile data and display role
+    const userMap = new Map<string, { id: string; email: string; full_name: string | null; role: string; displayRole: string }>();
 
     // Add admins first
     adminProfiles?.forEach((profile) => {
-      userMap.set(profile.id, profile);
+      userMap.set(profile.id, { ...profile, displayRole: "admin" });
     });
 
-    // Add client users
+    // Add client users - show as "external" since they're client team members
     clientUsers?.forEach((cu) => {
       const profile = cu.profiles as unknown as { id: string; email: string; full_name: string | null; role: string } | null;
-      if (profile && !userMap.has(profile.id)) {
-        userMap.set(profile.id, profile);
+      if (profile) {
+        if (userMap.has(profile.id)) {
+          // If admin is also a client user, keep admin role
+          // (already added with admin displayRole)
+        } else {
+          userMap.set(profile.id, { ...profile, displayRole: "external" });
+        }
       }
     });
 
@@ -78,7 +84,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       id: profile.id,
       email: profile.email,
       name: profile.full_name || profile.email?.split("@")[0] || "Unknown",
-      role: profile.role,
+      role: profile.displayRole,
       notificationsEnabled: enabledUserIds.includes(profile.id),
     }));
 

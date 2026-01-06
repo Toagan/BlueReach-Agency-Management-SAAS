@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
 import { sendPositiveReplyNotification } from "@/lib/email";
+import { fetchEmailsForLead } from "@/lib/instantly/emails";
 
 function getSupabase() {
   return createClient(
@@ -109,6 +110,21 @@ export async function POST(request: Request, { params }: RouteParams) {
       email: payload.email || payload.lead_email,
       interest_status: payload.interest_status || payload.lt_interest_status,
     });
+
+    // Store webhook payload in webhook_logs table
+    const { error: logError } = await supabase
+      .from("webhook_logs")
+      .insert({
+        campaign_id: campaignId,
+        event_type: payload.event_type || "unknown",
+        lead_email: payload.lead_email?.toLowerCase().trim() || null,
+        payload: payload,
+      });
+
+    if (logError) {
+      // Don't fail the webhook if logging fails, just warn
+      console.warn("[Webhook] Failed to log webhook payload:", logError.message);
+    }
 
     // Get lead email from payload and normalize it
     const rawLeadEmail = payload.lead_email;
@@ -344,6 +360,48 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
     }
 
+    // Auto-fetch full email thread from Instantly for reply events
+    // This ensures we have the complete conversation history stored locally
+    if (leadDbId && isReply && campaign.instantly_campaign_id) {
+      try {
+        console.log(`[Webhook] Fetching full email thread for ${leadEmail}`);
+        const emails = await fetchEmailsForLead(leadEmail, campaign.instantly_campaign_id);
+
+        if (emails.length > 0) {
+          let savedCount = 0;
+          for (const email of emails) {
+            const providerEmailId = email.id || `instantly-${email.timestamp_email || Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+            const emailRecord = {
+              lead_id: leadDbId,
+              campaign_id: campaignId,
+              provider_email_id: providerEmailId,
+              direction: email.from_address_email?.toLowerCase() === leadEmail ? "inbound" as const : "outbound" as const,
+              from_email: email.from_address_email || "",
+              to_email: email.to_address_email_list?.[0] || "",
+              subject: email.subject || null,
+              body_text: email.body?.text || null,
+              body_html: email.body?.html || null,
+              sent_at: email.timestamp_email || email.timestamp_created || new Date().toISOString(),
+            };
+
+            const { error: saveError } = await supabase
+              .from("lead_emails")
+              .upsert(emailRecord, {
+                onConflict: "provider_email_id",
+                ignoreDuplicates: true,
+              });
+
+            if (!saveError) savedCount++;
+          }
+          console.log(`[Webhook] Saved ${savedCount}/${emails.length} emails from full thread for ${leadEmail}`);
+        }
+      } catch (fetchError) {
+        // Don't fail the webhook if email fetch fails
+        console.error("[Webhook] Error fetching email thread:", fetchError);
+      }
+    }
+
     // Send email notification for positive replies
     if (isPositive && clientId) {
       try {
@@ -389,6 +447,20 @@ export async function POST(request: Request, { params }: RouteParams) {
     const duration = Date.now() - startTime;
     console.log(`[Webhook] Processed in ${duration}ms`);
 
+    // Update webhook log with processing result
+    if (payload.lead_email) {
+      await supabase
+        .from("webhook_logs")
+        .update({
+          processing_duration_ms: duration,
+          success: true,
+        })
+        .eq("campaign_id", campaignId)
+        .eq("lead_email", payload.lead_email.toLowerCase().trim())
+        .order("created_at", { ascending: false })
+        .limit(1);
+    }
+
     return NextResponse.json({
       success: true,
       campaign: campaign.name,
@@ -402,6 +474,24 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Log error but return 200 to prevent Instantly from retrying
     // Webhooks should acknowledge receipt even on processing failures
     console.error("[Webhook] Error processing webhook:", error);
+
+    // Try to update webhook log with error
+    try {
+      const duration = Date.now() - startTime;
+      await supabase
+        .from("webhook_logs")
+        .update({
+          processing_duration_ms: duration,
+          success: false,
+          error_message: error instanceof Error ? error.message : "Unknown error",
+        })
+        .eq("campaign_id", campaignId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+    } catch {
+      // Ignore log update errors
+    }
+
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : "Failed to process webhook",

@@ -1013,14 +1013,14 @@ export default function ClientDashboardPage() {
                               onClick={() => syncEmailsForLead(lead.id)}
                               disabled={syncingEmailsForLead === lead.id}
                               className="h-7 text-xs"
-                              title="Fetch latest emails from Instantly"
+                              title="Refresh email thread"
                             >
                               {syncingEmailsForLead === lead.id ? (
                                 <RefreshCw className="h-3 w-3 animate-spin mr-1" />
                               ) : (
-                                <Download className="h-3 w-3 mr-1" />
+                                <RefreshCw className="h-3 w-3 mr-1" />
                               )}
-                              Fetch from Instantly
+                              Refresh
                             </Button>
                           </div>
                         </div>
@@ -1046,9 +1046,9 @@ export default function ClientDashboardPage() {
                                 {syncingEmailsForLead === lead.id ? (
                                   <RefreshCw className="h-4 w-4 animate-spin mr-2" />
                                 ) : (
-                                  <Download className="h-4 w-4 mr-2" />
+                                  <RefreshCw className="h-4 w-4 mr-2" />
                                 )}
-                                Fetch from Instantly
+                                Refresh
                               </Button>
                             </div>
                           ) : (

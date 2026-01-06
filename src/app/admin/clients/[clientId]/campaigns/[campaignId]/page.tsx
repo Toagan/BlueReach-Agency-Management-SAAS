@@ -13,7 +13,6 @@ import {
   MessageSquare,
   Users,
   RefreshCw,
-  ExternalLink,
   ThumbsUp,
   AlertCircle,
   FileText,
@@ -543,18 +542,6 @@ export default function CampaignDetailPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {campaign?.instantly_campaign_id && (
-            <a
-              href={`https://app.instantly.ai/app/campaign/${campaign.instantly_campaign_id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button variant="outline" size="sm">
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Open in Instantly
-              </Button>
-            </a>
-          )}
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <Button

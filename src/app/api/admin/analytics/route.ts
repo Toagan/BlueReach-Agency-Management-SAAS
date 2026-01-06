@@ -50,7 +50,9 @@ function getDateRange(period: string): { startDate: Date; endDate: Date } | null
   return { startDate, endDate };
 }
 
-// GET - Get analytics from database
+// GET - Get analytics from LOCAL Supabase database only
+// This ensures stats are preserved even after deleting from Instantly
+// All data comes from synced leads table - the source of truth
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -59,17 +61,29 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabase();
     const dateRange = getDateRange(period);
 
-    // Build query for total leads (contacted)
+    // Build queries from LOCAL leads table (not Instantly API)
+    // This is the source of truth for all historical data
+
+    // Total leads contacted (all synced leads)
     let leadsQuery = supabase.from("leads").select("*", { count: "exact", head: true });
 
-    // Build query for replies - simple boolean check
+    // Replies (leads who replied)
     let repliesQuery = supabase
       .from("leads")
       .select("*", { count: "exact", head: true })
       .eq("has_replied", true);
 
-    // Build query for positive replies
-    let positiveQuery = supabase.from("leads").select("*", { count: "exact", head: true }).eq("is_positive_reply", true);
+    // Positive replies
+    let positiveQuery = supabase
+      .from("leads")
+      .select("*", { count: "exact", head: true })
+      .eq("is_positive_reply", true);
+
+    // Emails sent - count from lead_emails table for accuracy
+    let emailsQuery = supabase
+      .from("lead_emails")
+      .select("*", { count: "exact", head: true })
+      .eq("direction", "outbound");
 
     // Apply date filter if not all_time
     if (dateRange) {
@@ -79,23 +93,24 @@ export async function GET(request: NextRequest) {
       leadsQuery = leadsQuery.gte("created_at", startDateStr).lte("created_at", endDateStr);
       repliesQuery = repliesQuery.gte("created_at", startDateStr).lte("created_at", endDateStr);
       positiveQuery = positiveQuery.gte("created_at", startDateStr).lte("created_at", endDateStr);
+      emailsQuery = emailsQuery.gte("sent_at", startDateStr).lte("sent_at", endDateStr);
     }
 
     // Execute all queries in parallel
-    const [leadsResult, repliesResult, positiveResult] = await Promise.all([
+    const [leadsResult, repliesResult, positiveResult, emailsResult] = await Promise.all([
       leadsQuery,
       repliesQuery,
       positiveQuery,
+      emailsQuery,
     ]);
 
     const leadsContacted = leadsResult.count || 0;
     const replies = repliesResult.count || 0;
     const opportunities = positiveResult.count || 0;
 
-    // For emails sent, we'll use leads contacted as a proxy
-    // (each lead represents at least one email sent)
-    // Could also sum email counts if you want total emails including follow-ups
-    const emailsSent = leadsContacted;
+    // Use email count from lead_emails if available, otherwise estimate from leads
+    // (assumes each lead received at least 1 email)
+    const emailsSent = emailsResult.count || leadsContacted;
 
     // Calculate reply rate
     const replyRate = leadsContacted > 0 ? (replies / leadsContacted) * 100 : 0;
