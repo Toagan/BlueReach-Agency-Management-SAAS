@@ -244,13 +244,12 @@ export async function POST(
       const batchNum = Math.floor(i / insertBatchSize) + 1;
 
       // Use upsert with onConflict to handle duplicates gracefully
-      const { error: upsertError, count } = await supabase
+      const { error: upsertError } = await supabase
         .from("leads")
         .upsert(batch, {
           onConflict: "campaign_id,email",
           ignoreDuplicates: false,
-        })
-        .select("*", { count: "exact", head: true });
+        });
 
       if (upsertError) {
         console.error(`[SyncLeads] Upsert batch ${batchNum}/${totalBatches} error:`, upsertError);
@@ -456,8 +455,147 @@ export async function POST(
       // Don't throw - let the main sync complete even if positive sync fails
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 4: Sync email threads for leads with replies
+    // This ensures all conversation history is preserved locally
+    // ═══════════════════════════════════════════════════════════════════════════
+    let emailsSynced = 0;
+    let leadsWithEmailsSynced = 0;
+    let emailSyncErrors = 0;
+
+    try {
+      // Check if provider supports email fetching
+      if ('fetchEmailsForLead' in provider && typeof provider.fetchEmailsForLead === 'function') {
+        console.log(`[SyncLeads] Starting email thread sync...`);
+
+        // Get all leads with replies for this campaign
+        const { data: leadsWithReplies, error: repliesError } = await supabase
+          .from("leads")
+          .select("id, email, provider_lead_id, instantly_lead_id")
+          .eq("campaign_id", campaignId)
+          .or("has_replied.eq.true,is_positive_reply.eq.true,email_reply_count.gt.0");
+
+        if (repliesError) {
+          console.error(`[SyncLeads] Error fetching leads with replies:`, repliesError);
+        } else if (leadsWithReplies && leadsWithReplies.length > 0) {
+          console.log(`[SyncLeads] Found ${leadsWithReplies.length} leads with replies to sync emails for`);
+
+          // Get existing email IDs to track what we already have
+          const { data: existingEmails } = await supabase
+            .from("lead_emails")
+            .select("lead_id, provider_email_id")
+            .eq("campaign_id", campaignId);
+
+          const existingEmailsByLead = new Map<string, Set<string>>();
+          (existingEmails || []).forEach((e) => {
+            if (!existingEmailsByLead.has(e.lead_id)) {
+              existingEmailsByLead.set(e.lead_id, new Set());
+            }
+            if (e.provider_email_id) {
+              existingEmailsByLead.get(e.lead_id)!.add(e.provider_email_id);
+            }
+          });
+
+          // Process leads in batches to avoid rate limits
+          const emailBatchSize = 5;
+          for (let i = 0; i < leadsWithReplies.length; i += emailBatchSize) {
+            const batch = leadsWithReplies.slice(i, i + emailBatchSize);
+
+            await Promise.all(
+              batch.map(async (lead) => {
+                try {
+                  // Fetch emails from provider
+                  const emails = await (provider as { fetchEmailsForLead: (campaignId: string, email: string) => Promise<Array<{
+                    id?: string;
+                    threadId?: string;
+                    isReply?: boolean;
+                    fromEmail?: string;
+                    toEmail?: string;
+                    subject?: string;
+                    bodyText?: string;
+                    bodyHtml?: string;
+                    sentAt?: string;
+                  }>> }).fetchEmailsForLead(providerCampaignId, lead.email);
+
+                  if (!emails || emails.length === 0) {
+                    return;
+                  }
+
+                  // Filter out existing emails
+                  const existingIds = existingEmailsByLead.get(lead.id) || new Set();
+                  const newEmails = emails.filter(
+                    (email) => !email.id || !existingIds.has(email.id)
+                  );
+
+                  if (newEmails.length === 0) {
+                    return;
+                  }
+
+                  // Insert new emails
+                  const emailRecords = newEmails.map((email) => ({
+                    lead_id: lead.id,
+                    campaign_id: campaignId,
+                    provider_email_id: email.id,
+                    provider_thread_id: email.threadId,
+                    direction: email.isReply ? "inbound" : "outbound",
+                    from_email: email.fromEmail,
+                    to_email: email.toEmail || lead.email,
+                    subject: email.subject,
+                    body_text: email.bodyText,
+                    body_html: email.bodyHtml,
+                    sent_at: email.sentAt,
+                    created_at: new Date().toISOString(),
+                  }));
+
+                  const { error: insertError } = await supabase
+                    .from("lead_emails")
+                    .insert(emailRecords);
+
+                  if (insertError) {
+                    console.error(`[SyncLeads] Error inserting emails for ${lead.email}:`, insertError);
+                    emailSyncErrors++;
+                  } else {
+                    emailsSynced += newEmails.length;
+                    leadsWithEmailsSynced++;
+                  }
+                } catch (err) {
+                  console.error(`[SyncLeads] Error syncing emails for ${lead.email}:`, err);
+                  emailSyncErrors++;
+                }
+              })
+            );
+
+            // Small delay between batches to respect rate limits
+            if (i + emailBatchSize < leadsWithReplies.length) {
+              await new Promise((resolve) => setTimeout(resolve, 300));
+            }
+
+            // Log progress every 50 leads
+            if ((i + emailBatchSize) % 50 === 0 || i + emailBatchSize >= leadsWithReplies.length) {
+              console.log(`[SyncLeads] Email sync progress: ${Math.min(i + emailBatchSize, leadsWithReplies.length)}/${leadsWithReplies.length} leads processed`);
+            }
+          }
+
+          // Update last email sync timestamp
+          await supabase
+            .from("campaigns")
+            .update({ last_email_sync_at: new Date().toISOString() })
+            .eq("id", campaignId);
+
+          console.log(`[SyncLeads] Email sync complete: ${emailsSynced} emails synced for ${leadsWithEmailsSynced} leads (${emailSyncErrors} errors)`);
+        } else {
+          console.log(`[SyncLeads] No leads with replies found, skipping email sync`);
+        }
+      } else {
+        console.log(`[SyncLeads] Provider does not support email fetching, skipping email sync`);
+      }
+    } catch (emailSyncError) {
+      console.error(`[SyncLeads] Fatal error in email sync:`, emailSyncError);
+      // Don't throw - let the main sync complete even if email sync fails
+    }
+
     console.log(
-      `[SyncLeads] Completed: ${insertedCount} inserted, ${updatedCount} updated`
+      `[SyncLeads] Completed: ${insertedCount} inserted, ${updatedCount} updated, ${emailsSynced} emails synced`
     );
 
     return NextResponse.json({
@@ -467,6 +605,11 @@ export async function POST(
       updated: updatedCount,
       skipped: leadsToInsert.length - insertedCount,
       analytics: analyticsData,
+      emailSync: {
+        emailsSynced,
+        leadsWithEmailsSynced,
+        errors: emailSyncErrors,
+      },
     });
   } catch (error) {
     console.error("[SyncLeads] Error:", error);
@@ -536,17 +679,31 @@ export async function GET(
 
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("last_lead_sync_at")
+    .select("last_lead_sync_at, last_email_sync_at")
     .eq("id", campaignId)
     .single();
 
-  const { count } = await supabase
+  const { count: leadCount } = await supabase
     .from("leads")
+    .select("*", { count: "exact", head: true })
+    .eq("campaign_id", campaignId);
+
+  const { count: repliedCount } = await supabase
+    .from("leads")
+    .select("*", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .or("has_replied.eq.true,is_positive_reply.eq.true");
+
+  const { count: emailCount } = await supabase
+    .from("lead_emails")
     .select("*", { count: "exact", head: true })
     .eq("campaign_id", campaignId);
 
   return NextResponse.json({
     lastSyncAt: campaign?.last_lead_sync_at,
-    leadCount: count || 0,
+    lastEmailSyncAt: campaign?.last_email_sync_at,
+    leadCount: leadCount || 0,
+    leadsWithReplies: repliedCount || 0,
+    emailCount: emailCount || 0,
   });
 }
