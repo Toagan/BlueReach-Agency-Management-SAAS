@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users } from "lucide-react";
+import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users, Bell } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import Image from "next/image";
@@ -46,6 +47,14 @@ interface PendingInvitation {
   expires_at: string;
 }
 
+interface NotificationUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  notificationsEnabled: boolean;
+}
+
 export default function ClientSettingsPage() {
   const params = useParams();
   const clientId = params.clientId as string;
@@ -82,9 +91,51 @@ export default function ClientSettingsPage() {
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
 
+  // Notification preferences state
+  const [notificationUsers, setNotificationUsers] = useState<NotificationUser[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(true);
+  const [togglingUser, setTogglingUser] = useState<string | null>(null);
+
+  const fetchNotificationPreferences = async () => {
+    setLoadingNotifications(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/notification-preferences`);
+      const data = await res.json();
+      setNotificationUsers(data.users || []);
+    } catch (error) {
+      console.error("Error fetching notification preferences:", error);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const toggleNotification = async (userId: string, enabled: boolean) => {
+    setTogglingUser(userId);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/notification-preferences`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, enabled }),
+      });
+
+      if (res.ok) {
+        setNotificationUsers((users) =>
+          users.map((user) =>
+            user.id === userId ? { ...user, notificationsEnabled: enabled } : user
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error toggling notification:", error);
+    } finally {
+      setTogglingUser(null);
+    }
+  };
+
   useEffect(() => {
     fetchClient();
     fetchTeamMembers();
+    fetchNotificationPreferences();
   }, [clientId]);
 
   const fetchTeamMembers = async () => {
@@ -768,6 +819,65 @@ export default function ClientSettingsPage() {
               <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p className="text-sm">No team members yet</p>
               <p className="text-xs mt-1">Invite client owners to give them access to their dashboard</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Notification Preferences */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bell className="h-5 w-5" />
+            Positive Reply Notifications
+          </CardTitle>
+          <CardDescription>
+            Choose who receives email notifications when this client gets a positive reply
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loadingNotifications ? (
+            <div className="flex items-center justify-center py-8">
+              <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : notificationUsers.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">No workspace users found</p>
+          ) : (
+            <div className="space-y-3">
+              {notificationUsers.map((user) => (
+                <div
+                  key={user.id}
+                  className="flex items-center justify-between py-3 px-4 rounded-lg border bg-muted/30"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
+                      <span className="text-sm font-medium text-primary">
+                        {user.name.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{user.name}</p>
+                      <p className="text-xs text-muted-foreground">{user.email}</p>
+                    </div>
+                    <Badge variant={user.role === "admin" ? "default" : "secondary"} className="text-xs">
+                      {user.role}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {togglingUser === user.id ? (
+                      <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                    ) : (
+                      <Switch
+                        checked={user.notificationsEnabled}
+                        onCheckedChange={(checked: boolean) => toggleNotification(user.id, checked)}
+                      />
+                    )}
+                  </div>
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground pt-2">
+                Enabled users will receive an email when a positive reply is detected for {client.name}.
+              </p>
             </div>
           )}
         </CardContent>

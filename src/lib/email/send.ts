@@ -180,11 +180,12 @@ export async function sendPositiveReplyNotification(
 
   const branding = await getBrandingSettings();
 
-  // Get notification preferences from settings
+  // Get client-specific notification preferences
+  const settingKey = `client_${params.clientId}_notification_users`;
   const { data: prefsSetting } = await supabase
     .from("settings")
     .select("value")
-    .eq("key", "positive_reply_notification_users")
+    .eq("key", settingKey)
     .single();
 
   let enabledUserIds: string[] = [];
@@ -196,7 +197,7 @@ export async function sendPositiveReplyNotification(
     }
   }
 
-  // If no preferences set, default to all admins
+  // If no client-specific preferences set, default to all admins
   if (!prefsSetting) {
     const { data: adminProfiles } = await supabase
       .from("profiles")
