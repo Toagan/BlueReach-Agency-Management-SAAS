@@ -169,10 +169,23 @@ export async function POST(
       const dashboardUrl = `${appUrl}/dashboard/${clientId}`;
       const loginUrl = `${appUrl}/login?redirect=${encodeURIComponent(`/dashboard/${clientId}`)}`;
 
+      // Send invitation email to existing user
+      const emailResult = await sendInvitationEmail({
+        to: email.toLowerCase(),
+        inviteeName: name || email.split("@")[0],
+        inviterName,
+        clientName: client.name,
+        loginUrl,
+      });
+
       return NextResponse.json({
         success: true,
-        message: `${email} has been added to this client. Share the link so they can access their new dashboard.`,
+        message: emailResult.success
+          ? `Invitation email sent to ${email}. They have been added to ${client.name}.`
+          : `${email} has been added to this client. Share the link so they can access their new dashboard.`,
         isNewUser: false,
+        emailSent: emailResult.success,
+        emailError: emailResult.error,
         loginUrl,
         dashboardUrl,
       });

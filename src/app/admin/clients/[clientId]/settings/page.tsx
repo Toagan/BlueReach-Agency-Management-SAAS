@@ -176,10 +176,11 @@ export default function ClientSettingsPage() {
         setInviteEmail("");
         fetchTeamMembers();
 
-        // If email wasn't sent, show the login link
-        if (data.loginUrl) {
+        // Only show manual link if email wasn't sent successfully
+        if (data.loginUrl && !data.emailSent) {
           setInviteLink(data.loginUrl);
         } else {
+          // Email was sent, just show success message briefly
           setTimeout(() => setInviteSuccess(null), 5000);
         }
       } else {
