@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { getServerUrl } from "@/utils/get-url";
 
 // Create a Supabase client with service role for admin operations
 function getServiceSupabase() {
@@ -101,7 +102,7 @@ export async function POST(request: Request) {
 
     // Send invitation email using Supabase Auth
     // This sends a magic link that allows the user to sign in
-    const baseUrl = request.headers.get("origin") || "http://localhost:3000";
+    const baseUrl = await getServerUrl();
     const inviteUrl = `${baseUrl}/auth/invite?token=${token}`;
 
     // Check if user already exists

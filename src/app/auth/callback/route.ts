@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { getServerUrl } from "@/utils/get-url";
 
 // Service role client for operations that bypass RLS
 function getServiceSupabase() {
@@ -11,13 +12,16 @@ function getServiceSupabase() {
 }
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+
+  // Get the correct origin for redirects (handles Railway proxy)
+  const origin = await getServerUrl();
   const code = searchParams.get("code");
   const redirect = searchParams.get("redirect");
   const clientIdFromUrl = searchParams.get("client_id");
   const next = searchParams.get("next") ?? redirect ?? "/dashboard";
 
-  console.log("[Auth Callback] Params:", { code: !!code, clientIdFromUrl, next });
+  console.log("[Auth Callback] Params:", { code: !!code, clientIdFromUrl, next, origin });
 
   if (code) {
     const supabase = await createClient();

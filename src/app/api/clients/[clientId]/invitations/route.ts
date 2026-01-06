@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { sendInvitationEmail } from "@/lib/email";
+import { getServerUrl } from "@/utils/get-url";
 
 function getSupabaseAdmin() {
   return createClient(
@@ -164,7 +165,7 @@ export async function POST(
       }
 
       // Generate a login link for the existing user to access their new client
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+      const appUrl = await getServerUrl();
       const dashboardUrl = `${appUrl}/dashboard/${clientId}`;
       const loginUrl = `${appUrl}/login?redirect=${encodeURIComponent(`/dashboard/${clientId}`)}`;
 
@@ -232,7 +233,7 @@ export async function POST(
     }
 
     // Generate the login URL for this invitation
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl = await getServerUrl();
     const loginUrl = `${appUrl}/login?invite=${token}&email=${encodeURIComponent(email)}`;
 
     // Try to send the invitation email
