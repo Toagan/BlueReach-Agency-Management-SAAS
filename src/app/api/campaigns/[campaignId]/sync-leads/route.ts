@@ -410,8 +410,6 @@ export async function POST(
                 is_positive_reply: true, // Only set to true for explicitly positive leads
                 has_replied: true,
                 status: "replied",
-                // Also store the interest status for reference
-                interest_status: lead.interestStatus,
               };
 
               // ID Backfill: If matched by email but ID was missing, add it now
