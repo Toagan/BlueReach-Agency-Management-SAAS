@@ -18,16 +18,35 @@ export async function GET(request: Request, { params }: RouteParams) {
   const supabase = getSupabase();
 
   try {
-    // Get all profiles (potential notification recipients)
-    const { data: profiles, error: profilesError } = await supabase
+    // Get admin users (always can receive notifications)
+    const { data: adminProfiles } = await supabase
       .from("profiles")
       .select("id, email, full_name, role")
-      .order("email");
+      .eq("role", "admin");
 
-    if (profilesError) {
-      console.error("Error fetching profiles:", profilesError);
-      return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
-    }
+    // Get users linked to this specific client
+    const { data: clientUsers } = await supabase
+      .from("client_users")
+      .select("user_id, profiles(id, email, full_name, role)")
+      .eq("client_id", clientId);
+
+    // Combine admin users and client-specific users (avoiding duplicates)
+    const userMap = new Map<string, { id: string; email: string; full_name: string | null; role: string }>();
+
+    // Add admins first
+    adminProfiles?.forEach((profile) => {
+      userMap.set(profile.id, profile);
+    });
+
+    // Add client users
+    clientUsers?.forEach((cu) => {
+      const profile = cu.profiles as unknown as { id: string; email: string; full_name: string | null; role: string } | null;
+      if (profile && !userMap.has(profile.id)) {
+        userMap.set(profile.id, profile);
+      }
+    });
+
+    const profiles = Array.from(userMap.values());
 
     // Get client-specific notification preferences
     const settingKey = `client_${clientId}_notification_users`;
@@ -50,18 +69,18 @@ export async function GET(request: Request, { params }: RouteParams) {
     // If no preferences set yet, default to all admin users enabled
     if (!prefsSetting) {
       enabledUserIds = profiles
-        ?.filter((p) => p.role === "admin")
-        .map((p) => p.id) || [];
+        .filter((p) => p.role === "admin")
+        .map((p) => p.id);
     }
 
     // Build user list with enabled status
-    const users = profiles?.map((profile) => ({
+    const users = profiles.map((profile) => ({
       id: profile.id,
       email: profile.email,
       name: profile.full_name || profile.email?.split("@")[0] || "Unknown",
       role: profile.role,
       notificationsEnabled: enabledUserIds.includes(profile.id),
-    })) || [];
+    }));
 
     return NextResponse.json({ users, clientId });
   } catch (error) {
