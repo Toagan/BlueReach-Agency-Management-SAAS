@@ -114,9 +114,6 @@ export default function CampaignDetailPage() {
   const [syncElapsed, setSyncElapsed] = useState(0);
   const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Email history sync state
-  const [isSyncingEmails, setIsSyncingEmails] = useState(false);
-  const [syncEmailsResult, setSyncEmailsResult] = useState<string | null>(null);
 
   // Calculate estimated sync time based on lead count
   const estimatedSyncTime = useMemo(() => {
@@ -379,7 +376,8 @@ export default function CampaignDetailPage() {
         throw new Error(data.error || "Failed to sync leads");
       }
 
-      setSyncLeadsResult(`Synced ${data.inserted} new, ${data.updated} updated`);
+      const emailInfo = data.emailSync ? `, ${data.emailSync.emailsSynced} emails` : '';
+      setSyncLeadsResult(`Synced ${data.inserted} new, ${data.updated} updated${emailInfo}`);
       // Refresh data to show new leads
       await fetchData();
     } catch (err) {
@@ -390,33 +388,6 @@ export default function CampaignDetailPage() {
     }
   };
 
-  // Sync email history from provider
-  const handleSyncEmails = async () => {
-    setIsSyncingEmails(true);
-    setSyncEmailsResult(null);
-    setError(null);
-
-    try {
-      const res = await fetch(`/api/campaigns/${campaignId}/sync-emails`, {
-        method: "POST",
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || data.error) {
-        throw new Error(data.error || "Failed to sync emails");
-      }
-
-      setSyncEmailsResult(`Synced ${data.emailsSynced} emails for ${data.leadsProcessed} leads`);
-    } catch (err) {
-      console.error("Email sync error:", err);
-      setError(err instanceof Error ? err.message : "Failed to sync emails");
-    } finally {
-      setIsSyncingEmails(false);
-      // Clear result after 5 seconds
-      setTimeout(() => setSyncEmailsResult(null), 5000);
-    }
-  };
 
   // Sync sequences from Instantly
   const handleSyncSequences = async () => {
@@ -593,7 +564,7 @@ export default function CampaignDetailPage() {
                 disabled={isSyncingLeads}
               >
                 <Download className={`h-4 w-4 mr-2 ${isSyncingLeads ? "animate-spin" : ""}`} />
-                {isSyncingLeads ? "Syncing Leads..." : "Sync Leads"}
+                {isSyncingLeads ? "Syncing..." : "Full Sync"}
               </Button>
               {!isSyncingLeads && (
                 isAlreadySynced ? (
@@ -620,24 +591,6 @@ export default function CampaignDetailPage() {
                   {syncElapsed}s / ~{estimatedSyncTime}s
                 </span>
               </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSyncEmails}
-              disabled={isSyncingEmails || leads.length === 0}
-              title="Sync email history for leads with replies"
-            >
-              <Mail className={`h-4 w-4 mr-2 ${isSyncingEmails ? "animate-spin" : ""}`} />
-              {isSyncingEmails ? "Syncing..." : "Sync Emails"}
-            </Button>
-            {syncEmailsResult && (
-              <span className="text-xs text-green-600 flex items-center gap-1">
-                <Check className="h-3 w-3" />
-                {syncEmailsResult}
-              </span>
             )}
           </div>
           <Button
@@ -812,7 +765,7 @@ export default function CampaignDetailPage() {
                 disabled={isSyncingSequences}
               >
                 <Download className={`h-4 w-4 mr-2 ${isSyncingSequences ? "animate-spin" : ""}`} />
-                {isSyncingSequences ? "Syncing..." : "Sync from Instantly"}
+                {isSyncingSequences ? "Syncing..." : "Sync Templates"}
               </Button>
             </div>
           </div>
