@@ -165,6 +165,17 @@ export async function POST(
         updated_at: new Date().toISOString(),
       };
 
+      // FIX: Set has_replied based on provider status or emailReplyCount
+      // This ensures ALL leads who replied are counted, not just positive ones
+      const replyCount = lead.emailReplyCount || 0;
+      const providerStatus = (lead.status || "").toLowerCase();
+      const isRepliedStatus = providerStatus === "replied" || providerStatus === "completed";
+
+      if (replyCount > 0 || isRepliedStatus) {
+        leadData.has_replied = true;
+        // Don't override status if already set by mapLeadStatus
+      }
+
       // NOTE: We do NOT set is_positive_reply here because the Instantly /leads/list endpoint
       // does NOT return interest_status for regular leads. We fetch positive leads separately
       // at the end of this sync using fetchPositiveLeads() which filters by interest_status.
@@ -310,106 +321,141 @@ export async function POST(
     }
 
     // Sync positive leads specifically (Instantly doesn't return interest_status in regular leads list)
-    // IMPORTANT: First reset all is_positive_reply to false, then mark only the truly positive ones
+    // CONSERVATIVE SYNC STRATEGY:
+    // - Only set is_positive_reply = true for leads with EXPLICITLY positive interest status
+    // - NEVER set is_positive_reply = false to preserve manual admin changes
+    // - Validate each lead's status before updating
     let positiveLeadsSynced = 0;
+    let positiveLeadsSkipped = 0;
     let positiveLeadsBackfilled = 0;
+    let positiveLeadsErrors = 0;
+
+    // Define which interestStatus values are considered explicitly positive
+    const POSITIVE_INTEREST_STATUSES = ["interested", "meeting_booked", "meeting_completed", "closed"];
+
     try {
       // Check if provider has fetchPositiveLeads method (Instantly-specific)
       if ('fetchPositiveLeads' in provider && typeof provider.fetchPositiveLeads === 'function') {
-        // DISABLED: The Instantly API v2 interest_status filter is broken and returns ALL leads
-        // instead of just positive ones. Skipping reset to preserve manually set positive flags.
-        //
-        // Original code:
-        // console.log(`[SyncLeads] Resetting is_positive_reply for all leads in this campaign...`);
-        // const { error: resetError } = await supabase
-        //   .from("leads")
-        //   .update({ is_positive_reply: false })
-        //   .eq("campaign_id", campaignId)
-        //   .eq("is_positive_reply", true);
-        // if (resetError) {
-        //   console.warn(`[SyncLeads] Error resetting positive leads:`, resetError);
-        // }
-        console.log(`[SyncLeads] SKIPPING reset - Instantly API interest_status filter is broken`);
+        // NOTE: We do NOT reset is_positive_reply to false here.
+        // This preserves any manual positive flags set by admins in the dashboard.
+        // The fetchPositiveLeads() function now has a hard-check that only returns
+        // leads with explicitly positive lt_interest_status values (1, 3, 4, 5).
 
-        console.log(`[SyncLeads] Fetching positive leads from provider...`);
+        console.log(`[SyncLeads] Fetching positive leads from provider (conservative mode)...`);
         const positiveLeads = await (provider as { fetchPositiveLeads: (id: string) => Promise<ProviderLead[]> }).fetchPositiveLeads(providerCampaignId);
 
-        console.log(`[SyncLeads] Found ${positiveLeads.length} positive leads to sync`);
+        console.log(`[SyncLeads] Found ${positiveLeads.length} leads from positive leads endpoint`);
 
         for (const lead of positiveLeads) {
-          const emailLower = lead.email.toLowerCase().trim();
-          const providerLeadId = lead.id;
+          try {
+            const emailLower = lead.email.toLowerCase().trim();
+            const providerLeadId = lead.id;
 
-          // MATCHING STRATEGY: ID-first with email fallback
-          let matchedLeadId: string | null = null;
-          let needsIdBackfill = false;
+            // CONSERVATIVE CHECK: Double-verify the lead has a positive interest status
+            // This is a safety net in case fetchPositiveLeads returns unexpected data
+            const isExplicitlyPositive = lead.interestStatus && POSITIVE_INTEREST_STATUSES.includes(lead.interestStatus);
 
-          // Step 1: Try matching by provider lead ID
-          if (providerLeadId) {
-            const { data: idMatch } = await supabase
-              .from("leads")
-              .select("id, instantly_lead_id")
-              .eq("campaign_id", campaignId)
-              .eq("instantly_lead_id", providerLeadId)
-              .single();
-
-            if (idMatch) {
-              matchedLeadId = idMatch.id;
+            if (!isExplicitlyPositive) {
+              // Lead does not have an explicitly positive status - skip to avoid incorrect marking
+              console.warn(
+                `[SyncLeads] SKIPPING lead ${emailLower}: interestStatus="${lead.interestStatus}" is not explicitly positive`
+              );
+              positiveLeadsSkipped++;
+              continue;
             }
-          }
 
-          // Step 2: Fall back to email matching if no ID match
-          if (!matchedLeadId) {
-            const { data: emailMatch } = await supabase
-              .from("leads")
-              .select("id, instantly_lead_id")
-              .eq("campaign_id", campaignId)
-              .ilike("email", emailLower)
-              .single();
+            // MATCHING STRATEGY: ID-first with email fallback
+            let matchedLeadId: string | null = null;
+            let needsIdBackfill = false;
 
-            if (emailMatch) {
-              matchedLeadId = emailMatch.id;
-              // Check if we need to backfill the ID
-              if (providerLeadId && !emailMatch.instantly_lead_id) {
-                needsIdBackfill = true;
+            // Step 1: Try matching by provider lead ID
+            if (providerLeadId) {
+              const { data: idMatch, error: idMatchError } = await supabase
+                .from("leads")
+                .select("id, instantly_lead_id")
+                .eq("campaign_id", campaignId)
+                .eq("instantly_lead_id", providerLeadId)
+                .maybeSingle();
+
+              if (idMatchError) {
+                console.warn(`[SyncLeads] Error matching by ID for ${emailLower}:`, idMatchError);
+              } else if (idMatch) {
+                matchedLeadId = idMatch.id;
               }
             }
-          }
 
-          if (matchedLeadId) {
-            // Build update payload
-            const updatePayload: Record<string, unknown> = {
-              is_positive_reply: true,
-              has_replied: true,
-              status: "replied",
-            };
+            // Step 2: Fall back to email matching if no ID match
+            if (!matchedLeadId) {
+              const { data: emailMatch, error: emailMatchError } = await supabase
+                .from("leads")
+                .select("id, instantly_lead_id")
+                .eq("campaign_id", campaignId)
+                .ilike("email", emailLower)
+                .maybeSingle();
 
-            // ID Backfill: If matched by email but ID was missing, add it now
-            if (needsIdBackfill && providerLeadId) {
-              updatePayload.instantly_lead_id = providerLeadId;
-              updatePayload.provider_lead_id = providerLeadId;
-              positiveLeadsBackfilled++;
-              console.log(`[SyncLeads] Backfilling instantly_lead_id for positive lead ${emailLower}`);
+              if (emailMatchError) {
+                console.warn(`[SyncLeads] Error matching by email for ${emailLower}:`, emailMatchError);
+              } else if (emailMatch) {
+                matchedLeadId = emailMatch.id;
+                // Check if we need to backfill the ID
+                if (providerLeadId && !emailMatch.instantly_lead_id) {
+                  needsIdBackfill = true;
+                }
+              }
             }
 
-            const { error: updateError } = await supabase
-              .from("leads")
-              .update(updatePayload)
-              .eq("id", matchedLeadId);
+            if (matchedLeadId) {
+              // Build update payload - ONLY set is_positive_reply to true, never false
+              const updatePayload: Record<string, unknown> = {
+                is_positive_reply: true, // Only set to true for explicitly positive leads
+                has_replied: true,
+                status: "replied",
+                // Also store the interest status for reference
+                interest_status: lead.interestStatus,
+              };
 
-            if (!updateError) {
-              positiveLeadsSynced++;
+              // ID Backfill: If matched by email but ID was missing, add it now
+              if (needsIdBackfill && providerLeadId) {
+                updatePayload.instantly_lead_id = providerLeadId;
+                updatePayload.provider_lead_id = providerLeadId;
+                positiveLeadsBackfilled++;
+                console.log(`[SyncLeads] Backfilling instantly_lead_id for positive lead ${emailLower}`);
+              }
+
+              const { error: updateError } = await supabase
+                .from("leads")
+                .update(updatePayload)
+                .eq("id", matchedLeadId);
+
+              if (updateError) {
+                console.error(`[SyncLeads] Error updating positive lead ${emailLower}:`, updateError);
+                positiveLeadsErrors++;
+              } else {
+                positiveLeadsSynced++;
+              }
+            } else {
+              // Lead not found - log warning but don't create (full sync already happened)
+              console.warn(`[SyncLeads] WARNING: Positive lead ${emailLower} not found in DB after full sync`);
+              positiveLeadsSkipped++;
             }
-          } else {
-            // Lead not found - log warning but don't create (full sync already happened)
-            console.warn(`[SyncLeads] WARNING: Positive lead ${emailLower} not found in DB after full sync`);
+          } catch (leadError) {
+            // Catch errors for individual leads so one failure doesn't break the entire sync
+            console.error(`[SyncLeads] Exception processing positive lead ${lead.email}:`, leadError);
+            positiveLeadsErrors++;
           }
         }
 
-        console.log(`[SyncLeads] Marked ${positiveLeadsSynced} leads as positive (${positiveLeadsBackfilled} IDs backfilled)`);
+        console.log(
+          `[SyncLeads] Positive leads sync complete: ` +
+          `${positiveLeadsSynced} marked positive, ` +
+          `${positiveLeadsSkipped} skipped, ` +
+          `${positiveLeadsBackfilled} IDs backfilled, ` +
+          `${positiveLeadsErrors} errors`
+        );
       }
     } catch (positiveError) {
-      console.warn(`[SyncLeads] Could not sync positive leads:`, positiveError);
+      console.error(`[SyncLeads] Fatal error in positive leads sync:`, positiveError);
+      // Don't throw - let the main sync complete even if positive sync fails
     }
 
     console.log(

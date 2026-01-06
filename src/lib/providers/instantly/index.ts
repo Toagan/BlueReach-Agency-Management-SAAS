@@ -56,6 +56,7 @@ interface InstantlyLead {
   first_name?: string;
   last_name?: string;
   company_name?: string;
+  company_domain?: string;
   phone?: string;
   website?: string;
   campaign_id?: string;
@@ -67,6 +68,10 @@ interface InstantlyLead {
   lead_data?: Record<string, string>;
   created_at?: string;
   updated_at?: string;
+  // Engagement metrics
+  email_open_count?: number;
+  email_click_count?: number;
+  email_reply_count?: number;
 }
 
 interface InstantlyAnalytics {
@@ -342,13 +347,27 @@ export class InstantlyProvider implements EmailCampaignProvider {
   // Fetch only positive/interested leads using client-side filtering
   // NOTE: The Instantly API v2 interest_status filter parameter is broken and ignores all values.
   // We must fetch all leads and filter client-side by lt_interest_status field.
+  //
+  // POSITIVE STATUS VALUES (lt_interest_status):
+  //   1 = Interested
+  //   3 = Meeting Booked
+  //   4 = Meeting Completed
+  //   5 = Closed (Won)
+  //
+  // NON-POSITIVE VALUES:
+  //   0 or null = Unknown/No status
+  //   2 = Not Interested
   async fetchPositiveLeads(campaignId: string): Promise<ProviderLead[]> {
-    console.log(`[InstantlyProvider] Fetching all leads to filter for positive (lt_interest_status=1) for campaign ${campaignId}`);
+    console.log(`[InstantlyProvider] Fetching all leads to filter for positive statuses for campaign ${campaignId}`);
+
+    // Define which lt_interest_status values are considered "positive"
+    const POSITIVE_STATUS_CODES = [1, 3, 4, 5]; // interested, meeting_booked, meeting_completed, closed
 
     const allPositiveLeads: ProviderLead[] = [];
     let skip = 0;
     const limit = 100;
     let totalScanned = 0;
+    let rejectedCount = 0;
 
     while (true) {
       const response = await this.client.post<{ items: InstantlyLead[] }>(
@@ -363,15 +382,27 @@ export class InstantlyProvider implements EmailCampaignProvider {
       const leads = response.items || [];
       totalScanned += leads.length;
 
-      // Filter client-side for lt_interest_status = 1 (Interested)
+      // HARD-CHECK: Only include leads with explicitly positive lt_interest_status
       // This is the ONLY reliable way to identify positive leads in Instantly API v2
       for (const lead of leads) {
-        if (lead.lt_interest_status === 1) {
+        const status = lead.lt_interest_status;
+
+        // EXPLICIT HARD-CHECK: Must be a known positive status code
+        if (status !== null && status !== undefined && POSITIVE_STATUS_CODES.includes(status)) {
+          const mappedStatus = this.mapInterestStatus(status);
           allPositiveLeads.push({
             ...this.mapLead(lead),
-            interestStatus: "interested",
+            interestStatus: mappedStatus,
           });
+        } else if (status !== null && status !== undefined && status !== 0) {
+          // Warn if lead has a non-zero status that's not in our positive list
+          // This helps debug unexpected status values from the API
+          console.warn(
+            `[InstantlyProvider] Lead ${lead.email} has lt_interest_status=${status} (not positive). Skipping.`
+          );
+          rejectedCount++;
         }
+        // Note: status === 0 or null/undefined means no interest status set, silently skip
       }
 
       if (leads.length < limit) {
@@ -385,7 +416,11 @@ export class InstantlyProvider implements EmailCampaignProvider {
       }
     }
 
-    console.log(`[InstantlyProvider] Scanned ${totalScanned} total leads, found ${allPositiveLeads.length} positive (lt_interest_status=1)`);
+    console.log(
+      `[InstantlyProvider] Scanned ${totalScanned} total leads. ` +
+      `Found ${allPositiveLeads.length} positive (lt_interest_status in [1,3,4,5]). ` +
+      `Rejected ${rejectedCount} with non-positive status.`
+    );
     return allPositiveLeads;
   }
 
@@ -458,6 +493,7 @@ export class InstantlyProvider implements EmailCampaignProvider {
       firstName: l.first_name,
       lastName: l.last_name,
       companyName: l.company_name,
+      companyDomain: l.company_domain,
       phone: l.phone,
       website: l.website,
       status: l.status,
@@ -465,6 +501,10 @@ export class InstantlyProvider implements EmailCampaignProvider {
       createdAt: l.created_at,
       updatedAt: l.updated_at,
       customFields: l.lead_data,
+      // Engagement metrics - used to determine has_replied
+      emailOpenCount: l.email_open_count,
+      emailClickCount: l.email_click_count,
+      emailReplyCount: l.email_reply_count,
     };
   }
 
