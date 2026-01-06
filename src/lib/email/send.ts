@@ -2,6 +2,10 @@ import { Resend } from "resend";
 import { render } from "@react-email/render";
 import { createClient } from "@supabase/supabase-js";
 import { InvitationEmail, generatePlainText } from "./templates/Invitation";
+import {
+  PositiveReplyNotification,
+  generatePlainText as generatePositiveReplyPlainText,
+} from "./templates/PositiveReplyNotification";
 
 function getSupabase() {
   return createClient(
@@ -152,6 +156,120 @@ export async function sendInvitationEmail(
       error: err instanceof Error ? err.message : "Failed to send email",
     };
   }
+}
+
+export interface SendPositiveReplyNotificationParams {
+  leadEmail: string;
+  leadName?: string;
+  companyName?: string;
+  campaignName: string;
+  clientId: string;
+  clientName: string;
+  replySnippet?: string;
+}
+
+export async function sendPositiveReplyNotification(
+  params: SendPositiveReplyNotificationParams
+): Promise<{ success: boolean; error?: string; sentTo: string[] }> {
+  const resend = await getResendClient();
+  const supabase = getSupabase();
+
+  if (!resend) {
+    return { success: false, error: "Email service not configured", sentTo: [] };
+  }
+
+  const branding = await getBrandingSettings();
+
+  // Get recipients: admin emails + client users
+  const recipients: Array<{ email: string; name: string }> = [];
+
+  // 1. Get admin notification email from settings
+  const { data: adminEmailSetting } = await supabase
+    .from("settings")
+    .select("value")
+    .eq("key", "admin_notification_email")
+    .single();
+
+  if (adminEmailSetting?.value) {
+    recipients.push({ email: adminEmailSetting.value, name: "Admin" });
+  } else {
+    // Fallback to a default admin email
+    recipients.push({ email: "tilman@blue-reach.com", name: "Tilman" });
+  }
+
+  // 2. Get client users for this client
+  const { data: clientUsers } = await supabase
+    .from("client_users")
+    .select("user_id, profiles(email, full_name)")
+    .eq("client_id", params.clientId);
+
+  if (clientUsers) {
+    for (const cu of clientUsers) {
+      const profile = cu.profiles as unknown as { email: string; full_name: string } | null;
+      if (profile?.email && !recipients.find(r => r.email === profile.email)) {
+        recipients.push({
+          email: profile.email,
+          name: profile.full_name || profile.email.split("@")[0],
+        });
+      }
+    }
+  }
+
+  if (recipients.length === 0) {
+    console.log("[Email] No recipients for positive reply notification");
+    return { success: true, sentTo: [] };
+  }
+
+  // Build dashboard URL
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bluereach-agency-management-saas-production.up.railway.app";
+  const dashboardUrl = `${baseUrl}/admin/clients/${params.clientId}`;
+
+  const sentTo: string[] = [];
+  const errors: string[] = [];
+
+  // Send to each recipient
+  for (const recipient of recipients) {
+    const templateProps = {
+      recipientName: recipient.name,
+      leadEmail: params.leadEmail,
+      leadName: params.leadName,
+      companyName: params.companyName,
+      campaignName: params.campaignName,
+      clientName: params.clientName,
+      replySnippet: params.replySnippet,
+      dashboardUrl,
+    };
+
+    try {
+      const emailHtml = await render(PositiveReplyNotification(templateProps));
+      const emailText = generatePositiveReplyPlainText(templateProps);
+
+      const { data, error } = await resend.emails.send({
+        from: `${branding.senderName} <${branding.senderEmail}>`,
+        to: recipient.email,
+        subject: `🎯 New Positive Reply: ${params.leadName || params.leadEmail} - ${params.clientName}`,
+        html: emailHtml,
+        text: emailText,
+      });
+
+      if (error) {
+        console.error(`[Email] Failed to send notification to ${recipient.email}:`, error);
+        errors.push(`${recipient.email}: ${error.message}`);
+      } else {
+        console.log(`[Email] Sent positive reply notification to ${recipient.email} (ID: ${data?.id})`);
+        sentTo.push(recipient.email);
+      }
+    } catch (err) {
+      console.error(`[Email] Error sending notification to ${recipient.email}:`, err);
+      errors.push(`${recipient.email}: ${err instanceof Error ? err.message : "Unknown error"}`);
+    }
+  }
+
+  return {
+    success: sentTo.length > 0,
+    error: errors.length > 0 ? errors.join("; ") : undefined,
+    sentTo,
+  };
 }
 
 export { getBrandingSettings };

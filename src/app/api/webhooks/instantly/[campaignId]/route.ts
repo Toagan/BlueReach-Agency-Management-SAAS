@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
+import { sendPositiveReplyNotification } from "@/lib/email";
 
 function getSupabase() {
   return createClient(
@@ -340,6 +341,48 @@ export async function POST(request: Request, { params }: RouteParams) {
         } else {
           console.log(`[Webhook] Saved ${direction} email for ${leadEmail}`);
         }
+      }
+    }
+
+    // Send email notification for positive replies
+    if (isPositive && clientId) {
+      try {
+        // Get lead details for the notification
+        const { data: leadDetails } = await supabase
+          .from("leads")
+          .select("first_name, last_name, company_name")
+          .eq("campaign_id", campaignId)
+          .eq("email", leadEmail)
+          .maybeSingle();
+
+        const leadName = leadDetails
+          ? [leadDetails.first_name, leadDetails.last_name].filter(Boolean).join(" ") || undefined
+          : undefined;
+
+        // Get reply snippet from payload
+        const replySnippet = payload.reply_text_snippet ||
+          (payload.reply_text ? payload.reply_text.substring(0, 150) + (payload.reply_text.length > 150 ? "..." : "") : undefined);
+
+        console.log(`[Webhook] Sending positive reply notification for ${leadEmail}`);
+
+        const notificationResult = await sendPositiveReplyNotification({
+          leadEmail,
+          leadName,
+          companyName: leadDetails?.company_name || undefined,
+          campaignName: campaign.name,
+          clientId,
+          clientName,
+          replySnippet,
+        });
+
+        if (notificationResult.success) {
+          console.log(`[Webhook] Notification sent to: ${notificationResult.sentTo.join(", ")}`);
+        } else {
+          console.error(`[Webhook] Failed to send notification: ${notificationResult.error}`);
+        }
+      } catch (notifyError) {
+        // Don't fail the webhook if notification fails
+        console.error("[Webhook] Error sending notification:", notifyError);
       }
     }
 

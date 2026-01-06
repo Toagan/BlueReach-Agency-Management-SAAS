@@ -1,2 +1,9 @@
-export { sendInvitationEmail, getBrandingSettings } from "./send";
-export type { SendInvitationEmailParams } from "./send";
+export {
+  sendInvitationEmail,
+  sendPositiveReplyNotification,
+  getBrandingSettings,
+} from "./send";
+export type {
+  SendInvitationEmailParams,
+  SendPositiveReplyNotificationParams,
+} from "./send";
