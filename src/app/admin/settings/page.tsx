@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Key, Shield, Check, X, RefreshCw, Eye, EyeOff, Upload, ArrowLeft, Image as ImageIcon, Building2, Palette, Mail } from "lucide-react";
+import { Settings, Key, Shield, Check, X, RefreshCw, Eye, EyeOff, Upload, ArrowLeft, Image as ImageIcon, Building2, Palette, Mail, Bell, Users } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -16,6 +17,14 @@ interface Setting {
   is_encrypted: boolean;
   updated_at: string;
   masked_value: string;
+}
+
+interface NotificationUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  notificationsEnabled: boolean;
 }
 
 export default function SettingsPage() {
@@ -41,6 +50,11 @@ export default function SettingsPage() {
   const [senderName, setSenderName] = useState("");
   const [senderEmail, setSenderEmail] = useState("");
   const [savingBranding, setSavingBranding] = useState(false);
+
+  // Notification preferences state
+  const [notificationUsers, setNotificationUsers] = useState<NotificationUser[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(true);
+  const [togglingUser, setTogglingUser] = useState<string | null>(null);
 
   const fetchSettings = async () => {
     try {
@@ -97,8 +111,46 @@ export default function SettingsPage() {
     }
   };
 
+  const fetchNotificationPreferences = async () => {
+    setLoadingNotifications(true);
+    try {
+      const res = await fetch("/api/admin/notification-preferences");
+      const data = await res.json();
+      setNotificationUsers(data.users || []);
+    } catch (error) {
+      console.error("Error fetching notification preferences:", error);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const toggleNotification = async (userId: string, enabled: boolean) => {
+    setTogglingUser(userId);
+    try {
+      const res = await fetch("/api/admin/notification-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, enabled }),
+      });
+
+      if (res.ok) {
+        // Update local state
+        setNotificationUsers((users) =>
+          users.map((user) =>
+            user.id === userId ? { ...user, notificationsEnabled: enabled } : user
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error toggling notification:", error);
+    } finally {
+      setTogglingUser(null);
+    }
+  };
+
   useEffect(() => {
     fetchSettings();
+    fetchNotificationPreferences();
   }, []);
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -500,6 +552,63 @@ export default function SettingsPage() {
               </div>
             );
           })()}
+        </CardContent>
+      </Card>
+
+      {/* Notification Preferences */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bell className="h-5 w-5" />
+            Positive Reply Notifications
+          </CardTitle>
+          <CardDescription>
+            Choose which workspace members receive email notifications when a positive reply comes in
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loadingNotifications ? (
+            <div className="flex items-center justify-center py-8">
+              <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
+            </div>
+          ) : notificationUsers.length === 0 ? (
+            <p className="text-sm text-gray-500 py-4">No workspace users found</p>
+          ) : (
+            <div className="space-y-4">
+              {notificationUsers.map((user) => (
+                <div
+                  key={user.id}
+                  className="flex items-center justify-between py-3 px-4 rounded-lg border bg-gray-50 dark:bg-gray-900"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                      <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">{user.name}</p>
+                      <p className="text-sm text-muted-foreground">{user.email}</p>
+                    </div>
+                    <Badge variant={user.role === "admin" ? "default" : "secondary"} className="ml-2">
+                      {user.role}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {togglingUser === user.id ? (
+                      <RefreshCw className="h-4 w-4 animate-spin text-gray-400" />
+                    ) : (
+                      <Switch
+                        checked={user.notificationsEnabled}
+                        onCheckedChange={(checked: boolean) => toggleNotification(user.id, checked)}
+                      />
+                    )}
+                  </div>
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground mt-4">
+                Enabled users will receive an email notification whenever a positive reply is detected via webhook.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

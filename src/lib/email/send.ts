@@ -180,33 +180,47 @@ export async function sendPositiveReplyNotification(
 
   const branding = await getBrandingSettings();
 
-  // Get recipients: admin emails + client users
-  const recipients: Array<{ email: string; name: string }> = [];
-
-  // 1. Get admin notification email from settings
-  const { data: adminEmailSetting } = await supabase
+  // Get notification preferences from settings
+  const { data: prefsSetting } = await supabase
     .from("settings")
     .select("value")
-    .eq("key", "admin_notification_email")
+    .eq("key", "positive_reply_notification_users")
     .single();
 
-  if (adminEmailSetting?.value) {
-    recipients.push({ email: adminEmailSetting.value, name: "Admin" });
-  } else {
-    // Fallback to a default admin email
-    recipients.push({ email: "tilman@blue-reach.com", name: "Tilman" });
+  let enabledUserIds: string[] = [];
+  if (prefsSetting?.value) {
+    try {
+      enabledUserIds = JSON.parse(prefsSetting.value);
+    } catch {
+      enabledUserIds = [];
+    }
   }
 
-  // 2. Get client users for this client
-  const { data: clientUsers } = await supabase
-    .from("client_users")
-    .select("user_id, profiles(email, full_name)")
-    .eq("client_id", params.clientId);
+  // If no preferences set, default to all admins
+  if (!prefsSetting) {
+    const { data: adminProfiles } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("role", "admin");
+    enabledUserIds = adminProfiles?.map((p) => p.id) || [];
+  }
 
-  if (clientUsers) {
-    for (const cu of clientUsers) {
-      const profile = cu.profiles as unknown as { email: string; full_name: string } | null;
-      if (profile?.email && !recipients.find(r => r.email === profile.email)) {
+  if (enabledUserIds.length === 0) {
+    console.log("[Email] No users enabled for positive reply notifications");
+    return { success: true, sentTo: [] };
+  }
+
+  // Get enabled users' email addresses
+  const { data: enabledProfiles } = await supabase
+    .from("profiles")
+    .select("id, email, full_name")
+    .in("id", enabledUserIds);
+
+  const recipients: Array<{ email: string; name: string }> = [];
+
+  if (enabledProfiles) {
+    for (const profile of enabledProfiles) {
+      if (profile.email) {
         recipients.push({
           email: profile.email,
           name: profile.full_name || profile.email.split("@")[0],
