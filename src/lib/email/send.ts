@@ -51,7 +51,7 @@ async function getBrandingSettings(): Promise<BrandingSettings> {
     agencyName,
     agencyLogoUrl: settingsMap.get("agency_logo_url") || null,
     agencyWebsiteUrl: settingsMap.get("agency_website_url") || "https://blue-reach.com",
-    primaryColor: settingsMap.get("agency_primary_color") || "#4F46E5",
+    primaryColor: settingsMap.get("agency_primary_color") || "#0052FF",
     senderName,
     // Use verified blue-reach.com domain
     senderEmail: settingsMap.get("agency_sender_email") || "noreply@blue-reach.com",
