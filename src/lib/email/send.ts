@@ -53,8 +53,8 @@ async function getBrandingSettings(): Promise<BrandingSettings> {
     agencyWebsiteUrl: settingsMap.get("agency_website_url") || "https://blue-reach.com",
     primaryColor: settingsMap.get("agency_primary_color") || "#4F46E5",
     senderName,
-    // Default to Resend test domain until custom domain is verified
-    senderEmail: settingsMap.get("agency_sender_email") || "onboarding@resend.dev",
+    // Use verified blue-reach.com domain
+    senderEmail: settingsMap.get("agency_sender_email") || "noreply@blue-reach.com",
   };
 }
 
