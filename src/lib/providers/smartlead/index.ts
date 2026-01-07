@@ -50,7 +50,11 @@ interface SmartleadLead {
   phone_number?: string;
   website?: string;
   linkedin_profile?: string;
-  lead_status: "STARTED" | "COMPLETED" | "BLOCKED" | "INPROGRESS";
+  company_url?: string;
+  location?: string;
+  // API returns "status" not "lead_status"
+  status?: "STARTED" | "COMPLETED" | "BLOCKED" | "INPROGRESS" | "SENT" | string;
+  lead_status?: "STARTED" | "COMPLETED" | "BLOCKED" | "INPROGRESS";
   category?:
     | "Interested"
     | "Meeting Request"
@@ -58,9 +62,21 @@ interface SmartleadLead {
     | "Do Not Contact"
     | "Information Request"
     | "Out Of Office"
-    | "Wrong Person";
+    | "Wrong Person"
+    | string;
+  // Interest and engagement metrics from API
+  is_interested?: boolean;
+  reply_count?: number;
+  open_count?: number;
+  click_count?: number;
+  // Sequence tracking
+  last_email_sequence_sent?: number;
+  is_unsubscribed?: boolean;
+  // Timestamps
   created_at?: string;
   updated_at?: string;
+  // Campaign-specific mapping
+  campaign_lead_map_id?: number;
   // Custom fields are included as additional properties
   [key: string]: unknown;
 }
@@ -223,11 +239,40 @@ export class SmartleadProvider implements EmailCampaignProvider {
     let offset = 0;
     let hasMore = true;
 
+    console.log(`[SmartleadProvider] Starting fetchAllLeads for campaign ${campaignId}`);
+
     while (hasMore) {
       const response = await this.client.get<SmartleadLeadResponse>(
         `/campaigns/${campaignId}/leads`,
         { limit, offset }
       );
+
+      // DEBUG: Log first response to see structure
+      if (offset === 0) {
+        console.log(`[SmartleadProvider] API Response structure:`, {
+          total_leads: response.total_leads,
+          offset: response.offset,
+          limit: response.limit,
+          data_length: response.data?.length || 0,
+          first_lead_sample: response.data?.[0] ? {
+            id: response.data[0].id,
+            email: response.data[0].email,
+            status: response.data[0].status,
+            lead_status: response.data[0].lead_status,
+            category: response.data[0].category,
+            is_interested: response.data[0].is_interested,
+            reply_count: response.data[0].reply_count,
+            open_count: response.data[0].open_count,
+            click_count: response.data[0].click_count,
+          } : "NO DATA",
+        });
+      }
+
+      // Handle case where response.data might be undefined or not an array
+      if (!response.data || !Array.isArray(response.data)) {
+        console.warn(`[SmartleadProvider] Unexpected response format:`, response);
+        break;
+      }
 
       const leads = response.data.map((lead) => this.mapLead(lead));
       allLeads.push(...leads);
@@ -247,6 +292,70 @@ export class SmartleadProvider implements EmailCampaignProvider {
       `[SmartleadProvider] Completed fetching ${allLeads.length} leads`
     );
     return allLeads;
+  }
+
+  // Fetch leads with positive interest status (Interested, Meeting Request, etc.)
+  // This mirrors the Instantly fetchPositiveLeads() method for consistency
+  async fetchPositiveLeads(campaignId: string): Promise<ProviderLead[]> {
+    console.log(`[SmartleadProvider] Fetching positive leads for campaign ${campaignId}`);
+
+    // Define which categories/statuses are considered "positive"
+    const POSITIVE_CATEGORIES = ["Interested", "Meeting Request"];
+
+    const allPositiveLeads: ProviderLead[] = [];
+    const limit = 100;
+    let offset = 0;
+    let hasMore = true;
+    let totalScanned = 0;
+
+    while (hasMore) {
+      const response = await this.client.get<SmartleadLeadResponse>(
+        `/campaigns/${campaignId}/leads`,
+        { limit, offset }
+      );
+
+      const leads = response.data || [];
+      totalScanned += leads.length;
+
+      // Filter for positive leads based on is_interested OR category
+      for (const lead of leads) {
+        const isPositiveByFlag = lead.is_interested === true;
+        const isPositiveByCategory = lead.category && POSITIVE_CATEGORIES.includes(lead.category);
+        const hasReplied = (lead.reply_count || 0) > 0;
+
+        if (isPositiveByFlag || isPositiveByCategory) {
+          const mappedLead = this.mapLead(lead);
+          // Ensure interest status is set for positive leads
+          if (!mappedLead.interestStatus) {
+            mappedLead.interestStatus = "interested";
+          }
+          allPositiveLeads.push(mappedLead);
+        } else if (hasReplied && !lead.category) {
+          // Lead has replied but no category set - treat as potential positive
+          // Log for debugging but don't auto-mark as positive
+          console.log(
+            `[SmartleadProvider] Lead ${lead.email} has ${lead.reply_count} replies but no category set`
+          );
+        }
+      }
+
+      offset += limit;
+      hasMore = leads.length === limit && offset < response.total_leads;
+
+      // Progress logging every 1000 leads
+      if (totalScanned % 1000 === 0) {
+        console.log(
+          `[SmartleadProvider] Scanned ${totalScanned} leads, found ${allPositiveLeads.length} positive so far...`
+        );
+      }
+    }
+
+    console.log(
+      `[SmartleadProvider] Scanned ${totalScanned} total leads. ` +
+      `Found ${allPositiveLeads.length} positive (is_interested=true OR category in [${POSITIVE_CATEGORIES.join(", ")}]).`
+    );
+
+    return allPositiveLeads;
   }
 
   async createLead(
@@ -354,10 +463,20 @@ export class SmartleadProvider implements EmailCampaignProvider {
       "phone_number",
       "website",
       "linkedin_profile",
+      "company_url",
+      "location",
       "lead_status",
+      "status",
       "category",
+      "is_interested",
+      "reply_count",
+      "open_count",
+      "click_count",
+      "last_email_sequence_sent",
+      "is_unsubscribed",
       "created_at",
       "updated_at",
+      "campaign_lead_map_id",
     ];
 
     const customFields: Record<string, string> = {};
@@ -366,6 +485,15 @@ export class SmartleadProvider implements EmailCampaignProvider {
         customFields[key] = value;
       }
     });
+
+    // Determine interest status from is_interested boolean OR category
+    let interestStatus = this.mapLeadCategory(lead.category);
+    if (lead.is_interested === true && !interestStatus) {
+      interestStatus = "interested";
+    }
+
+    // Use status field (API returns "status") or fall back to lead_status
+    const statusField = lead.status || lead.lead_status;
 
     return {
       id: String(lead.id),
@@ -376,8 +504,12 @@ export class SmartleadProvider implements EmailCampaignProvider {
       phone: lead.phone_number,
       website: lead.website,
       linkedinUrl: lead.linkedin_profile,
-      status: this.mapLeadStatus(lead.lead_status),
-      interestStatus: this.mapLeadCategory(lead.category),
+      status: this.mapLeadStatus(statusField),
+      interestStatus,
+      // Map engagement metrics from Smartlead API
+      emailReplyCount: lead.reply_count || 0,
+      emailOpenCount: lead.open_count || 0,
+      emailClickCount: lead.click_count || 0,
       createdAt: lead.created_at,
       updatedAt: lead.updated_at,
       customFields:
@@ -385,18 +517,22 @@ export class SmartleadProvider implements EmailCampaignProvider {
     };
   }
 
-  private mapLeadStatus(status: SmartleadLead["lead_status"]): string {
-    switch (status) {
+  private mapLeadStatus(status?: string): string {
+    if (!status) return "contacted";
+
+    switch (status.toUpperCase()) {
       case "STARTED":
+      case "SENT":
         return "contacted";
       case "INPROGRESS":
+      case "IN_PROGRESS":
         return "in_progress";
       case "COMPLETED":
         return "completed";
       case "BLOCKED":
         return "blocked";
       default:
-        return "new";
+        return "contacted";
     }
   }
 

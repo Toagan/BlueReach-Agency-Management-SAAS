@@ -64,11 +64,24 @@ export async function POST(
     console.log(
       `[SyncLeads] Starting sync for campaign ${campaignId} (${provider.providerType})`
     );
+    console.log(`[SyncLeads] Provider campaign ID: ${providerCampaignId}`);
 
     // Fetch ALL leads from provider
     const providerLeads = await provider.fetchAllLeads(providerCampaignId);
 
     console.log(`[SyncLeads] Fetched ${providerLeads.length} leads from provider`);
+
+    // DEBUG: Log sample of fetched leads for Smartlead debugging
+    if (provider.providerType === "smartlead" && providerLeads.length > 0) {
+      console.log(`[SyncLeads] Smartlead sample leads:`, providerLeads.slice(0, 3).map(l => ({
+        id: l.id,
+        email: l.email,
+        status: l.status,
+        interestStatus: l.interestStatus,
+        emailReplyCount: l.emailReplyCount,
+        emailOpenCount: l.emailOpenCount,
+      })));
+    }
 
     // Get existing leads for this campaign
     const { data: existingLeads } = await supabase
