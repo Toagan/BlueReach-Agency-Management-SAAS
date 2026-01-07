@@ -181,18 +181,20 @@ export async function GET(request: NextRequest) {
 
 async function handleStatsReport(request: NextRequest) {
   try {
-    // Optional: Verify cron secret for security
     const { searchParams } = new URL(request.url);
-    const cronSecret = searchParams.get("secret");
-    const expectedSecret = process.env.CRON_SECRET;
-
-    if (expectedSecret && cronSecret !== expectedSecret) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     // Allow forcing a specific client for testing
     const forceClientId = searchParams.get("clientId");
     const forceInterval = searchParams.get("interval");
+
+    // Verify cron secret for security (only required for scheduled cron jobs, not test requests)
+    // Test requests with clientId are allowed without secret (for UI "Send Now" button)
+    const cronSecret = searchParams.get("secret");
+    const expectedSecret = process.env.CRON_SECRET;
+
+    if (expectedSecret && cronSecret !== expectedSecret && !forceClientId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     // Custom recipients for testing (comma-separated)
     const customToParam = searchParams.get("to");
@@ -385,7 +387,7 @@ async function handleStatsReport(request: NextRequest) {
       reportsSent: successCount,
       totalRecipients,
       results,
-      version: "v5-debug",
+      version: "v6-allow-test-requests",
       clientsToProcess: clientsToReport,
     });
   } catch (error) {
