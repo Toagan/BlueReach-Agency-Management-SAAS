@@ -243,6 +243,23 @@ export interface EmailEvent {
   provider_event_id: string | null;
 }
 
+export interface CampaignAnalyticsDaily {
+  id: string;
+  campaign_id: string;
+  snapshot_date: string;
+  emails_sent: number;
+  emails_opened: number;
+  emails_opened_unique: number;
+  emails_clicked: number;
+  emails_clicked_unique: number;
+  emails_replied: number;
+  emails_replied_unique: number;
+  leads_contacted: number;
+  positive_replies: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface TeamMember {
   id: string;
   client_id: string;

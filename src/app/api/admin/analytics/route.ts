@@ -50,9 +50,9 @@ function getDateRange(period: string): { startDate: Date; endDate: Date } | null
   return { startDate, endDate };
 }
 
-// GET - Get analytics from LOCAL Supabase database only
-// This ensures stats are preserved even after deleting from Instantly
-// All data comes from synced leads table - the source of truth
+// GET - Get analytics from LOCAL Supabase database
+// For date-filtered periods, uses campaign_analytics_daily table (accurate daily snapshots)
+// For all-time, uses campaigns.cached_* fields (aggregated totals from Instantly API)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -61,92 +61,127 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabase();
     const dateRange = getDateRange(period);
 
-    // Build queries from LOCAL tables (not Instantly API)
-    // This is the source of truth for all historical data
-
-    // Total leads contacted (all synced leads)
-    let leadsQuery = supabase.from("leads").select("*", { count: "exact", head: true });
-
-    // Replies (leads who replied)
-    let repliesQuery = supabase
-      .from("leads")
-      .select("*", { count: "exact", head: true })
-      .eq("has_replied", true);
-
-    // Positive replies
-    let positiveQuery = supabase
-      .from("leads")
-      .select("*", { count: "exact", head: true })
-      .eq("is_positive_reply", true);
-
-    // Emails sent - aggregate from campaigns.cached_emails_sent
-    // This is populated during campaign sync from Instantly API and is the accurate source
-    // Note: lead_emails table is sparsely populated (only for replied/positive leads)
-    let emailsQuery = supabase
-      .from("campaigns")
-      .select("cached_emails_sent");
-
-    // Bounced emails - aggregate from campaigns.cached_emails_bounced
-    let bouncedQuery = supabase
-      .from("campaigns")
-      .select("cached_emails_bounced");
-
-    // Apply date filter if not all_time
-    if (dateRange) {
-      const startDateStr = dateRange.startDate.toISOString();
-      const endDateStr = dateRange.endDate.toISOString();
-
-      leadsQuery = leadsQuery.gte("created_at", startDateStr).lte("created_at", endDateStr);
-      repliesQuery = repliesQuery.gte("created_at", startDateStr).lte("created_at", endDateStr);
-      positiveQuery = positiveQuery.gte("created_at", startDateStr).lte("created_at", endDateStr);
-      // Note: campaigns don't have date-based cached stats, so we use leads count as fallback for date ranges
-    }
-
-    // Execute all queries in parallel
-    const [leadsResult, repliesResult, positiveResult, emailsResult, bouncedResult] = await Promise.all([
-      leadsQuery,
-      repliesQuery,
-      positiveQuery,
-      emailsQuery,
-      bouncedQuery,
-    ]);
-
-    const leadsContacted = leadsResult.count || 0;
-    const replies = repliesResult.count || 0;
-    const opportunities = positiveResult.count || 0;
-
-    // For date-filtered periods, use leads_contacted as proxy for emails sent
-    // (campaigns.cached_emails_sent is all-time total, not date-filterable)
-    // For all-time, use the accurate cached totals from Instantly API syncs
     let emailsSent = 0;
+    let emailsOpened = 0;
+    let emailsClicked = 0;
+    let replies = 0;
+    let opportunities = 0;
+    let leadsContacted = 0;
     let bounced = 0;
+    let dataSource = "campaigns_cached";
 
     if (dateRange) {
-      // Date-filtered: use leads count as proxy (each lead = at least 1 email)
-      emailsSent = leadsContacted;
-      // No date-based bounce data available
-      bounced = 0;
+      // DATE-FILTERED: Use campaign_analytics_daily table for accurate date-based metrics
+      const startDateStr = dateRange.startDate.toISOString().split("T")[0];
+      const endDateStr = dateRange.endDate.toISOString().split("T")[0];
+
+      const { data: dailyStats, error: dailyError } = await supabase
+        .from("campaign_analytics_daily")
+        .select("emails_sent, emails_opened, emails_clicked, emails_replied, positive_replies, leads_contacted")
+        .gte("snapshot_date", startDateStr)
+        .lte("snapshot_date", endDateStr);
+
+      if (dailyError) {
+        console.error("Error fetching daily analytics:", dailyError);
+        // Fall back to leads count if daily snapshots not available
+        const { count: leadsCount } = await supabase
+          .from("leads")
+          .select("*", { count: "exact", head: true })
+          .gte("created_at", dateRange.startDate.toISOString())
+          .lte("created_at", dateRange.endDate.toISOString());
+
+        const { count: repliesCount } = await supabase
+          .from("leads")
+          .select("*", { count: "exact", head: true })
+          .eq("has_replied", true)
+          .gte("created_at", dateRange.startDate.toISOString())
+          .lte("created_at", dateRange.endDate.toISOString());
+
+        const { count: positiveCount } = await supabase
+          .from("leads")
+          .select("*", { count: "exact", head: true })
+          .eq("is_positive_reply", true)
+          .gte("created_at", dateRange.startDate.toISOString())
+          .lte("created_at", dateRange.endDate.toISOString());
+
+        leadsContacted = leadsCount || 0;
+        emailsSent = leadsContacted; // Fallback proxy
+        replies = repliesCount || 0;
+        opportunities = positiveCount || 0;
+        dataSource = "leads_fallback";
+      } else if (dailyStats && dailyStats.length > 0) {
+        // Aggregate daily stats
+        emailsSent = dailyStats.reduce((sum, d) => sum + (d.emails_sent || 0), 0);
+        emailsOpened = dailyStats.reduce((sum, d) => sum + (d.emails_opened || 0), 0);
+        emailsClicked = dailyStats.reduce((sum, d) => sum + (d.emails_clicked || 0), 0);
+        replies = dailyStats.reduce((sum, d) => sum + (d.emails_replied || 0), 0);
+        opportunities = dailyStats.reduce((sum, d) => sum + (d.positive_replies || 0), 0);
+        leadsContacted = dailyStats.reduce((sum, d) => sum + (d.leads_contacted || 0), 0);
+        dataSource = "daily_snapshots";
+      } else {
+        // No daily data for this period - fall back to leads count
+        const { count: leadsCount } = await supabase
+          .from("leads")
+          .select("*", { count: "exact", head: true })
+          .gte("created_at", dateRange.startDate.toISOString())
+          .lte("created_at", dateRange.endDate.toISOString());
+
+        const { count: repliesCount } = await supabase
+          .from("leads")
+          .select("*", { count: "exact", head: true })
+          .eq("has_replied", true)
+          .gte("created_at", dateRange.startDate.toISOString())
+          .lte("created_at", dateRange.endDate.toISOString());
+
+        const { count: positiveCount } = await supabase
+          .from("leads")
+          .select("*", { count: "exact", head: true })
+          .eq("is_positive_reply", true)
+          .gte("created_at", dateRange.startDate.toISOString())
+          .lte("created_at", dateRange.endDate.toISOString());
+
+        leadsContacted = leadsCount || 0;
+        emailsSent = leadsContacted; // Fallback proxy
+        replies = repliesCount || 0;
+        opportunities = positiveCount || 0;
+        dataSource = "leads_fallback";
+      }
     } else {
-      // All-time: use accurate cached totals from campaigns
+      // ALL-TIME: Use campaigns.cached_* for accurate totals
+      const [leadsResult, repliesResult, positiveResult, emailsResult, bouncedResult] = await Promise.all([
+        supabase.from("leads").select("*", { count: "exact", head: true }),
+        supabase.from("leads").select("*", { count: "exact", head: true }).eq("has_replied", true),
+        supabase.from("leads").select("*", { count: "exact", head: true }).eq("is_positive_reply", true),
+        supabase.from("campaigns").select("cached_emails_sent, cached_emails_opened"),
+        supabase.from("campaigns").select("cached_emails_bounced"),
+      ]);
+
+      leadsContacted = leadsResult.count || 0;
+      replies = repliesResult.count || 0;
+      opportunities = positiveResult.count || 0;
+
       if (emailsResult.data) {
         emailsSent = emailsResult.data.reduce(
-          (sum: number, campaign: { cached_emails_sent: number | null }) =>
-            sum + (campaign.cached_emails_sent || 0),
+          (sum: number, c: { cached_emails_sent: number | null }) => sum + (c.cached_emails_sent || 0),
+          0
+        );
+        emailsOpened = emailsResult.data.reduce(
+          (sum: number, c: { cached_emails_opened: number | null }) => sum + (c.cached_emails_opened || 0),
           0
         );
       }
       if (bouncedResult.data) {
         bounced = bouncedResult.data.reduce(
-          (sum: number, campaign: { cached_emails_bounced: number | null }) =>
-            sum + (campaign.cached_emails_bounced || 0),
+          (sum: number, c: { cached_emails_bounced: number | null }) => sum + (c.cached_emails_bounced || 0),
           0
         );
       }
+      dataSource = "campaigns_cached";
     }
 
-    // Calculate reply rate based on leads contacted (not emails sent)
-    // This is more accurate as one lead may receive multiple emails
-    const replyRate = leadsContacted > 0 ? (replies / leadsContacted) * 100 : 0;
+    // Calculate reply rate based on emails sent (or leads contacted as fallback)
+    const baseForRate = emailsSent > 0 ? emailsSent : leadsContacted;
+    const replyRate = baseForRate > 0 ? (replies / baseForRate) * 100 : 0;
 
     return NextResponse.json({
       period,
@@ -154,10 +189,13 @@ export async function GET(request: NextRequest) {
       end_date: dateRange?.endDate.toISOString().split("T")[0] || null,
       leads_contacted: leadsContacted,
       emails_sent: emailsSent,
+      emails_opened: emailsOpened,
+      emails_clicked: emailsClicked,
       bounced,
       replies,
       opportunities,
       reply_rate: Number(replyRate.toFixed(2)),
+      data_source: dataSource,
     });
   } catch (error) {
     console.error("Error fetching analytics:", error);
