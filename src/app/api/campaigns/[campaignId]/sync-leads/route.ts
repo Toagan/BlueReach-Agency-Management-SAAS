@@ -67,19 +67,27 @@ export async function POST(
     console.log(`[SyncLeads] Provider campaign ID: ${providerCampaignId}`);
 
     // Fetch ALL leads from provider
-    const providerLeads = await provider.fetchAllLeads(providerCampaignId);
+    // For Smartlead, use fetchAllLeadsWithStats to get engagement data from statistics endpoint
+    let providerLeads;
+    if (provider.providerType === "smartlead" && 'fetchAllLeadsWithStats' in provider) {
+      console.log(`[SyncLeads] Using fetchAllLeadsWithStats for Smartlead to get engagement data`);
+      providerLeads = await (provider as { fetchAllLeadsWithStats: (id: string) => Promise<typeof providerLeads> }).fetchAllLeadsWithStats(providerCampaignId);
+    } else {
+      providerLeads = await provider.fetchAllLeads(providerCampaignId);
+    }
 
     console.log(`[SyncLeads] Fetched ${providerLeads.length} leads from provider`);
 
     // DEBUG: Log sample of fetched leads for Smartlead debugging
     if (provider.providerType === "smartlead" && providerLeads.length > 0) {
-      console.log(`[SyncLeads] Smartlead sample leads:`, providerLeads.slice(0, 3).map(l => ({
+      console.log(`[SyncLeads] Smartlead sample leads (with stats):`, providerLeads.slice(0, 3).map(l => ({
         id: l.id,
         email: l.email,
         status: l.status,
         interestStatus: l.interestStatus,
         emailReplyCount: l.emailReplyCount,
         emailOpenCount: l.emailOpenCount,
+        emailClickCount: l.emailClickCount,
       })));
     }
 

@@ -97,6 +97,34 @@ interface SmartleadLeadResponse {
   limit: number;
 }
 
+// Statistics endpoint returns per-lead engagement data
+// GET /campaigns/{campaign_id}/statistics
+interface SmartleadLeadStatistic {
+  lead_name: string;
+  lead_email: string;
+  lead_category: string | null;
+  sequence_number: number;
+  email_campaign_seq_id: number;
+  seq_variant_id: number;
+  email_subject: string;
+  email_message: string;
+  sent_time: string | null;
+  open_time: string | null;
+  click_time: string | null;
+  reply_time: string | null;
+  open_count: number;
+  click_count: number;
+  is_unsubscribed: boolean;
+  is_bounced: boolean;
+}
+
+interface SmartleadStatisticsResponse {
+  total_stats: string;
+  data: SmartleadLeadStatistic[];
+  offset: number;
+  limit: number;
+}
+
 interface SmartleadEmailMessage {
   id: number;
   campaign_id: number;
@@ -397,6 +425,145 @@ export class SmartleadProvider implements EmailCampaignProvider {
     );
 
     return allPositiveLeads;
+  }
+
+  // Fetch lead engagement statistics from /campaigns/{id}/statistics endpoint
+  // This returns open_count, click_count, reply_time, and lead_category per lead
+  async fetchLeadStatistics(campaignId: string): Promise<Map<string, {
+    category: string | null;
+    openCount: number;
+    clickCount: number;
+    hasReplied: boolean;
+    replyTime: string | null;
+  }>> {
+    console.log(`[SmartleadProvider] Fetching lead statistics for campaign ${campaignId}`);
+
+    const statsMap = new Map<string, {
+      category: string | null;
+      openCount: number;
+      clickCount: number;
+      hasReplied: boolean;
+      replyTime: string | null;
+    }>();
+
+    const limit = 100;
+    let offset = 0;
+    let hasMore = true;
+    let totalFetched = 0;
+
+    while (hasMore) {
+      try {
+        const response = await this.client.get<SmartleadStatisticsResponse>(
+          `/campaigns/${campaignId}/statistics`,
+          { limit, offset }
+        );
+
+        if (!response.data || response.data.length === 0) {
+          break;
+        }
+
+        // Aggregate stats per lead email (may have multiple entries per sequence)
+        for (const stat of response.data) {
+          const email = stat.lead_email?.toLowerCase();
+          if (!email) continue;
+
+          const existing = statsMap.get(email);
+          if (existing) {
+            // Merge: take max open/click counts, preserve category if set
+            existing.openCount = Math.max(existing.openCount, stat.open_count || 0);
+            existing.clickCount = Math.max(existing.clickCount, stat.click_count || 0);
+            if (!existing.hasReplied && stat.reply_time) {
+              existing.hasReplied = true;
+              existing.replyTime = stat.reply_time;
+            }
+            if (!existing.category && stat.lead_category) {
+              existing.category = stat.lead_category;
+            }
+          } else {
+            statsMap.set(email, {
+              category: stat.lead_category,
+              openCount: stat.open_count || 0,
+              clickCount: stat.click_count || 0,
+              hasReplied: !!stat.reply_time,
+              replyTime: stat.reply_time,
+            });
+          }
+        }
+
+        totalFetched += response.data.length;
+        offset += limit;
+        hasMore = response.data.length === limit;
+
+        // Progress logging
+        if (totalFetched % 500 === 0) {
+          console.log(`[SmartleadProvider] Fetched ${totalFetched} statistics records...`);
+        }
+      } catch (error) {
+        console.error(`[SmartleadProvider] Error fetching statistics at offset ${offset}:`, error);
+        break;
+      }
+    }
+
+    console.log(`[SmartleadProvider] Fetched statistics for ${statsMap.size} unique leads`);
+    return statsMap;
+  }
+
+  // Fetch all leads with engagement statistics merged in
+  async fetchAllLeadsWithStats(campaignId: string): Promise<ProviderLead[]> {
+    console.log(`[SmartleadProvider] Fetching all leads with statistics for campaign ${campaignId}`);
+
+    // Fetch leads and statistics in parallel
+    const [leads, statsMap] = await Promise.all([
+      this.fetchAllLeads(campaignId),
+      this.fetchLeadStatistics(campaignId),
+    ]);
+
+    // Merge statistics into leads
+    let enrichedCount = 0;
+    for (const lead of leads) {
+      const email = lead.email?.toLowerCase();
+      if (email && statsMap.has(email)) {
+        const stats = statsMap.get(email)!;
+        lead.emailOpenCount = stats.openCount;
+        lead.emailClickCount = stats.clickCount;
+
+        // Set reply count based on whether they replied
+        if (stats.hasReplied) {
+          lead.emailReplyCount = Math.max(lead.emailReplyCount || 0, 1);
+        }
+
+        // Map category to interest status
+        if (stats.category) {
+          lead.interestStatus = this.mapLeadCategoryString(stats.category);
+        }
+
+        enrichedCount++;
+      }
+    }
+
+    console.log(`[SmartleadProvider] Enriched ${enrichedCount}/${leads.length} leads with statistics`);
+    return leads;
+  }
+
+  // Map category string to interest status
+  private mapLeadCategoryString(category: string): ProviderLead["interestStatus"] {
+    switch (category) {
+      case "Interested":
+        return "interested";
+      case "Meeting Request":
+        return "meeting_booked";
+      case "Not Interested":
+      case "Do Not Contact":
+        return "not_interested";
+      case "Out Of Office":
+        return "out_of_office";
+      case "Wrong Person":
+        return "wrong_person";
+      case "Information Request":
+        return "neutral";
+      default:
+        return undefined;
+    }
   }
 
   async createLead(
