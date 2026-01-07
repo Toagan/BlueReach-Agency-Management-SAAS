@@ -698,25 +698,22 @@ export class SmartleadProvider implements EmailCampaignProvider {
 
   async fetchEmailsForLead(
     campaignId: string,
-    leadEmail: string
+    leadEmail: string,
+    leadId?: string // Optional: pass lead ID directly if available
   ): Promise<ProviderEmail[]> {
     try {
-      // First find the lead
-      const leadResponse = await this.client.get<SmartleadLeadResponse>(
-        `/campaigns/${campaignId}/leads`,
-        { email: leadEmail }
-      );
+      let smartleadLeadId: number | null = leadId ? parseInt(leadId) : null;
 
-      if (leadResponse.data.length === 0) {
+      // If no lead ID provided, skip for Smartlead
+      // Smartlead API doesn't support filtering by email, so searching would be too slow
+      if (smartleadLeadId === null || isNaN(smartleadLeadId)) {
+        console.log(`[SmartleadProvider] Skipping email fetch for ${leadEmail} - no lead ID available`);
         return [];
       }
 
-      // Handle nested structure: response.data[0].lead.id
-      const leadId = leadResponse.data[0].lead.id;
-
       // Fetch messages for this lead
       const messages = await this.client.get<SmartleadEmailMessage[]>(
-        `/campaigns/${campaignId}/leads/${leadId}/messages`
+        `/campaigns/${campaignId}/leads/${smartleadLeadId}/messages`
       );
 
       return messages.map((msg) => ({

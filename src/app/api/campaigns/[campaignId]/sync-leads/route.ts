@@ -530,8 +530,11 @@ export async function POST(
             await Promise.all(
               batch.map(async (lead) => {
                 try {
+                  // Get lead ID for provider (Smartlead needs this, Instantly can look up by email)
+                  const providerLeadId = lead.provider_lead_id || lead.instantly_lead_id;
+
                   // Fetch emails from provider
-                  const emails = await (provider as { fetchEmailsForLead: (campaignId: string, email: string) => Promise<Array<{
+                  const emails = await (provider as { fetchEmailsForLead: (campaignId: string, email: string, leadId?: string) => Promise<Array<{
                     id?: string;
                     threadId?: string;
                     isReply?: boolean;
@@ -541,7 +544,7 @@ export async function POST(
                     bodyText?: string;
                     bodyHtml?: string;
                     sentAt?: string;
-                  }>> }).fetchEmailsForLead(providerCampaignId, lead.email);
+                  }>> }).fetchEmailsForLead(providerCampaignId, lead.email, providerLeadId || undefined);
 
                   if (!emails || emails.length === 0) {
                     return;
