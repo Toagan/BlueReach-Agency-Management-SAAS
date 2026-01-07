@@ -97,61 +97,73 @@ async function getClientStats(
   supabase: ReturnType<typeof getSupabase>,
   clientId: string,
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  isAllTime: boolean = false
 ): Promise<{ emailsSent: number; replies: number; positiveReplies: number; replyRate: number }> {
   const startDateStr = startDate.toISOString();
   const endDateStr = endDate.toISOString();
 
-  // Get all campaigns for this client
-  const { data: campaigns } = await supabase
-    .from("campaigns")
-    .select("id")
-    .eq("client_id", clientId);
+  let emailsSent = 0;
+  let replies = 0;
+  let positiveReplies = 0;
 
-  const campaignIds = campaigns?.map((c) => c.id) || [];
+  if (isAllTime) {
+    // For all-time stats, count ALL leads for this client (no date filter)
+    const { count: totalLeads } = await supabase
+      .from("leads")
+      .select("*", { count: "exact", head: true })
+      .eq("client_id", clientId);
 
-  if (campaignIds.length === 0) {
-    return { emailsSent: 0, replies: 0, positiveReplies: 0, replyRate: 0 };
+    // Count ALL replies for this client
+    const { count: totalReplies } = await supabase
+      .from("leads")
+      .select("*", { count: "exact", head: true })
+      .eq("client_id", clientId)
+      .eq("has_replied", true);
+
+    // Count ALL positive replies for this client
+    const { count: totalPositive } = await supabase
+      .from("leads")
+      .select("*", { count: "exact", head: true })
+      .eq("client_id", clientId)
+      .eq("is_positive_reply", true);
+
+    emailsSent = totalLeads || 0;
+    replies = totalReplies || 0;
+    positiveReplies = totalPositive || 0;
+  } else {
+    // For date-range stats, use date filters
+    // Count leads created in the date range
+    const { count: leadsCount } = await supabase
+      .from("leads")
+      .select("*", { count: "exact", head: true })
+      .eq("client_id", clientId)
+      .gte("created_at", startDateStr)
+      .lte("created_at", endDateStr);
+
+    // Count replies in the date range (based on when they replied)
+    const { count: repliesCount } = await supabase
+      .from("leads")
+      .select("*", { count: "exact", head: true })
+      .eq("client_id", clientId)
+      .eq("has_replied", true)
+      .gte("responded_at", startDateStr)
+      .lte("responded_at", endDateStr);
+
+    // Count positive replies in the date range
+    const { count: positiveCount } = await supabase
+      .from("leads")
+      .select("*", { count: "exact", head: true })
+      .eq("client_id", clientId)
+      .eq("is_positive_reply", true)
+      .gte("responded_at", startDateStr)
+      .lte("responded_at", endDateStr);
+
+    emailsSent = leadsCount || 0;
+    replies = repliesCount || 0;
+    positiveReplies = positiveCount || 0;
   }
 
-  // Count leads created in the date range for this client
-  const { count: leadsCount } = await supabase
-    .from("leads")
-    .select("*", { count: "exact", head: true })
-    .eq("client_id", clientId)
-    .gte("created_at", startDateStr)
-    .lte("created_at", endDateStr);
-
-  // Count replies in the date range
-  const { count: repliesCount } = await supabase
-    .from("leads")
-    .select("*", { count: "exact", head: true })
-    .eq("client_id", clientId)
-    .eq("has_replied", true)
-    .gte("updated_at", startDateStr)
-    .lte("updated_at", endDateStr);
-
-  // Count positive replies in the date range
-  const { count: positiveCount } = await supabase
-    .from("leads")
-    .select("*", { count: "exact", head: true })
-    .eq("client_id", clientId)
-    .eq("is_positive_reply", true)
-    .gte("updated_at", startDateStr)
-    .lte("updated_at", endDateStr);
-
-  // Count outbound emails in the date range
-  const { count: emailsCount } = await supabase
-    .from("lead_emails")
-    .select("*", { count: "exact", head: true })
-    .in("campaign_id", campaignIds)
-    .eq("direction", "outbound")
-    .gte("sent_at", startDateStr)
-    .lte("sent_at", endDateStr);
-
-  const emailsSent = emailsCount || leadsCount || 0;
-  const replies = repliesCount || 0;
-  const positiveReplies = positiveCount || 0;
   const replyRate = emailsSent > 0 ? (replies / emailsSent) * 100 : 0;
 
   return { emailsSent, replies, positiveReplies, replyRate };
@@ -262,12 +274,15 @@ async function handleStatsReport(request: NextRequest) {
 
         // Get date ranges
         const { startDate, endDate, previousStartDate, previousEndDate } = getDateRange(interval);
+        const isAllTime = interval === "all-time";
 
         // Get current period stats
-        const stats = await getClientStats(supabase, clientId, startDate, endDate);
+        const stats = await getClientStats(supabase, clientId, startDate, endDate, isAllTime);
 
-        // Get previous period stats for comparison
-        const previousStats = await getClientStats(supabase, clientId, previousStartDate, previousEndDate);
+        // Get previous period stats for comparison (skip for all-time)
+        const previousStats = isAllTime
+          ? { emailsSent: 0, replies: 0, positiveReplies: 0, replyRate: 0 }
+          : await getClientStats(supabase, clientId, previousStartDate, previousEndDate, false);
 
         // Format period label
         const periodLabels: Record<string, string> = {
