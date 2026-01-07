@@ -220,8 +220,26 @@ async function handleStatsReport(request: NextRequest) {
 
     const clientsToReport: Array<{ clientId: string; interval: string }> = [];
 
+    // Helper to check if we should send based on interval
+    const shouldSendToday = (interval: string): boolean => {
+      const now = new Date();
+      const dayOfWeek = now.getUTCDay(); // 0 = Sunday, 1 = Monday, ...
+      const dayOfMonth = now.getUTCDate();
+
+      switch (interval) {
+        case "daily":
+          return true; // Send every day
+        case "weekly":
+          return dayOfWeek === 1; // Send on Mondays
+        case "monthly":
+          return dayOfMonth === 1; // Send on 1st of month
+        default:
+          return false;
+      }
+    };
+
     if (forceClientId) {
-      // Force send for a specific client
+      // Force send for a specific client (bypass day check)
       clientsToReport.push({
         clientId: forceClientId,
         interval: forceInterval || "weekly",
@@ -231,20 +249,26 @@ async function handleStatsReport(request: NextRequest) {
       for (const setting of settings) {
         const match = setting.key.match(/^client_(.+)_stats_report_interval$/);
         if (match && setting.value && setting.value !== "disabled") {
-          clientsToReport.push({
-            clientId: match[1],
-            interval: setting.value,
-          });
+          // Only add if today is the right day for this interval
+          if (shouldSendToday(setting.value)) {
+            clientsToReport.push({
+              clientId: match[1],
+              interval: setting.value,
+            });
+          }
         }
       }
     }
 
     if (clientsToReport.length === 0) {
-      console.log("[Stats Report] No clients have stats reporting enabled");
+      const now = new Date();
+      const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][now.getUTCDay()];
+      console.log(`[Stats Report] No reports to send today (${dayName}, day ${now.getUTCDate()} of month)`);
       return NextResponse.json({
         success: true,
-        message: "No clients have stats reporting enabled",
+        message: `No reports scheduled for today (${dayName})`,
         reportsSent: 0,
+        note: "Daily reports send every day, weekly on Mondays, monthly on the 1st",
       });
     }
 
@@ -354,7 +378,7 @@ async function handleStatsReport(request: NextRequest) {
       reportsSent: successCount,
       totalRecipients,
       results,
-      version: "v2-alltime-fix",
+      version: "v3-cron-scheduling",
     });
   } catch (error) {
     console.error("[Stats Report] Error:", error);
