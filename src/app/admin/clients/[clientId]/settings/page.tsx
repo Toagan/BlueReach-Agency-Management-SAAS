@@ -7,7 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users, Bell } from "lucide-react";
+import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users, Bell, BarChart3, Send } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
@@ -96,6 +103,12 @@ export default function ClientSettingsPage() {
   const [loadingNotifications, setLoadingNotifications] = useState(true);
   const [togglingUser, setTogglingUser] = useState<string | null>(null);
 
+  // Stats report settings
+  const [statsReportInterval, setStatsReportInterval] = useState("disabled");
+  const [loadingStatsSettings, setLoadingStatsSettings] = useState(true);
+  const [savingStatsSettings, setSavingStatsSettings] = useState(false);
+  const [sendingTestReport, setSendingTestReport] = useState(false);
+
   const fetchNotificationPreferences = async () => {
     setLoadingNotifications(true);
     try {
@@ -132,10 +145,75 @@ export default function ClientSettingsPage() {
     }
   };
 
+  const fetchStatsSettings = async () => {
+    setLoadingStatsSettings(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/stats-settings`);
+      if (res.ok) {
+        const data = await res.json();
+        setStatsReportInterval(data.interval || "disabled");
+      }
+    } catch (error) {
+      console.error("Error fetching stats settings:", error);
+    } finally {
+      setLoadingStatsSettings(false);
+    }
+  };
+
+  const saveStatsInterval = async (interval: string) => {
+    setSavingStatsSettings(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/stats-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interval }),
+      });
+
+      if (res.ok) {
+        setStatsReportInterval(interval);
+        setSuccess(interval === "disabled" ? "Stats reports disabled" : `Stats reports set to ${interval}`);
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        const data = await res.json();
+        setError(data.error || "Failed to save stats settings");
+      }
+    } catch (error) {
+      console.error("Error saving stats settings:", error);
+      setError("Failed to save stats settings");
+    } finally {
+      setSavingStatsSettings(false);
+    }
+  };
+
+  const sendTestReport = async () => {
+    setSendingTestReport(true);
+    try {
+      const res = await fetch(`/api/cron/stats-report?clientId=${clientId}&interval=${statsReportInterval === "disabled" ? "weekly" : statsReportInterval}`);
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        const recipientCount = data.totalRecipients || 0;
+        setSuccess(`Test report sent to ${recipientCount} recipient${recipientCount !== 1 ? "s" : ""}`);
+      } else {
+        setError(data.error || "Failed to send test report");
+      }
+    } catch (error) {
+      console.error("Error sending test report:", error);
+      setError("Failed to send test report");
+    } finally {
+      setSendingTestReport(false);
+      setTimeout(() => {
+        setSuccess(null);
+        setError(null);
+      }, 5000);
+    }
+  };
+
   useEffect(() => {
     fetchClient();
     fetchTeamMembers();
     fetchNotificationPreferences();
+    fetchStatsSettings();
   }, [clientId]);
 
   const fetchTeamMembers = async () => {
@@ -880,6 +958,77 @@ export default function ClientSettingsPage() {
                 Enabled users will receive an email when a positive reply is detected for {client.name}.
               </p>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Stats Report Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            Stats Reports
+          </CardTitle>
+          <CardDescription>
+            Automatically send periodic stats reports to the notification recipients above
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {loadingStatsSettings ? (
+            <div className="flex items-center justify-center py-4">
+              <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="statsInterval">Report Frequency</Label>
+                <Select
+                  value={statsReportInterval}
+                  onValueChange={saveStatsInterval}
+                  disabled={savingStatsSettings}
+                >
+                  <SelectTrigger id="statsInterval" className="w-full">
+                    <SelectValue placeholder="Select frequency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="disabled">Disabled</SelectItem>
+                    <SelectItem value="daily">Daily</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Reports include emails sent, total replies, and positive replies for the selected period.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t">
+                <div>
+                  <p className="text-sm font-medium">Send Test Report</p>
+                  <p className="text-xs text-muted-foreground">
+                    Send a stats report now to all notification recipients
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={sendTestReport}
+                  disabled={sendingTestReport || notificationUsers.filter(u => u.notificationsEnabled).length === 0}
+                >
+                  {sendingTestReport ? (
+                    <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  Send Now
+                </Button>
+              </div>
+              {notificationUsers.filter(u => u.notificationsEnabled).length === 0 && (
+                <p className="text-xs text-amber-600">
+                  Enable at least one notification recipient above to receive stats reports.
+                </p>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
