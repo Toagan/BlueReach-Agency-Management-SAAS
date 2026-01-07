@@ -294,7 +294,7 @@ async function handleStatsReport(request: NextRequest) {
         const periodLabel = periodLabels[interval] || "Weekly";
         const periodRange = formatDateRange(startDate, endDate);
 
-        console.log(`[Stats Report] Sending ${periodLabel} report for ${client.name}: ${stats.emailsSent} sent, ${stats.replies} replies, ${stats.positiveReplies} positive`);
+        console.log(`[Stats Report v2] Sending ${periodLabel} report for ${client.name}: ${stats.emailsSent} leads contacted, ${stats.replies} replies, ${stats.positiveReplies} positive (isAllTime=${isAllTime})`);
 
         // Send the report
         const result = await sendStatsReport({
@@ -354,6 +354,7 @@ async function handleStatsReport(request: NextRequest) {
       reportsSent: successCount,
       totalRecipients,
       results,
+      version: "v2-alltime-fix",
     });
   } catch (error) {
     console.error("[Stats Report] Error:", error);
