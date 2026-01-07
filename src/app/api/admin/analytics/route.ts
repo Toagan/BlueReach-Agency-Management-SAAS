@@ -115,31 +115,33 @@ export async function GET(request: NextRequest) {
     const replies = repliesResult.count || 0;
     const opportunities = positiveResult.count || 0;
 
-    // Sum up cached_emails_sent from all campaigns
-    // This is the accurate email count from Instantly API syncs
+    // For date-filtered periods, use leads_contacted as proxy for emails sent
+    // (campaigns.cached_emails_sent is all-time total, not date-filterable)
+    // For all-time, use the accurate cached totals from Instantly API syncs
     let emailsSent = 0;
-    if (emailsResult.data) {
-      emailsSent = emailsResult.data.reduce(
-        (sum: number, campaign: { cached_emails_sent: number | null }) =>
-          sum + (campaign.cached_emails_sent || 0),
-        0
-      );
-    }
-
-    // Sum up cached_emails_bounced from all campaigns
     let bounced = 0;
-    if (bouncedResult.data) {
-      bounced = bouncedResult.data.reduce(
-        (sum: number, campaign: { cached_emails_bounced: number | null }) =>
-          sum + (campaign.cached_emails_bounced || 0),
-        0
-      );
-    }
 
-    // For date-filtered periods, fall back to leads count if no cached data
-    // (campaigns table doesn't have date-based analytics)
-    if (dateRange && emailsSent === 0) {
+    if (dateRange) {
+      // Date-filtered: use leads count as proxy (each lead = at least 1 email)
       emailsSent = leadsContacted;
+      // No date-based bounce data available
+      bounced = 0;
+    } else {
+      // All-time: use accurate cached totals from campaigns
+      if (emailsResult.data) {
+        emailsSent = emailsResult.data.reduce(
+          (sum: number, campaign: { cached_emails_sent: number | null }) =>
+            sum + (campaign.cached_emails_sent || 0),
+          0
+        );
+      }
+      if (bouncedResult.data) {
+        bounced = bouncedResult.data.reduce(
+          (sum: number, campaign: { cached_emails_bounced: number | null }) =>
+            sum + (campaign.cached_emails_bounced || 0),
+          0
+        );
+      }
     }
 
     // Calculate reply rate based on leads contacted (not emails sent)
