@@ -285,14 +285,21 @@ async function handleStatsReport(request: NextRequest) {
     for (const { clientId, interval } of clientsToReport) {
       try {
         // Get client info
-        const { data: client } = await supabase
+        const { data: client, error: clientError } = await supabase
           .from("clients")
           .select("id, name")
           .eq("id", clientId)
           .single();
 
-        if (!client) {
-          console.log(`[Stats Report] Client ${clientId} not found`);
+        if (clientError || !client) {
+          console.log(`[Stats Report] Client ${clientId} not found:`, clientError?.message);
+          results.push({
+            clientId,
+            clientName: "NOT_FOUND",
+            success: false,
+            sentTo: [],
+            error: clientError?.message || "Client not found in database",
+          });
           continue;
         }
 
@@ -378,7 +385,8 @@ async function handleStatsReport(request: NextRequest) {
       reportsSent: successCount,
       totalRecipients,
       results,
-      version: "v4-improved-template",
+      version: "v5-debug",
+      clientsToProcess: clientsToReport,
     });
   } catch (error) {
     console.error("[Stats Report] Error:", error);
