@@ -387,8 +387,7 @@ async function handleStatsReport(request: NextRequest) {
       reportsSent: successCount,
       totalRecipients,
       results,
-      version: "v6-allow-test-requests",
-      clientsToProcess: clientsToReport,
+      version: "v6",
     });
   } catch (error) {
     console.error("[Stats Report] Error:", error);
