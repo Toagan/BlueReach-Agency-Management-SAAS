@@ -126,6 +126,12 @@ export async function POST(
     const leadsToUpdate: Array<{ email: string; data: Record<string, unknown> }> = [];
 
     for (const lead of providerLeads) {
+      // Skip leads without valid email
+      if (!lead.email) {
+        console.warn(`[SyncLeads] Skipping lead with no email:`, { id: lead.id, firstName: lead.firstName });
+        continue;
+      }
+
       const emailLower = lead.email.toLowerCase().trim();
       const providerLeadId = lead.id;
 
@@ -360,6 +366,13 @@ export async function POST(
 
         for (const lead of positiveLeads) {
           try {
+            // Skip leads without valid email
+            if (!lead.email) {
+              console.warn(`[SyncLeads] Skipping positive lead with no email:`, { id: lead.id });
+              positiveLeadsSkipped++;
+              continue;
+            }
+
             const emailLower = lead.email.toLowerCase().trim();
             const providerLeadId = lead.id;
 

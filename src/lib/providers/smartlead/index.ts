@@ -81,8 +81,17 @@ interface SmartleadLead {
   [key: string]: unknown;
 }
 
+// Smartlead API returns leads in a nested structure:
+// { data: [{ campaign_lead_map_id, status, created_at, lead: {...} }] }
+interface SmartleadLeadWrapper {
+  campaign_lead_map_id?: number;
+  status?: string;
+  created_at?: string;
+  lead: SmartleadLead;
+}
+
 interface SmartleadLeadResponse {
-  data: SmartleadLead[];
+  data: SmartleadLeadWrapper[];
   total_leads: number;
   offset: number;
   limit: number;
@@ -230,7 +239,16 @@ export class SmartleadProvider implements EmailCampaignProvider {
       { limit, offset }
     );
 
-    return response.data.map((lead) => this.mapLead(lead));
+    // Handle nested structure: { data: [{ lead: {...} }] }
+    return response.data.map((wrapper) => {
+      // Merge wrapper status into lead data for proper status mapping
+      const lead = {
+        ...wrapper.lead,
+        status: wrapper.status || wrapper.lead.status,
+        campaign_lead_map_id: wrapper.campaign_lead_map_id,
+      };
+      return this.mapLead(lead);
+    });
   }
 
   async fetchAllLeads(campaignId: string): Promise<ProviderLead[]> {
@@ -249,22 +267,29 @@ export class SmartleadProvider implements EmailCampaignProvider {
 
       // DEBUG: Log first response to see structure
       if (offset === 0) {
+        const firstWrapper = response.data?.[0];
+        const firstLead = firstWrapper?.lead;
         console.log(`[SmartleadProvider] API Response structure:`, {
           total_leads: response.total_leads,
           offset: response.offset,
           limit: response.limit,
           data_length: response.data?.length || 0,
-          first_lead_sample: response.data?.[0] ? {
-            id: response.data[0].id,
-            email: response.data[0].email,
-            status: response.data[0].status,
-            lead_status: response.data[0].lead_status,
-            category: response.data[0].category,
-            is_interested: response.data[0].is_interested,
-            reply_count: response.data[0].reply_count,
-            open_count: response.data[0].open_count,
-            click_count: response.data[0].click_count,
+          first_wrapper_sample: firstWrapper ? {
+            campaign_lead_map_id: firstWrapper.campaign_lead_map_id,
+            status: firstWrapper.status,
+            created_at: firstWrapper.created_at,
+            has_lead: !!firstWrapper.lead,
           } : "NO DATA",
+          first_lead_sample: firstLead ? {
+            id: firstLead.id,
+            email: firstLead.email,
+            status: firstLead.status,
+            category: firstLead.category,
+            is_interested: firstLead.is_interested,
+            reply_count: firstLead.reply_count,
+            open_count: firstLead.open_count,
+            click_count: firstLead.click_count,
+          } : "NO LEAD DATA",
         });
       }
 
@@ -274,7 +299,16 @@ export class SmartleadProvider implements EmailCampaignProvider {
         break;
       }
 
-      const leads = response.data.map((lead) => this.mapLead(lead));
+      // Handle nested structure: { data: [{ lead: {...} }] }
+      const leads = response.data.map((wrapper) => {
+        // Merge wrapper status into lead data for proper status mapping
+        const lead = {
+          ...wrapper.lead,
+          status: wrapper.status || wrapper.lead?.status,
+          campaign_lead_map_id: wrapper.campaign_lead_map_id,
+        };
+        return this.mapLead(lead);
+      });
       allLeads.push(...leads);
 
       offset += limit;
@@ -314,11 +348,18 @@ export class SmartleadProvider implements EmailCampaignProvider {
         { limit, offset }
       );
 
-      const leads = response.data || [];
-      totalScanned += leads.length;
+      const wrappers = response.data || [];
+      totalScanned += wrappers.length;
 
       // Filter for positive leads based on is_interested OR category
-      for (const lead of leads) {
+      // Handle nested structure: { data: [{ lead: {...} }] }
+      for (const wrapper of wrappers) {
+        const lead = {
+          ...wrapper.lead,
+          status: wrapper.status || wrapper.lead?.status,
+          campaign_lead_map_id: wrapper.campaign_lead_map_id,
+        };
+
         const isPositiveByFlag = lead.is_interested === true;
         const isPositiveByCategory = lead.category && POSITIVE_CATEGORIES.includes(lead.category);
         const hasReplied = (lead.reply_count || 0) > 0;
@@ -340,7 +381,7 @@ export class SmartleadProvider implements EmailCampaignProvider {
       }
 
       offset += limit;
-      hasMore = leads.length === limit && offset < response.total_leads;
+      hasMore = wrappers.length === limit && offset < response.total_leads;
 
       // Progress logging every 1000 leads
       if (totalScanned % 1000 === 0) {
@@ -444,7 +485,8 @@ export class SmartleadProvider implements EmailCampaignProvider {
       throw new Error(`Lead not found: ${email}`);
     }
 
-    const leadId = response.data[0].id;
+    // Handle nested structure: response.data[0].lead.id
+    const leadId = response.data[0].lead.id;
 
     // Update the lead category
     await this.client.post(`/campaigns/${campaignId}/leads/${leadId}/update-category`, {
@@ -453,6 +495,16 @@ export class SmartleadProvider implements EmailCampaignProvider {
   }
 
   private mapLead(lead: SmartleadLead): ProviderLead {
+    // Safety check for undefined lead
+    if (!lead) {
+      console.warn(`[SmartleadProvider] mapLead called with undefined lead`);
+      return {
+        id: "unknown",
+        email: "",
+        status: "contacted",
+      };
+    }
+
     // Extract custom fields (any field not in standard fields)
     const standardFields = [
       "id",
@@ -659,7 +711,8 @@ export class SmartleadProvider implements EmailCampaignProvider {
         return [];
       }
 
-      const leadId = leadResponse.data[0].id;
+      // Handle nested structure: response.data[0].lead.id
+      const leadId = leadResponse.data[0].lead.id;
 
       // Fetch messages for this lead
       const messages = await this.client.get<SmartleadEmailMessage[]>(
