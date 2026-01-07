@@ -378,7 +378,7 @@ async function handleStatsReport(request: NextRequest) {
       reportsSent: successCount,
       totalRecipients,
       results,
-      version: "v3-cron-scheduling",
+      version: "v4-improved-template",
     });
   } catch (error) {
     console.error("[Stats Report] Error:", error);
