@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabase();
     const dateRange = getDateRange(period);
 
-    // Build queries from LOCAL leads table (not Instantly API)
+    // Build queries from LOCAL tables (not Instantly API)
     // This is the source of truth for all historical data
 
     // Total leads contacted (all synced leads)
@@ -79,11 +79,17 @@ export async function GET(request: NextRequest) {
       .select("*", { count: "exact", head: true })
       .eq("is_positive_reply", true);
 
-    // Emails sent - count from lead_emails table for accuracy
+    // Emails sent - aggregate from campaigns.cached_emails_sent
+    // This is populated during campaign sync from Instantly API and is the accurate source
+    // Note: lead_emails table is sparsely populated (only for replied/positive leads)
     let emailsQuery = supabase
-      .from("lead_emails")
-      .select("*", { count: "exact", head: true })
-      .eq("direction", "outbound");
+      .from("campaigns")
+      .select("cached_emails_sent");
+
+    // Bounced emails - aggregate from campaigns.cached_emails_bounced
+    let bouncedQuery = supabase
+      .from("campaigns")
+      .select("cached_emails_bounced");
 
     // Apply date filter if not all_time
     if (dateRange) {
@@ -93,26 +99,51 @@ export async function GET(request: NextRequest) {
       leadsQuery = leadsQuery.gte("created_at", startDateStr).lte("created_at", endDateStr);
       repliesQuery = repliesQuery.gte("created_at", startDateStr).lte("created_at", endDateStr);
       positiveQuery = positiveQuery.gte("created_at", startDateStr).lte("created_at", endDateStr);
-      emailsQuery = emailsQuery.gte("sent_at", startDateStr).lte("sent_at", endDateStr);
+      // Note: campaigns don't have date-based cached stats, so we use leads count as fallback for date ranges
     }
 
     // Execute all queries in parallel
-    const [leadsResult, repliesResult, positiveResult, emailsResult] = await Promise.all([
+    const [leadsResult, repliesResult, positiveResult, emailsResult, bouncedResult] = await Promise.all([
       leadsQuery,
       repliesQuery,
       positiveQuery,
       emailsQuery,
+      bouncedQuery,
     ]);
 
     const leadsContacted = leadsResult.count || 0;
     const replies = repliesResult.count || 0;
     const opportunities = positiveResult.count || 0;
 
-    // Use email count from lead_emails if available, otherwise estimate from leads
-    // (assumes each lead received at least 1 email)
-    const emailsSent = emailsResult.count || leadsContacted;
+    // Sum up cached_emails_sent from all campaigns
+    // This is the accurate email count from Instantly API syncs
+    let emailsSent = 0;
+    if (emailsResult.data) {
+      emailsSent = emailsResult.data.reduce(
+        (sum: number, campaign: { cached_emails_sent: number | null }) =>
+          sum + (campaign.cached_emails_sent || 0),
+        0
+      );
+    }
 
-    // Calculate reply rate
+    // Sum up cached_emails_bounced from all campaigns
+    let bounced = 0;
+    if (bouncedResult.data) {
+      bounced = bouncedResult.data.reduce(
+        (sum: number, campaign: { cached_emails_bounced: number | null }) =>
+          sum + (campaign.cached_emails_bounced || 0),
+        0
+      );
+    }
+
+    // For date-filtered periods, fall back to leads count if no cached data
+    // (campaigns table doesn't have date-based analytics)
+    if (dateRange && emailsSent === 0) {
+      emailsSent = leadsContacted;
+    }
+
+    // Calculate reply rate based on leads contacted (not emails sent)
+    // This is more accurate as one lead may receive multiple emails
     const replyRate = leadsContacted > 0 ? (replies / leadsContacted) * 100 : 0;
 
     return NextResponse.json({
@@ -121,6 +152,7 @@ export async function GET(request: NextRequest) {
       end_date: dateRange?.endDate.toISOString().split("T")[0] || null,
       leads_contacted: leadsContacted,
       emails_sent: emailsSent,
+      bounced,
       replies,
       opportunities,
       reply_rate: Number(replyRate.toFixed(2)),
