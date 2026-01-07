@@ -24,9 +24,8 @@ interface CampaignAnalyticsResponse {
   data: InstantlyCampaignAnalytics[];
 }
 
-interface DailyAnalyticsResponse {
-  data: InstantlyCampaignDailyAnalytics[];
-}
+// API returns { daily: [...] } wrapper or direct array
+type DailyAnalyticsResponse = { daily: InstantlyCampaignDailyAnalytics[] } | InstantlyCampaignDailyAnalytics[];
 
 export async function getOverviewAnalytics(): Promise<AnalyticsOverviewResponse> {
   const client = getInstantlyClient();
@@ -50,7 +49,14 @@ export async function getDailyAnalytics(params?: {
 }): Promise<InstantlyCampaignDailyAnalytics[]> {
   const client = getInstantlyClient();
   const response = await client.get<DailyAnalyticsResponse>("/campaigns/analytics/daily", params);
-  return response.data || [];
+  // API returns { daily: [...] } wrapper or direct array
+  if (Array.isArray(response)) {
+    return response;
+  }
+  if (response && typeof response === 'object' && 'daily' in response) {
+    return response.daily || [];
+  }
+  return [];
 }
 
 // Combined analytics for dashboard
