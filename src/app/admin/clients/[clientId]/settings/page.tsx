@@ -838,12 +838,15 @@ export default function ClientSettingsPage() {
                         variant="ghost"
                         onClick={() => handleRemoveUser(cu.user_id)}
                         disabled={removingUserId === cu.user_id}
-                        className="text-muted-foreground hover:text-red-600"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
                       >
                         {removingUserId === cu.user_id ? (
                           <RefreshCw className="h-4 w-4 animate-spin" />
                         ) : (
-                          <X className="h-4 w-4" />
+                          <>
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Remove
+                          </>
                         )}
                       </Button>
                     </div>
