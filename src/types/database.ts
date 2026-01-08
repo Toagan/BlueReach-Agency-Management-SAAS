@@ -70,6 +70,8 @@ export interface Lead {
   personalization: string | null;
   status: LeadStatus;
   is_positive_reply: boolean;
+  has_replied: boolean;
+  responded_at: string | null;
   deal_value: number | null;
   next_action: string | null;
   next_action_date: string | null;

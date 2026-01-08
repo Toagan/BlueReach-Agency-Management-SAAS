@@ -208,11 +208,19 @@ export async function POST(
       // at the end of this sync using fetchPositiveLeads() which filters by interest_status.
       // Setting is_positive_reply based on non-existent data caused 11k+ false positives.
 
-      // We only set is_positive_reply = false for explicitly negative statuses
+      // Set is_positive_reply based on interest status
       const interestStatus = lead.interestStatus;
+      const positiveStatuses = ["interested", "meeting_booked", "meeting_completed", "closed", 1, 3, 4, 5, "1", "3", "4", "5"];
       const negativeStatuses = ["not_interested", 2, "2"];
 
-      if (negativeStatuses.includes(interestStatus as string | number)) {
+      if (positiveStatuses.includes(interestStatus as string | number)) {
+        leadData.is_positive_reply = true;
+        leadData.has_replied = true;
+        // Also update status to replied if not already set to something more specific
+        if (!leadData.status || leadData.status === "contacted") {
+          leadData.status = "replied";
+        }
+      } else if (negativeStatuses.includes(interestStatus as string | number)) {
         leadData.is_positive_reply = false;
       }
 
