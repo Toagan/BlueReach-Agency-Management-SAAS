@@ -125,19 +125,24 @@ interface SmartleadStatisticsResponse {
   limit: number;
 }
 
+// Response from /campaigns/{id}/leads/{id}/message-history
 interface SmartleadEmailMessage {
-  id: number;
-  campaign_id: number;
-  lead_id: number;
-  email_account: string;
-  to_email: string;
+  stats_id: string;
+  from: string;
+  to: string;
+  type: "SENT" | "REPLY";
+  message_id: string;
+  time: string;
+  email_body: string;
   subject: string;
-  body: string;
-  message_type: "SENT" | "REPLY";
-  sent_at: string;
-  opened_at?: string;
-  clicked_at?: string;
-  replied_at?: string;
+  email_seq_number?: string;
+  open_count?: number;
+  click_count?: number;
+  attachments?: unknown;
+}
+
+interface SmartleadMessageHistoryResponse {
+  history: SmartleadEmailMessage[];
 }
 
 interface SmartleadWebhookPayload {
@@ -880,41 +885,28 @@ export class SmartleadProvider implements EmailCampaignProvider {
 
       // Fetch messages for this lead
       // API endpoint: /campaigns/{campaign_id}/leads/{lead_id}/message-history
-      const response = await this.client.get<SmartleadEmailMessage[] | { data: SmartleadEmailMessage[] } | { message_history: SmartleadEmailMessage[] }>(
+      // Response: { history: [...] }
+      const response = await this.client.get<SmartleadMessageHistoryResponse>(
         `/campaigns/${campaignId}/leads/${smartleadLeadId}/message-history`
       );
 
-      // Handle different possible response formats
-      let messages: SmartleadEmailMessage[] = [];
-      if (Array.isArray(response)) {
-        messages = response;
-      } else if (response && typeof response === 'object') {
-        if ('data' in response && Array.isArray(response.data)) {
-          messages = response.data;
-        } else if ('message_history' in response && Array.isArray(response.message_history)) {
-          messages = response.message_history;
-        }
-      }
+      // Extract messages from history wrapper
+      const messages = response?.history || [];
 
-      // Debug: Log first response for troubleshooting
       if (messages.length > 0) {
         console.log(`[SmartleadProvider] Fetched ${messages.length} emails for ${leadEmail}`);
-      } else {
-        console.log(`[SmartleadProvider] No emails found for ${leadEmail} (lead_id: ${smartleadLeadId}), response:`, JSON.stringify(response).slice(0, 200));
       }
 
       return messages.map((msg) => ({
-        id: String(msg.id),
-        fromEmail: msg.email_account,
-        toEmail: msg.to_email,
+        id: msg.stats_id || msg.message_id,
+        fromEmail: msg.from,
+        toEmail: msg.to,
         subject: msg.subject,
-        bodyHtml: msg.body,
-        campaignId: String(msg.campaign_id),
-        leadEmail: msg.to_email,
-        isReply: msg.message_type === "REPLY",
-        sentAt: msg.sent_at,
-        openedAt: msg.opened_at,
-        repliedAt: msg.replied_at,
+        bodyHtml: msg.email_body,
+        campaignId: campaignId,
+        leadEmail: leadEmail,
+        isReply: msg.type === "REPLY",
+        sentAt: msg.time,
       }));
     } catch (error) {
       console.error("[SmartleadProvider] Error fetching emails:", error);
