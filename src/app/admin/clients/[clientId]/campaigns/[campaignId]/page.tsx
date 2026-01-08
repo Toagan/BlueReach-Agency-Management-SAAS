@@ -22,7 +22,16 @@ import {
   Download,
   Eye,
   Code,
+  FileDown,
+  ChevronDown,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -80,6 +89,7 @@ interface Lead {
   personalization: string | null;
   status: string;
   is_positive_reply: boolean;
+  has_replied: boolean | null;
   created_at: string;
   updated_at: string;
   metadata?: Record<string, unknown>;
@@ -389,6 +399,37 @@ export default function CampaignDetailPage() {
   };
 
 
+  // Export leads to CSV
+  const handleExportLeads = async (filter: "positive_replies" | "replied_not_positive" | "no_reply") => {
+    try {
+      const response = await fetch(`/api/campaigns/${campaignId}/export-leads?filter=${filter}`);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Export failed");
+      }
+
+      // Get filename from Content-Disposition header
+      const contentDisposition = response.headers.get("Content-Disposition");
+      const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
+      const filename = filenameMatch ? filenameMatch[1] : `leads_${filter}.csv`;
+
+      // Download the file
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error("Export error:", err);
+      setError(err instanceof Error ? err.message : "Failed to export leads");
+    }
+  };
+
   // Sync sequences from Instantly
   const handleSyncSequences = async () => {
     setIsSyncingSequences(true);
@@ -462,7 +503,8 @@ export default function CampaignDetailPage() {
 
   // Group leads by status
   const positiveLeads = leads.filter(l => l.is_positive_reply);
-  const repliedLeads = leads.filter(l => l.status === 'replied' && !l.is_positive_reply);
+  const repliedLeads = leads.filter(l => l.has_replied && !l.is_positive_reply);
+  const noReplyLeads = leads.filter(l => !l.has_replied);
   const recentLeads = leads.slice(0, 10);
 
   return (
@@ -590,6 +632,54 @@ export default function CampaignDetailPage() {
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <FileDown className="h-4 w-4 mr-2" />
+                Export
+                <ChevronDown className="h-4 w-4 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem
+                onClick={() => handleExportLeads("positive_replies")}
+                className="cursor-pointer"
+              >
+                <ThumbsUp className="h-4 w-4 mr-2 text-green-500" />
+                <div>
+                  <div className="font-medium">Positive Replies</div>
+                  <div className="text-xs text-muted-foreground">
+                    {positiveLeads.length} leads
+                  </div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleExportLeads("replied_not_positive")}
+                className="cursor-pointer"
+              >
+                <MessageSquare className="h-4 w-4 mr-2 text-amber-500" />
+                <div>
+                  <div className="font-medium">Replied (Not Positive)</div>
+                  <div className="text-xs text-muted-foreground">
+                    {repliedLeads.length} leads
+                  </div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => handleExportLeads("no_reply")}
+                className="cursor-pointer"
+              >
+                <Mail className="h-4 w-4 mr-2 text-muted-foreground" />
+                <div>
+                  <div className="font-medium">No Reply</div>
+                  <div className="text-xs text-muted-foreground">
+                    {noReplyLeads.length} leads
+                  </div>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

@@ -197,7 +197,7 @@ export async function POST(
       // FIX: Set has_replied based on provider status or emailReplyCount
       // This ensures ALL leads who replied are counted, not just positive ones
       const replyCount = lead.emailReplyCount || 0;
-      const providerStatus = (lead.status || "").toLowerCase();
+      const providerStatus = String(lead.status || "").toLowerCase();
       const isRepliedStatus = providerStatus === "replied" || providerStatus === "completed";
 
       if (replyCount > 0 || isRepliedStatus) {
