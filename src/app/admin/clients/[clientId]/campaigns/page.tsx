@@ -25,21 +25,19 @@ export default async function CampaignsPage({ params }: PageProps) {
 
   const campaigns = await getCampaigns(supabase, clientId);
 
-  // Get lead counts for each campaign
-  const { data: leadCounts } = await supabase
-    .from("leads")
-    .select("campaign_id")
-    .in(
-      "campaign_id",
-      campaigns.map((c) => c.id)
-    );
+  // Get lead counts for each campaign using proper COUNT queries
+  // Previous approach hit Supabase's 1000 row default limit
+  const countByCampaign: Record<string, number> = {};
 
-  const countByCampaign = leadCounts?.reduce(
-    (acc, lead) => {
-      acc[lead.campaign_id] = (acc[lead.campaign_id] || 0) + 1;
-      return acc;
-    },
-    {} as Record<string, number>
+  await Promise.all(
+    campaigns.map(async (campaign) => {
+      const { count } = await supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", campaign.id);
+
+      countByCampaign[campaign.id] = count || 0;
+    })
   );
 
   return (
