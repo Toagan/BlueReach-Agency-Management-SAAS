@@ -67,20 +67,13 @@ export async function POST(
     console.log(`[SyncLeads] Provider campaign ID: ${providerCampaignId}`);
 
     // Fetch ALL leads from provider
-    // For Smartlead with many leads, skip statistics to avoid timeouts
-    // Statistics adds ~50% more API calls which can trigger rate limits
+    // For Smartlead, always fetch leads first, then sync positive leads from statistics
     let providerLeads;
-    const skipStats = request.nextUrl.searchParams.get("skipStats") === "true";
 
     if (provider.providerType === "smartlead") {
-      if (!skipStats && 'fetchAllLeadsWithStats' in provider) {
-        console.log(`[SyncLeads] Using fetchAllLeadsWithStats for Smartlead to get engagement data`);
-        providerLeads = await (provider as { fetchAllLeadsWithStats: (id: string) => Promise<typeof providerLeads> }).fetchAllLeadsWithStats(providerCampaignId);
-      } else {
-        // Skip statistics for faster sync (use for large campaigns or when ?skipStats=true)
-        console.log(`[SyncLeads] Skipping statistics fetch for faster Smartlead sync`);
-        providerLeads = await provider.fetchAllLeads(providerCampaignId);
-      }
+      // Always use basic lead fetch for speed - we'll sync positive leads separately
+      console.log(`[SyncLeads] Fetching leads from Smartlead (statistics synced separately)`);
+      providerLeads = await provider.fetchAllLeads(providerCampaignId);
     } else {
       providerLeads = await provider.fetchAllLeads(providerCampaignId);
     }
@@ -666,8 +659,57 @@ export async function POST(
       // Don't throw - let the main sync complete even if email sync fails
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 5: Sync positive leads from Smartlead statistics (category-based)
+    // The basic leads endpoint doesn't return category, so we fetch from statistics
+    // ═══════════════════════════════════════════════════════════════════════════
+    let positiveLeadsFromStats = 0;
+
+    if (provider.providerType === "smartlead" && 'fetchLeadStatistics' in provider) {
+      try {
+        console.log(`[SyncLeads] Fetching positive leads from Smartlead statistics...`);
+
+        const statsMap = await (provider as { fetchLeadStatistics: (id: string) => Promise<Map<string, { category: string | null; hasReplied: boolean }>> }).fetchLeadStatistics(providerCampaignId);
+
+        const positiveCategories = ["Interested", "Meeting Request"];
+        const positiveEmails: string[] = [];
+
+        statsMap.forEach((stats, email) => {
+          if (stats.category && positiveCategories.includes(stats.category)) {
+            positiveEmails.push(email);
+          }
+        });
+
+        console.log(`[SyncLeads] Found ${positiveEmails.length} positive leads in statistics`);
+
+        // Update positive leads in batches
+        for (let i = 0; i < positiveEmails.length; i += 50) {
+          const batch = positiveEmails.slice(i, i + 50);
+          for (const email of batch) {
+            const { error } = await supabase
+              .from("leads")
+              .update({
+                is_positive_reply: true,
+                has_replied: true,
+                status: "replied",
+              })
+              .eq("campaign_id", campaignId)
+              .ilike("email", email);
+
+            if (!error) {
+              positiveLeadsFromStats++;
+            }
+          }
+        }
+
+        console.log(`[SyncLeads] Updated ${positiveLeadsFromStats} positive leads from statistics`);
+      } catch (statsError) {
+        console.error(`[SyncLeads] Error syncing positive leads from statistics:`, statsError);
+      }
+    }
+
     console.log(
-      `[SyncLeads] Completed: ${insertedCount} inserted, ${updatedCount} updated, ${emailsSynced} emails synced`
+      `[SyncLeads] Completed: ${insertedCount} inserted, ${updatedCount} updated, ${positiveLeadsFromStats} positive, ${emailsSynced} emails synced`
     );
 
     return NextResponse.json({
@@ -676,6 +718,7 @@ export async function POST(
       inserted: insertedCount,
       updated: updatedCount,
       skipped: leadsToInsert.length - insertedCount,
+      positiveLeads: positiveLeadsFromStats,
       analytics: analyticsData,
       emailSync: {
         emailsSynced,
