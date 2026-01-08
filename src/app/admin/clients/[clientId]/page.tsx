@@ -938,16 +938,17 @@ export default function ClientDashboardPage() {
                       )}
                     </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex flex-wrap gap-2 mb-3">
+                    {/* Action Buttons - Compact Grid Layout */}
+                    <div className="grid grid-cols-2 gap-2 mb-3">
                       {!lead.responded_at && lead.status !== "won" && lead.status !== "lost" && (
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => handleWorkflowAction(lead.id, "mark_responded")}
                           disabled={updatingLeadId === lead.id}
+                          className="text-xs h-8"
                         >
-                          <CheckCircle className="h-4 w-4 mr-1" />
+                          <CheckCircle className="h-3.5 w-3.5 mr-1" />
                           Mark Responded
                         </Button>
                       )}
@@ -960,8 +961,9 @@ export default function ClientDashboardPage() {
                             meeting_at: new Date().toISOString(),
                           })}
                           disabled={updatingLeadId === lead.id}
+                          className="text-xs h-8"
                         >
-                          <Calendar className="h-4 w-4 mr-1" />
+                          <Calendar className="h-3.5 w-3.5 mr-1" />
                           Schedule Meeting
                         </Button>
                       )}
@@ -971,21 +973,21 @@ export default function ClientDashboardPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                            className="text-xs h-8 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950"
                             onClick={() => handleWorkflowAction(lead.id, "close_won")}
                             disabled={updatingLeadId === lead.id}
                           >
-                            <Trophy className="h-4 w-4 mr-1" />
+                            <Trophy className="h-3.5 w-3.5 mr-1" />
                             Close Won
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            className="text-xs h-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
                             onClick={() => handleWorkflowAction(lead.id, "close_lost")}
                             disabled={updatingLeadId === lead.id}
                           >
-                            <XCircle className="h-4 w-4 mr-1" />
+                            <XCircle className="h-3.5 w-3.5 mr-1" />
                             Close Lost
                           </Button>
                         </>
@@ -995,38 +997,36 @@ export default function ClientDashboardPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="text-muted-foreground"
+                          className="text-xs h-8 text-muted-foreground col-span-2"
                           onClick={() => handleWorkflowAction(lead.id, "revert_status")}
                           disabled={updatingLeadId === lead.id}
                         >
-                          <Clock className="h-4 w-4 mr-1" />
+                          <Clock className="h-3.5 w-3.5 mr-1" />
                           Revert
                         </Button>
                       )}
                     </div>
 
-                    {/* View Emails Button */}
-                    <div className="mb-3">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => toggleEmailView(lead.id)}
-                        disabled={loadingEmailsForLead === lead.id}
-                        className="w-full justify-between"
-                      >
-                        <span className="flex items-center">
-                          <MessageSquareText className="h-4 w-4 mr-2" />
-                          View Email Exchange
-                        </span>
-                        {loadingEmailsForLead === lead.id ? (
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                        ) : expandedEmailLeadId === lead.id ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
+                    {/* View Emails Button - Primary Action */}
+                    <Button
+                      size="sm"
+                      variant={expandedEmailLeadId === lead.id ? "default" : "secondary"}
+                      onClick={() => toggleEmailView(lead.id)}
+                      disabled={loadingEmailsForLead === lead.id}
+                      className="w-full justify-between mb-3"
+                    >
+                      <span className="flex items-center">
+                        <MessageSquareText className="h-4 w-4 mr-2" />
+                        View Email Exchange
+                      </span>
+                      {loadingEmailsForLead === lead.id ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : expandedEmailLeadId === lead.id ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </Button>
 
                     {/* Email Exchange Section */}
                     {expandedEmailLeadId === lead.id && (
