@@ -67,11 +67,20 @@ export async function POST(
     console.log(`[SyncLeads] Provider campaign ID: ${providerCampaignId}`);
 
     // Fetch ALL leads from provider
-    // For Smartlead, use fetchAllLeadsWithStats to get engagement data from statistics endpoint
+    // For Smartlead with many leads, skip statistics to avoid timeouts
+    // Statistics adds ~50% more API calls which can trigger rate limits
     let providerLeads;
-    if (provider.providerType === "smartlead" && 'fetchAllLeadsWithStats' in provider) {
-      console.log(`[SyncLeads] Using fetchAllLeadsWithStats for Smartlead to get engagement data`);
-      providerLeads = await (provider as { fetchAllLeadsWithStats: (id: string) => Promise<typeof providerLeads> }).fetchAllLeadsWithStats(providerCampaignId);
+    const skipStats = request.nextUrl.searchParams.get("skipStats") === "true";
+
+    if (provider.providerType === "smartlead") {
+      if (!skipStats && 'fetchAllLeadsWithStats' in provider) {
+        console.log(`[SyncLeads] Using fetchAllLeadsWithStats for Smartlead to get engagement data`);
+        providerLeads = await (provider as { fetchAllLeadsWithStats: (id: string) => Promise<typeof providerLeads> }).fetchAllLeadsWithStats(providerCampaignId);
+      } else {
+        // Skip statistics for faster sync (use for large campaigns or when ?skipStats=true)
+        console.log(`[SyncLeads] Skipping statistics fetch for faster Smartlead sync`);
+        providerLeads = await provider.fetchAllLeads(providerCampaignId);
+      }
     } else {
       providerLeads = await provider.fetchAllLeads(providerCampaignId);
     }

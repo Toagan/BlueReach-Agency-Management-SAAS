@@ -365,7 +365,8 @@ export default function CampaignDetailPage() {
     setError(null);
 
     try {
-      const res = await fetch(`/api/campaigns/${campaignId}/sync-leads`, {
+      // Skip statistics fetch for faster sync (statistics can be fetched separately if needed)
+      const res = await fetch(`/api/campaigns/${campaignId}/sync-leads?skipStats=true`, {
         method: "POST",
       });
 
