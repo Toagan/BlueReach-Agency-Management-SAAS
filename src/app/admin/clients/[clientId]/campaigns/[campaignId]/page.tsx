@@ -585,56 +585,25 @@ export default function CampaignDetailPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleSyncLeads}
-                disabled={isSyncingLeads}
-              >
-                <Download className={`h-4 w-4 mr-2 ${isSyncingLeads ? "animate-spin" : ""}`} />
-                {isSyncingLeads ? "Syncing..." : "Full Sync"}
-              </Button>
-              {!isSyncingLeads && (
-                isAlreadySynced ? (
-                  <span className="text-xs text-green-600 flex items-center gap-1">
-                    <Check className="h-3 w-3" />
-                    Synced ({leads.length.toLocaleString()} leads)
-                  </span>
-                ) : analytics?.leads_count && analytics.leads_count > 0 ? (
-                  <span className="text-xs text-muted-foreground">
-                    {analytics.leads_count.toLocaleString()} leads (~{estimatedSyncTime}s)
-                  </span>
-                ) : null
-              )}
-            </div>
-            {isSyncingLeads && (
-              <div className="flex items-center gap-2 min-w-[200px]">
-                <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500 transition-all duration-1000"
-                    style={{ width: `${Math.min((syncElapsed / estimatedSyncTime) * 100, 95)}%` }}
-                  />
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  {syncElapsed}s / ~{estimatedSyncTime}s
-                </span>
+          {/* Sync Progress (only shows when syncing) */}
+          {isSyncingLeads && (
+            <div className="flex items-center gap-2 min-w-[200px]">
+              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-500 transition-all duration-1000"
+                  style={{ width: `${Math.min((syncElapsed / estimatedSyncTime) * 100, 95)}%` }}
+                />
               </div>
-            )}
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchData}
-            disabled={loading}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
+              <span className="text-xs text-muted-foreground">
+                Syncing... {syncElapsed}s
+              </span>
+            </div>
+          )}
+
+          {/* Export Dropdown - Primary Action */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="default" size="sm">
                 <FileDown className="h-4 w-4 mr-2" />
                 Export
                 <ChevronDown className="h-4 w-4 ml-1" />
@@ -675,6 +644,44 @@ export default function CampaignDetailPage() {
                   <div className="font-medium">No Reply</div>
                   <div className="text-xs text-muted-foreground">
                     {noReplyLeads.length} leads
+                  </div>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Options Dropdown - Secondary Actions */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem
+                onClick={fetchData}
+                disabled={loading}
+                className="cursor-pointer"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                <div>
+                  <div className="font-medium">Refresh Page</div>
+                  <div className="text-xs text-muted-foreground">
+                    Reload data from database
+                  </div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={handleSyncLeads}
+                disabled={isSyncingLeads}
+                className="cursor-pointer"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                <div>
+                  <div className="font-medium">Re-sync from Provider</div>
+                  <div className="text-xs text-muted-foreground">
+                    {isSyncingLeads ? "Syncing..." : `Pull latest from ${campaign?.instantly_campaign_id ? "Instantly" : "Smartlead"}`}
                   </div>
                 </div>
               </DropdownMenuItem>
