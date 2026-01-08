@@ -58,6 +58,8 @@ interface CampaignData {
   name: string;
   original_name: string | null;
   instantly_campaign_id: string | null;
+  smartlead_campaign_id: string | null;
+  provider_type: "instantly" | "smartlead" | null;
   is_active: boolean;
   created_at: string;
   client_id: string;
@@ -871,7 +873,9 @@ export default function CampaignDetailPage() {
             <div className="text-center py-8 text-muted-foreground">
               <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="font-medium">No email sequences found</p>
-              <p className="text-sm mt-1">Click "Sync from Instantly" to fetch the email copy</p>
+              <p className="text-sm mt-1">
+                Click "Sync Templates" to fetch email copy from {campaign?.provider_type === "smartlead" ? "Smartlead" : "Instantly"}
+              </p>
             </div>
           ) : (
             <div className="space-y-4">

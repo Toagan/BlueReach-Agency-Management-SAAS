@@ -208,7 +208,13 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
         method: "POST",
       });
 
-      // 2. Sync positive leads to mark is_positive_reply correctly
+      // 2. Sync email sequences/templates
+      setSyncStatus("Syncing email templates...");
+      await fetch(`/api/campaigns/${newCampaign.id}/sequences`, {
+        method: "POST",
+      });
+
+      // 3. Sync positive leads to mark is_positive_reply correctly
       setSyncStatus("Syncing positive replies...");
       await fetch(`/api/clients/${clientId}/sync-positive`, {
         method: "POST",
@@ -218,7 +224,7 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
       setTimeout(() => setSyncStatus(null), 3000);
     } catch (syncError) {
       console.error("Background sync error:", syncError);
-      setSyncStatus("Sync failed - click 'Sync from Instantly' manually");
+      setSyncStatus("Sync failed - try manual sync");
     }
   };
 

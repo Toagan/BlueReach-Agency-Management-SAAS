@@ -145,6 +145,30 @@ interface SmartleadMessageHistoryResponse {
   history: SmartleadEmailMessage[];
 }
 
+// Sequence/Email step types from Smartlead API
+interface SmartleadSequenceStep {
+  seq_id: number;
+  seq_number: number;
+  seq_delay_details: {
+    delay_in_days: number;
+    delay_in_hours?: number;
+    delay_in_minutes?: number;
+  };
+  seq_variants: SmartleadSequenceVariant[];
+}
+
+interface SmartleadSequenceVariant {
+  variant_id: number;
+  variant_label: string;
+  subject: string;
+  email_body: string;
+  is_active?: boolean;
+}
+
+interface SmartleadSequenceResponse {
+  email_campaign_sequences: SmartleadSequenceStep[];
+}
+
 interface SmartleadWebhookPayload {
   event_type:
     | "EMAIL_SENT"
@@ -226,6 +250,33 @@ export class SmartleadProvider implements EmailCampaignProvider {
       // Stats may not be available
     }
 
+    // Fetch sequences/email steps
+    let sequences: ProviderCampaignDetails["sequences"] = undefined;
+    try {
+      const seqResponse = await this.client.get<SmartleadSequenceResponse>(
+        `/campaigns/${campaignId}/sequences`
+      );
+
+      if (seqResponse.email_campaign_sequences && seqResponse.email_campaign_sequences.length > 0) {
+        sequences = [{
+          steps: seqResponse.email_campaign_sequences.map((step) => ({
+            stepNumber: step.seq_number,
+            delayDays: step.seq_delay_details?.delay_in_days || 0,
+            variants: step.seq_variants.map((variant) => ({
+              id: String(variant.variant_id),
+              subject: variant.subject,
+              body: variant.email_body,
+              isActive: variant.is_active !== false, // Default to active if not specified
+            })),
+          })),
+        }];
+        console.log(`[SmartleadProvider] Fetched ${seqResponse.email_campaign_sequences.length} sequence steps for campaign ${campaignId}`);
+      }
+    } catch (err) {
+      console.warn(`[SmartleadProvider] Could not fetch sequences for campaign ${campaignId}:`, err);
+      // Sequences may not be available, continue without them
+    }
+
     return {
       id: String(campaign.id),
       name: campaign.name,
@@ -236,6 +287,7 @@ export class SmartleadProvider implements EmailCampaignProvider {
       emailsSentCount: stats?.sent_count,
       repliesCount: stats?.reply_count,
       bouncesCount: stats?.bounce_count,
+      sequences,
     };
   }
 
