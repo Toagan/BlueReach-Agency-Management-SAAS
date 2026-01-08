@@ -510,12 +510,14 @@ export async function POST(
       if ('fetchEmailsForLead' in provider && typeof provider.fetchEmailsForLead === 'function') {
         console.log(`[SyncLeads] Starting email thread sync...`);
 
-        // Get all leads with replies for this campaign
+        // Get leads with ACTUAL replies for this campaign
+        // Only sync emails for positive replies or leads with email_reply_count > 0
+        // Skip has_replied=true as it may include false positives from status="COMPLETED"
         const { data: leadsWithReplies, error: repliesError } = await supabase
           .from("leads")
           .select("id, email, provider_lead_id, instantly_lead_id")
           .eq("campaign_id", campaignId)
-          .or("has_replied.eq.true,is_positive_reply.eq.true,email_reply_count.gt.0");
+          .or("is_positive_reply.eq.true,email_reply_count.gt.0");
 
         if (repliesError) {
           console.error(`[SyncLeads] Error fetching leads with replies:`, repliesError);
