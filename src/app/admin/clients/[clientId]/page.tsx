@@ -1467,22 +1467,23 @@ function CampaignCard({
         );
       })()}
 
-      {/* Webhook Configuration */}
-      <div className="mt-4 pt-4 border-t border-border">
-        <button
-          onClick={() => setShowWebhook(!showWebhook)}
-          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <Webhook className="h-4 w-4" />
-          <span>Webhook for Instantly</span>
-          {showWebhook ? (
-            <ChevronUp className="h-3 w-3" />
-          ) : (
-            <ChevronDown className="h-3 w-3" />
-          )}
-        </button>
+      {/* Webhook Configuration - Admin Only */}
+      {isAdmin && (
+        <div className="mt-4 pt-4 border-t border-border">
+          <button
+            onClick={() => setShowWebhook(!showWebhook)}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Webhook className="h-4 w-4" />
+            <span>Webhook for Instantly</span>
+            {showWebhook ? (
+              <ChevronUp className="h-3 w-3" />
+            ) : (
+              <ChevronDown className="h-3 w-3" />
+            )}
+          </button>
 
-        {showWebhook && (
+          {showWebhook && (
           <div className="mt-3 space-y-3">
             <div className="flex items-center gap-2">
               <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all">
@@ -1580,7 +1581,8 @@ function CampaignCard({
             )}
           </div>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
