@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function AdminLayout({
@@ -38,14 +37,10 @@ export default async function AdminLayout({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link href="/admin" className="flex items-center gap-2">
-              <Image
-                src="/logo.png"
-                alt="BlueReach"
-                width={140}
-                height={40}
-                className="h-8 w-auto"
-                priority
-              />
+              <span className="text-2xl">👋</span>
+              <span className="text-xl font-bold text-primary">
+                Blue<span className="text-foreground">Reach</span>
+              </span>
             </Link>
             <div className="flex items-center gap-4">
               <ThemeToggle />
