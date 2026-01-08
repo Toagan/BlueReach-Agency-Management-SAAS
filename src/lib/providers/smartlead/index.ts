@@ -886,6 +886,8 @@ export class SmartleadProvider implements EmailCampaignProvider {
       // Fetch messages for this lead
       // API endpoint: /campaigns/{campaign_id}/leads/{lead_id}/message-history
       // Response: { history: [...] }
+      console.log(`[SmartleadProvider] Fetching emails for ${leadEmail} (campaign: ${campaignId}, lead: ${smartleadLeadId})`);
+
       const response = await this.client.get<SmartleadMessageHistoryResponse>(
         `/campaigns/${campaignId}/leads/${smartleadLeadId}/message-history`
       );
@@ -893,9 +895,7 @@ export class SmartleadProvider implements EmailCampaignProvider {
       // Extract messages from history wrapper
       const messages = response?.history || [];
 
-      if (messages.length > 0) {
-        console.log(`[SmartleadProvider] Fetched ${messages.length} emails for ${leadEmail}`);
-      }
+      console.log(`[SmartleadProvider] Got ${messages.length} emails for ${leadEmail}`);
 
       return messages.map((msg) => ({
         id: msg.stats_id || msg.message_id,
