@@ -879,8 +879,9 @@ export class SmartleadProvider implements EmailCampaignProvider {
       }
 
       // Fetch messages for this lead
+      // API endpoint: /campaigns/{campaign_id}/leads/{lead_id}/message-history
       const messages = await this.client.get<SmartleadEmailMessage[]>(
-        `/campaigns/${campaignId}/leads/${smartleadLeadId}/messages`
+        `/campaigns/${campaignId}/leads/${smartleadLeadId}/message-history`
       );
 
       return messages.map((msg) => ({
