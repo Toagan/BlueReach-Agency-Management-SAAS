@@ -517,11 +517,14 @@ export class SmartleadProvider implements EmailCampaignProvider {
   async fetchAllLeadsWithStats(campaignId: string): Promise<ProviderLead[]> {
     console.log(`[SmartleadProvider] Fetching all leads with statistics for campaign ${campaignId}`);
 
-    // Fetch leads and statistics in parallel
-    const [leads, statsMap] = await Promise.all([
-      this.fetchAllLeads(campaignId),
-      this.fetchLeadStatistics(campaignId),
-    ]);
+    // Fetch leads first, then statistics SEQUENTIALLY to avoid rate limit issues
+    // Parallel fetching was causing 429 rate limits due to doubled request rate
+    const leads = await this.fetchAllLeads(campaignId);
+
+    // Small delay between lead fetch and stats fetch to let rate limit window reset
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const statsMap = await this.fetchLeadStatistics(campaignId);
 
     // Merge statistics into leads
     let enrichedCount = 0;

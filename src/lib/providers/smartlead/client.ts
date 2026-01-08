@@ -50,11 +50,12 @@ export class SmartleadApiClient {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  // Rate limiting: 10 requests per 2 seconds
+  // Rate limiting: 5 requests per 2 seconds (conservative to avoid 429s)
+  // Smartlead's actual limit seems stricter than documented
   private async enforceRateLimit(): Promise<void> {
     const now = Date.now();
     const windowMs = 2000; // 2 seconds
-    const maxRequests = 10;
+    const maxRequests = 5; // Reduced from 10 to be more conservative
 
     if (now - this.lastRequestTime > windowMs) {
       // Reset window
@@ -106,10 +107,11 @@ export class SmartleadApiClient {
         // Handle rate limiting
         if (response.status === 429) {
           const retryAfter = response.headers.get("Retry-After");
-          const waitTime = retryAfter
-            ? parseInt(retryAfter) * 1000
-            : Math.pow(2, retries) * 1000;
-          console.log(`[Smartlead] Rate limited, waiting ${waitTime}ms before retry`);
+          // Cap wait time at 10 seconds to avoid long delays
+          // Even if Smartlead says 60s, we'll retry sooner with exponential backoff
+          const suggestedWait = retryAfter ? parseInt(retryAfter) * 1000 : 5000;
+          const waitTime = Math.min(suggestedWait, 10000) * (retries + 1);
+          console.log(`[Smartlead] Rate limited (429), waiting ${waitTime}ms before retry ${retries + 1}/${maxRetries}`);
           await this.sleep(waitTime);
           retries++;
           continue;
