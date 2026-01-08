@@ -880,9 +880,28 @@ export class SmartleadProvider implements EmailCampaignProvider {
 
       // Fetch messages for this lead
       // API endpoint: /campaigns/{campaign_id}/leads/{lead_id}/message-history
-      const messages = await this.client.get<SmartleadEmailMessage[]>(
+      const response = await this.client.get<SmartleadEmailMessage[] | { data: SmartleadEmailMessage[] } | { message_history: SmartleadEmailMessage[] }>(
         `/campaigns/${campaignId}/leads/${smartleadLeadId}/message-history`
       );
+
+      // Handle different possible response formats
+      let messages: SmartleadEmailMessage[] = [];
+      if (Array.isArray(response)) {
+        messages = response;
+      } else if (response && typeof response === 'object') {
+        if ('data' in response && Array.isArray(response.data)) {
+          messages = response.data;
+        } else if ('message_history' in response && Array.isArray(response.message_history)) {
+          messages = response.message_history;
+        }
+      }
+
+      // Debug: Log first response for troubleshooting
+      if (messages.length > 0) {
+        console.log(`[SmartleadProvider] Fetched ${messages.length} emails for ${leadEmail}`);
+      } else {
+        console.log(`[SmartleadProvider] No emails found for ${leadEmail} (lead_id: ${smartleadLeadId}), response:`, JSON.stringify(response).slice(0, 200));
+      }
 
       return messages.map((msg) => ({
         id: String(msg.id),
