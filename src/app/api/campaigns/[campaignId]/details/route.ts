@@ -45,6 +45,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     // Build analytics from cached values (ALWAYS read from cache first)
+    // Note: leads_count and total_opportunities will be overwritten with local DB counts below
     const hasCachedData = campaign.cached_emails_sent !== null;
     let analytics = hasCachedData ? {
       emails_sent: campaign.cached_emails_sent || 0,
@@ -63,19 +64,32 @@ export async function GET(request: Request, { params }: RouteParams) {
         campaign.cached_emails_sent > 0
           ? (campaign.cached_emails_bounced || 0) / campaign.cached_emails_sent
           : 0,
-      leads_count: campaign.cached_leads_count || 0,
+      leads_count: 0, // Will be set from local DB below
       contacted_count: campaign.cached_contacted_count || campaign.cached_emails_sent || 0,
-      total_opportunities: campaign.cached_positive_count || 0,
+      total_opportunities: 0, // Will be set from local DB below
     } : null;
 
-    // Get local leads_count from database (for comparison/fallback)
-    const { count: localLeadsCount } = await supabase
-      .from("leads")
-      .select("*", { count: "exact", head: true })
-      .eq("campaign_id", campaignId);
+    // Get local leads_count and positive_count from database
+    const [{ count: localLeadsCount }, { count: localPositiveCount }] = await Promise.all([
+      supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", campaignId),
+      supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", campaignId)
+        .eq("is_positive_reply", true),
+    ]);
 
-    // Note: We'll prefer provider leads_count over local count when available
-    // Local count is only used as fallback or for "synced" status comparison
+    // Use local counts as source of truth for leads_count and positive_count
+    // Provider analytics are used for email metrics (sent, opened, replied, bounced)
+
+    // Update analytics with local DB counts (source of truth for leads)
+    if (analytics) {
+      analytics.leads_count = localLeadsCount || 0;
+      analytics.total_opportunities = localPositiveCount || 0;
+    }
 
     let updatedCampaign = campaign;
     const providerCampaignId = campaign.provider_campaign_id || campaign.instantly_campaign_id;
@@ -129,9 +143,10 @@ export async function GET(request: Request, { params }: RouteParams) {
               providerAnalytics.emailsSentCount > 0
                 ? (providerAnalytics.bouncedCount || 0) / providerAnalytics.emailsSentCount
                 : 0,
-            leads_count: providerAnalytics.leadsCount || localLeadsCount || 0,
+            // Use local DB counts for leads and positive replies (source of truth after sync)
+            leads_count: localLeadsCount || providerAnalytics.leadsCount || 0,
             contacted_count: providerAnalytics.contactedCount || 0,
-            total_opportunities: providerAnalytics.totalOpportunities || 0,
+            total_opportunities: localPositiveCount || providerAnalytics.totalOpportunities || 0,
           };
 
           // Update cache in database
