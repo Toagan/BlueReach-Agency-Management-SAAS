@@ -1028,44 +1028,62 @@ export default function ClientDashboardPage() {
                       )}
                     </Button>
 
-                    {/* Email Exchange Section */}
+                    {/* Email Exchange Section - Chat-like UI */}
                     {expandedEmailLeadId === lead.id && (
-                      <div className="mb-3 border border-border rounded-lg overflow-hidden">
-                        <div className="bg-muted/50 px-3 py-2 flex items-center justify-between">
-                          <span className="text-sm font-medium flex items-center">
-                            <MessageSquareText className="h-4 w-4 mr-2" />
-                            Email Thread
+                      <div className="mb-3 border border-border rounded-xl overflow-hidden bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950">
+                        {/* Header */}
+                        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm px-4 py-3 flex items-center justify-between border-b border-border">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                              {(lead.first_name?.[0] || lead.email[0]).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">
+                                {lead.first_name && !lead.first_name.toLowerCase().startsWith("sehr")
+                                  ? `${lead.first_name}${lead.last_name ? ` ${lead.last_name}` : ""}`
+                                  : lead.email.split("@")[0]}
+                              </p>
+                              <p className="text-xs text-muted-foreground">{lead.email}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
                             {leadEmails[lead.id] && leadEmails[lead.id].length > 0 && (
-                              <span className="ml-2 text-xs text-muted-foreground">
-                                ({leadEmails[lead.id].length} {leadEmails[lead.id].length === 1 ? "email" : "emails"})
+                              <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
+                                {leadEmails[lead.id].length} {leadEmails[lead.id].length === 1 ? "message" : "messages"}
                               </span>
                             )}
-                          </span>
-                          {(loadingEmailsForLead === lead.id || syncingEmailsForLead === lead.id) && (
-                            <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-                          )}
+                            {(loadingEmailsForLead === lead.id || syncingEmailsForLead === lead.id) && (
+                              <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                            )}
+                          </div>
                         </div>
-                        <div className="p-3 space-y-3 max-h-[400px] overflow-y-auto">
+
+                        {/* Messages Container */}
+                        <div className="p-4 space-y-4 max-h-[450px] overflow-y-auto">
                           {loadingEmailsForLead === lead.id ? (
-                            <div className="flex items-center justify-center py-4">
-                              <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+                            <div className="flex items-center justify-center py-8">
+                              <div className="flex flex-col items-center gap-2">
+                                <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+                                <span className="text-xs text-muted-foreground">Loading conversation...</span>
+                              </div>
                             </div>
                           ) : !leadEmails[lead.id] || leadEmails[lead.id].length === 0 ? (
-                            <div className="text-center py-6 text-muted-foreground">
-                              <MessageSquareText className="h-10 w-10 mx-auto mb-3 opacity-40" />
-                              <p className="text-sm font-medium">No emails found</p>
-                              <p className="text-xs mt-1 max-w-[200px] mx-auto">
-                                This lead may not have any email history in the campaign yet.
+                            <div className="text-center py-10 text-muted-foreground">
+                              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted/50 flex items-center justify-center">
+                                <MessageSquareText className="h-8 w-8 opacity-40" />
+                              </div>
+                              <p className="text-sm font-medium">No messages yet</p>
+                              <p className="text-xs mt-1 max-w-[220px] mx-auto">
+                                Email history will appear here once available.
                               </p>
                             </div>
                           ) : (
                             leadEmails[lead.id]
                               .filter((email) => email.body_text || email.body_html)
-                              .map((email) => {
+                              .map((email, index) => {
                                 // Extract text content - prefer body_text, fall back to stripped HTML
                                 let content = email.body_text;
                                 if (!content && email.body_html) {
-                                  // Strip HTML tags for display
                                   content = email.body_html
                                     .replace(/<br\s*\/?>/gi, '\n')
                                     .replace(/<\/p>/gi, '\n')
@@ -1079,34 +1097,67 @@ export default function ClientDashboardPage() {
                                 }
                                 if (!content) return null;
 
+                                const isOutbound = email.direction === "outbound";
+                                const timestamp = email.sent_at
+                                  ? new Date(email.sent_at).toLocaleString(undefined, {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })
+                                  : "";
+
                                 return (
                                   <div
                                     key={email.id}
-                                    className={`rounded-lg p-3 ${
-                                      email.direction === "outbound"
-                                        ? "bg-blue-50 dark:bg-blue-950 border-l-4 border-blue-500"
-                                        : "bg-green-50 dark:bg-green-950 border-l-4 border-green-500"
-                                    }`}
+                                    className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}
                                   >
-                                    <div className="flex items-center justify-between mb-2">
-                                      <div className="flex items-center gap-2">
-                                        {email.direction === "outbound" ? (
-                                          <Send className="h-3 w-3 text-blue-500" />
-                                        ) : (
-                                          <Reply className="h-3 w-3 text-green-500" />
-                                        )}
-                                        <span className="text-xs font-medium text-muted-foreground">
-                                          {email.direction === "outbound" ? "You" : lead.email.split("@")[0]}
-                                        </span>
+                                    <div className={`flex items-end gap-2 max-w-[85%] ${isOutbound ? "flex-row-reverse" : ""}`}>
+                                      {/* Avatar */}
+                                      <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold shadow-sm ${
+                                        isOutbound
+                                          ? "bg-gradient-to-br from-blue-500 to-blue-700 text-white"
+                                          : "bg-gradient-to-br from-emerald-400 to-emerald-600 text-white"
+                                      }`}>
+                                        {isOutbound ? "Y" : (lead.first_name?.[0] || lead.email[0]).toUpperCase()}
                                       </div>
-                                      <span className="text-xs text-muted-foreground">
-                                        {email.sent_at
-                                          ? new Date(email.sent_at).toLocaleDateString()
-                                          : ""}
-                                      </span>
-                                    </div>
-                                    <div className="text-sm text-foreground whitespace-pre-wrap">
-                                      {content}
+
+                                      {/* Message Bubble */}
+                                      <div className={`group relative ${isOutbound ? "items-end" : "items-start"}`}>
+                                        <div className={`rounded-2xl px-4 py-2.5 shadow-sm ${
+                                          isOutbound
+                                            ? "bg-blue-600 text-white rounded-br-md"
+                                            : "bg-white dark:bg-slate-800 text-foreground rounded-bl-md border border-border"
+                                        }`}>
+                                          {/* Subject line if exists */}
+                                          {email.subject && index === 0 && (
+                                            <p className={`text-xs font-semibold mb-1.5 pb-1.5 border-b ${
+                                              isOutbound
+                                                ? "border-blue-400/30 text-blue-100"
+                                                : "border-border text-muted-foreground"
+                                            }`}>
+                                              {email.subject}
+                                            </p>
+                                          )}
+                                          <p className={`text-sm whitespace-pre-wrap leading-relaxed ${
+                                            isOutbound ? "text-white" : "text-foreground"
+                                          }`}>
+                                            {content}
+                                          </p>
+                                        </div>
+
+                                        {/* Timestamp */}
+                                        <div className={`flex items-center gap-1 mt-1 px-1 ${
+                                          isOutbound ? "justify-end" : "justify-start"
+                                        }`}>
+                                          <span className="text-[10px] text-muted-foreground">
+                                            {timestamp}
+                                          </span>
+                                          {isOutbound && (
+                                            <Send className="h-2.5 w-2.5 text-muted-foreground" />
+                                          )}
+                                        </div>
+                                      </div>
                                     </div>
                                   </div>
                                 );
