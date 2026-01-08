@@ -747,14 +747,16 @@ export class SmartleadProvider implements EmailCampaignProvider {
     switch (status.toUpperCase()) {
       case "STARTED":
       case "SENT":
-        return "contacted";
       case "INPROGRESS":
       case "IN_PROGRESS":
-        return "in_progress";
+        return "contacted";
       case "COMPLETED":
-        return "completed";
+        // COMPLETED means sequence finished - map to "contacted" as default
+        // Will be overridden to "replied" if they actually replied
+        return "contacted";
       case "BLOCKED":
-        return "blocked";
+        // BLOCKED leads should be marked as bounced/contacted
+        return "contacted";
       default:
         return "contacted";
     }
