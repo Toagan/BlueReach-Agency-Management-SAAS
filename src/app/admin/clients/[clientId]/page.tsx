@@ -241,9 +241,38 @@ export default function ClientDashboardPage() {
       setExpandedEmailLeadId(null);
     } else {
       setExpandedEmailLeadId(leadId);
-      // Fetch emails if we don't have them yet
-      if (!leadEmails[leadId]) {
-        await fetchEmailsForLead(leadId);
+      // Always fetch fresh emails when opening - first from DB, then sync from provider if needed
+      setLoadingEmailsForLead(leadId);
+      try {
+        // First, fetch from local database
+        const res = await fetch(`/api/leads/${leadId}/emails`);
+        if (res.ok) {
+          const data = await res.json();
+          const emails = data.emails || [];
+          setLeadEmails((prev) => ({ ...prev, [leadId]: emails }));
+
+          // If no emails in DB, automatically sync from provider
+          if (emails.length === 0) {
+            setSyncingEmailsForLead(leadId);
+            try {
+              const syncRes = await fetch(`/api/leads/${leadId}/emails`, { method: "POST" });
+              if (syncRes.ok) {
+                // Refresh from DB after sync
+                const refreshRes = await fetch(`/api/leads/${leadId}/emails`);
+                if (refreshRes.ok) {
+                  const refreshData = await refreshRes.json();
+                  setLeadEmails((prev) => ({ ...prev, [leadId]: refreshData.emails || [] }));
+                }
+              }
+            } finally {
+              setSyncingEmailsForLead(null);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch/sync emails:", err);
+      } finally {
+        setLoadingEmailsForLead(null);
       }
     }
   };
@@ -988,7 +1017,8 @@ export default function ClientDashboardPage() {
                     {expandedEmailLeadId === lead.id && (
                       <div className="mb-3 border border-border rounded-lg overflow-hidden">
                         <div className="bg-muted/50 px-3 py-2 flex items-center justify-between">
-                          <span className="text-sm font-medium">
+                          <span className="text-sm font-medium flex items-center">
+                            <MessageSquareText className="h-4 w-4 mr-2" />
                             Email Thread
                             {leadEmails[lead.id] && leadEmails[lead.id].length > 0 && (
                               <span className="ml-2 text-xs text-muted-foreground">
@@ -996,33 +1026,9 @@ export default function ClientDashboardPage() {
                               </span>
                             )}
                           </span>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => fetchEmailsForLead(lead.id)}
-                              disabled={loadingEmailsForLead === lead.id}
-                              className="h-7 text-xs"
-                              title="Refresh emails"
-                            >
-                              <RefreshCw className={`h-3 w-3 ${loadingEmailsForLead === lead.id ? "animate-spin" : ""}`} />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => syncEmailsForLead(lead.id)}
-                              disabled={syncingEmailsForLead === lead.id}
-                              className="h-7 text-xs"
-                              title="Refresh email thread"
-                            >
-                              {syncingEmailsForLead === lead.id ? (
-                                <RefreshCw className="h-3 w-3 animate-spin mr-1" />
-                              ) : (
-                                <RefreshCw className="h-3 w-3 mr-1" />
-                              )}
-                              Refresh
-                            </Button>
-                          </div>
+                          {(loadingEmailsForLead === lead.id || syncingEmailsForLead === lead.id) && (
+                            <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                          )}
                         </div>
                         <div className="p-3 space-y-3 max-h-[400px] overflow-y-auto">
                           {loadingEmailsForLead === lead.id ? (
@@ -1030,26 +1036,12 @@ export default function ClientDashboardPage() {
                               <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
                             </div>
                           ) : !leadEmails[lead.id] || leadEmails[lead.id].length === 0 ? (
-                            <div className="text-center py-4 text-muted-foreground">
-                              <MessageSquareText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                              <p className="text-sm">No emails found</p>
-                              <p className="text-xs mt-1">
-                                Emails are synced automatically via webhooks.
+                            <div className="text-center py-6 text-muted-foreground">
+                              <MessageSquareText className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                              <p className="text-sm font-medium">No emails found</p>
+                              <p className="text-xs mt-1 max-w-[200px] mx-auto">
+                                This lead may not have any email history in the campaign yet.
                               </p>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => syncEmailsForLead(lead.id)}
-                                disabled={syncingEmailsForLead === lead.id}
-                                className="mt-3"
-                              >
-                                {syncingEmailsForLead === lead.id ? (
-                                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                                ) : (
-                                  <RefreshCw className="h-4 w-4 mr-2" />
-                                )}
-                                Refresh
-                              </Button>
                             </div>
                           ) : (
                             leadEmails[lead.id]
