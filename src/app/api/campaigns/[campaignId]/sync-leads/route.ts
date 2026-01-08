@@ -574,12 +574,25 @@ export async function POST(
                     (email) => !email.id || !existingIds.has(email.id)
                   );
 
-                  if (newEmails.length === 0) {
+                  // Deduplicate emails by provider_email_id (API may return duplicates)
+                  const uniqueEmails: typeof newEmails = [];
+                  const seenIds = new Set<string>();
+                  for (const email of newEmails) {
+                    if (email.id && !seenIds.has(email.id)) {
+                      seenIds.add(email.id);
+                      uniqueEmails.push(email);
+                    } else if (!email.id) {
+                      uniqueEmails.push(email);
+                    }
+                  }
+
+                  if (uniqueEmails.length === 0) {
                     return;
                   }
 
-                  // Insert new emails
-                  const emailRecords = newEmails.map((email) => ({
+                  // Upsert emails (update if provider_email_id exists, insert otherwise)
+                  // This handles the case where emails were previously synced with wrong lead_id
+                  const emailRecords = uniqueEmails.map((email) => ({
                     lead_id: lead.id,
                     campaign_id: campaignId,
                     provider_email_id: email.id,
@@ -591,18 +604,21 @@ export async function POST(
                     body_text: email.bodyText,
                     body_html: email.bodyHtml,
                     sent_at: email.sentAt,
-                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
                   }));
 
                   const { error: insertError } = await supabase
                     .from("lead_emails")
-                    .insert(emailRecords);
+                    .upsert(emailRecords, {
+                      onConflict: "provider_email_id",
+                      ignoreDuplicates: false,
+                    });
 
                   if (insertError) {
                     console.error(`[SyncLeads] Error inserting emails for ${lead.email}:`, insertError);
                     emailSyncErrors++;
                   } else {
-                    emailsSynced += newEmails.length;
+                    emailsSynced += uniqueEmails.length;
                     leadsWithEmailsSynced++;
                   }
                 } catch (err) {

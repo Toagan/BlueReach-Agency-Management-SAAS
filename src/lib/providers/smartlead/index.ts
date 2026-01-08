@@ -874,7 +874,7 @@ export class SmartleadProvider implements EmailCampaignProvider {
     leadId?: string // Optional: pass lead ID directly if available
   ): Promise<ProviderEmail[]> {
     try {
-      let smartleadLeadId: number | null = leadId ? parseInt(leadId) : null;
+      const smartleadLeadId: number | null = leadId ? parseInt(leadId) : null;
 
       // If no lead ID provided, skip for Smartlead
       // Smartlead API doesn't support filtering by email, so searching would be too slow
@@ -898,7 +898,8 @@ export class SmartleadProvider implements EmailCampaignProvider {
       console.log(`[SmartleadProvider] Got ${messages.length} emails for ${leadEmail}`);
 
       return messages.map((msg) => ({
-        id: msg.stats_id || msg.message_id,
+        // Use message_id as unique identifier (stats_id is same for all emails in thread)
+        id: msg.message_id || msg.stats_id,
         fromEmail: msg.from,
         toEmail: msg.to,
         subject: msg.subject,
