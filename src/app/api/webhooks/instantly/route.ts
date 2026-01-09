@@ -138,8 +138,10 @@ export async function POST(request: Request) {
     // Find the campaign and lead
     let campaignId: string | null = null;
     let leadId: string | null = null;
-    const leadEmail = payload.lead_email || payload.lead?.email;
-    
+    // Normalize email for consistent lookup
+    const rawLeadEmail = payload.lead_email || payload.lead?.email;
+    const leadEmail = rawLeadEmail ? rawLeadEmail.toLowerCase().trim() : null;
+
     if (payload.campaign_id) {
       const { data: campaign } = await supabase
         .from("campaigns")

@@ -139,8 +139,14 @@ export async function POST(request: Request) {
       let updated = 0;
       let failed = 0;
 
+      // Prepare leads for batch upsert
+      const leadsToUpsert: Array<Record<string, unknown>> = [];
+
       for (const lead of instantlyLeads) {
-        // Extract additional Instantly fields (needed for both insert and update)
+        // Normalize email for consistent storage and lookup
+        const normalizedEmail = lead.email.toLowerCase().trim();
+
+        // Extract additional Instantly fields
         const instantlyData = lead as {
           company_domain?: string;
           personalization?: string;
@@ -152,13 +158,6 @@ export async function POST(request: Request) {
           email_reply_count?: number;
           payload?: Record<string, string>;
         };
-
-        const { data: existingLead } = await supabase
-          .from("leads")
-          .select("id, status, is_positive_reply, first_name, last_name, company_name, company_domain, phone, personalization, email_open_count, email_click_count, email_reply_count")
-          .eq("campaign_id", campaign_id)
-          .eq("email", lead.email)
-          .single();
 
         // Build metadata with all extra Instantly data
         const metadata: Record<string, unknown> = {};
@@ -190,86 +189,54 @@ export async function POST(request: Request) {
           leadStatus = "replied";
         }
 
-        if (existingLead) {
-          // Lead exists - UPDATE Instantly-sourced fields while preserving local-only fields
-          // Status priority: won(8) > lost(7) > booked(6) > replied(5) > clicked(4) > opened(3) > contacted(2) > not_interested(1)
-          const statusPriority: Record<string, number> = {
-            "won": 8, "lost": 7, "booked": 6, "replied": 5,
-            "clicked": 4, "opened": 3, "contacted": 2, "not_interested": 1
-          };
+        leadsToUpsert.push({
+          campaign_id,
+          email: normalizedEmail,
+          first_name: lead.first_name || null,
+          last_name: lead.last_name || null,
+          company_name: lead.company_name || null,
+          company_domain: instantlyData.company_domain || null,
+          phone: lead.phone || null,
+          personalization: instantlyData.personalization || null,
+          status: leadStatus || "contacted",
+          instantly_lead_id: lead.id,
+          instantly_created_at: instantlyData.timestamp_created || null,
+          last_contacted_at: instantlyData.timestamp_last_contact || null,
+          last_step_info: instantlyData.status_summary?.lastStep || null,
+          email_open_count: instantlyData.email_open_count || 0,
+          email_click_count: instantlyData.email_click_count || 0,
+          email_reply_count: instantlyData.email_reply_count || 0,
+          has_replied: hasReplied,
+          is_positive_reply: isPositiveReply,
+          metadata: Object.keys(metadata).length > 0 ? metadata : {},
+          updated_at: new Date().toISOString(),
+        });
+      }
 
-          const currentPriority = statusPriority[existingLead.status] || 0;
-          const newPriority = statusPriority[leadStatus] || 0;
+      // Deduplicate by email (keep last occurrence)
+      const deduped = new Map<string, Record<string, unknown>>();
+      for (const lead of leadsToUpsert) {
+        deduped.set(lead.email as string, lead);
+      }
+      const uniqueLeads = Array.from(deduped.values());
 
-          // Build update object - only update fields that should be updated
-          const updateData: Record<string, unknown> = {
-            // Always update these from Instantly
-            last_contacted_at: instantlyData.timestamp_last_contact || null,
-            last_step_info: instantlyData.status_summary?.lastStep || null,
-            // Only increment counts, never decrease
-            email_open_count: Math.max(instantlyData.email_open_count || 0, existingLead.email_open_count || 0),
-            email_click_count: Math.max(instantlyData.email_click_count || 0, existingLead.email_click_count || 0),
-            email_reply_count: Math.max(instantlyData.email_reply_count || 0, existingLead.email_reply_count || 0),
-          };
-
-          // Only update status if new status has higher priority (never downgrade)
-          if (newPriority > currentPriority) {
-            updateData.status = leadStatus;
-          }
-
-          // Only set is_positive_reply to true, never reset to false via sync
-          if (isPositiveReply && !existingLead.is_positive_reply) {
-            updateData.is_positive_reply = true;
-          }
-
-          // Fill-only fields: only update if local value is empty
-          if (!existingLead.first_name && lead.first_name) updateData.first_name = lead.first_name;
-          if (!existingLead.last_name && lead.last_name) updateData.last_name = lead.last_name;
-          if (!existingLead.company_name && lead.company_name) updateData.company_name = lead.company_name;
-          if (!existingLead.company_domain && instantlyData.company_domain) updateData.company_domain = instantlyData.company_domain;
-          if (!existingLead.phone && lead.phone) updateData.phone = lead.phone;
-          if (!existingLead.personalization && instantlyData.personalization) updateData.personalization = instantlyData.personalization;
-
-          // NOTE: These fields are NEVER touched by sync (preserved):
-          // - notes, deal_value, next_action, next_action_date, linkedin_url
-
-          const { error: updateError } = await supabase
-            .from("leads")
-            .update(updateData)
-            .eq("id", existingLead.id);
-
-          if (updateError) {
-            failed++;
-          } else {
-            updated++;
-          }
-        } else {
-          // Create new lead with ALL fields
-          const { error } = await supabase.from("leads").insert({
-            campaign_id,
-            email: lead.email,
-            first_name: lead.first_name || null,
-            last_name: lead.last_name || null,
-            company_name: lead.company_name || null,
-            company_domain: instantlyData.company_domain || null,
-            phone: lead.phone || null,
-            personalization: instantlyData.personalization || null,
-            status: leadStatus || "contacted",
-            instantly_lead_id: lead.id,
-            instantly_created_at: instantlyData.timestamp_created || null,
-            last_contacted_at: instantlyData.timestamp_last_contact || null,
-            last_step_info: instantlyData.status_summary?.lastStep || null,
-            email_reply_count: instantlyData.email_reply_count || 0,
-            has_replied: hasReplied,
-            is_positive_reply: isPositiveReply,
-            metadata: Object.keys(metadata).length > 0 ? metadata : {},
+      // Batch upsert to handle race conditions atomically
+      const batchSize = 100;
+      for (let i = 0; i < uniqueLeads.length; i += batchSize) {
+        const batch = uniqueLeads.slice(i, i + batchSize);
+        const { error: upsertError, count } = await supabase
+          .from("leads")
+          .upsert(batch, {
+            onConflict: "campaign_id,email",
+            ignoreDuplicates: false,
           });
 
-          if (error) {
-            failed++;
-          } else {
-            imported++;
-          }
+        if (upsertError) {
+          console.error("[Instantly Leads Sync] Upsert error:", upsertError);
+          failed += batch.length;
+        } else {
+          // Count as imported (upsert handles both insert and update)
+          imported += count || batch.length;
         }
       }
 

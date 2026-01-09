@@ -62,12 +62,15 @@ export async function POST(request: Request) {
         results.campaigns_processed++;
 
         for (const lead of instantlyLeads) {
+          // Normalize email for consistent lookup
+          const normalizedEmail = lead.email.toLowerCase().trim();
+
           // Find the existing lead in our database
           const { data: existingLead } = await supabase
             .from("leads")
             .select("id, status, is_positive_reply")
             .eq("campaign_id", campaign.id)
-            .eq("email", lead.email)
+            .eq("email", normalizedEmail)
             .single();
 
           if (!existingLead) {

@@ -414,9 +414,12 @@ export async function POST(
       return NextResponse.json({ success: true, message: "No lead email" });
     }
 
-    const lead = await findLead(supabase, campaign.id, webhookPayload.leadEmail);
+    // Normalize email for consistent lookup
+    const normalizedLeadEmail = webhookPayload.leadEmail.toLowerCase().trim();
+
+    const lead = await findLead(supabase, campaign.id, normalizedLeadEmail);
     if (!lead) {
-      console.log(`[Webhook] Lead not found: ${webhookPayload.leadEmail}`);
+      console.log(`[Webhook] Lead not found: ${normalizedLeadEmail}`);
       return NextResponse.json({ success: true, message: "Lead not found" });
     }
 
@@ -427,7 +430,7 @@ export async function POST(
       webhookPayload,
       campaign.id,
       lead.id,
-      webhookPayload.leadEmail
+      normalizedLeadEmail
     );
 
     return NextResponse.json({
