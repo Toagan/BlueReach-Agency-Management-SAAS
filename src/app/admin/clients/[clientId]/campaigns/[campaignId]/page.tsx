@@ -402,7 +402,7 @@ export default function CampaignDetailPage() {
 
 
   // Export leads to CSV
-  const handleExportLeads = async (filter: "positive_replies" | "replied_not_positive" | "no_reply") => {
+  const handleExportLeads = async (filter: "positive_replies" | "replied_not_positive" | "no_reply" | "all") => {
     try {
       const response = await fetch(`/api/campaigns/${campaignId}/export-leads?filter=${filter}`);
 
@@ -658,7 +658,20 @@ export default function CampaignDetailPage() {
                 <div>
                   <div className="font-medium">No Reply</div>
                   <div className="text-xs text-muted-foreground">
-                    {noReplyLeads.length} leads
+                    All leads that haven't replied
+                  </div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => handleExportLeads("all")}
+                className="cursor-pointer"
+              >
+                <Users className="h-4 w-4 mr-2 text-blue-500" />
+                <div>
+                  <div className="font-medium">All Leads</div>
+                  <div className="text-xs text-muted-foreground">
+                    Export entire lead list
                   </div>
                 </div>
               </DropdownMenuItem>

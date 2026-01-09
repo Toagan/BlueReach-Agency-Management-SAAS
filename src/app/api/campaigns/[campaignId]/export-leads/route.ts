@@ -54,6 +54,8 @@ export async function GET(
       .eq("campaign_id", campaignId);
 
     // Apply filter
+    console.log(`[ExportLeads] Filter: ${filter}, Campaign: ${campaignId}`);
+
     switch (filter) {
       case "positive_replies":
         query = query.eq("is_positive_reply", true);
@@ -62,10 +64,15 @@ export async function GET(
         query = query.eq("has_replied", true).neq("is_positive_reply", true);
         break;
       case "no_reply":
+        // Export all leads that haven't replied
+        // has_replied is null, false, or status is 'contacted' without reply
         query = query.or("has_replied.is.null,has_replied.eq.false");
         break;
+      case "all":
+        // Export all leads - no additional filter
+        break;
       default:
-        // "all" - no additional filter
+        // Default to all
         break;
     }
 
@@ -76,6 +83,8 @@ export async function GET(
 
     const { data: leads, error } = await query;
 
+    console.log(`[ExportLeads] Query completed. Found ${leads?.length || 0} leads`);
+
     if (error) {
       console.error("[ExportLeads] Query error:", error);
       return NextResponse.json(
@@ -85,11 +94,14 @@ export async function GET(
     }
 
     if (!leads || leads.length === 0) {
+      console.log(`[ExportLeads] No leads found for filter: ${filter}`);
       return NextResponse.json(
-        { error: "No leads found for this filter" },
+        { error: `No leads found matching "${filter.replace(/_/g, " ")}" filter` },
         { status: 404 }
       );
     }
+
+    console.log(`[ExportLeads] Exporting ${leads.length} leads for filter: ${filter}`);
 
     // Get campaign name for filename
     const { data: campaign } = await supabase
