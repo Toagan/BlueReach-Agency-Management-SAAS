@@ -611,35 +611,15 @@ export default function ClientDashboardPage() {
               <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-100/50 dark:bg-slate-800/50 px-6 py-4">
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                   {client?.verticals && client.verticals.length > 0 && (
-                    <div className="relative group flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-muted-foreground" />
-                      <div className="flex flex-wrap gap-1 cursor-pointer">
-                        {client.verticals.slice(0, 3).map((vertical, index) => (
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <div className="flex flex-wrap gap-1">
+                        {client.verticals.map((vertical, index) => (
                           <Badge key={index} variant="secondary" className="text-xs">
                             {vertical}
                           </Badge>
                         ))}
-                        {client.verticals.length > 3 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{client.verticals.length - 3} more
-                          </Badge>
-                        )}
                       </div>
-                      {/* Hover tooltip showing all verticals */}
-                      {client.verticals.length > 3 && (
-                        <div className="absolute left-0 top-full mt-2 z-50 hidden group-hover:block">
-                          <div className="bg-popover text-popover-foreground border border-border rounded-lg shadow-lg p-3 min-w-[200px]">
-                            <p className="text-xs font-medium text-muted-foreground mb-2">All Verticals</p>
-                            <div className="flex flex-wrap gap-1">
-                              {client.verticals.map((vertical, index) => (
-                                <Badge key={index} variant="secondary" className="text-xs">
-                                  {vertical}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
                   {client?.acv && (
