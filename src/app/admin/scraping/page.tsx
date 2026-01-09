@@ -112,7 +112,156 @@ export default function ScrapingPage() {
         </Card>
       </div>
 
-      {/* Placeholder for future filters/settings */}
+      {/* Scraping Tools & Resources */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Scraping Tools & Resources</CardTitle>
+          <CardDescription>
+            External tools and APIs for lead scraping
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <a
+              href="https://blitzapi.io"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-start gap-3 p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-muted/50 transition-colors group"
+            >
+              <div className="p-2 rounded-md bg-purple-100 dark:bg-purple-900/30">
+                <Search className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div className="flex-1">
+                <div className="font-medium group-hover:text-primary transition-colors">BlitzAPI</div>
+                <p className="text-sm text-muted-foreground">
+                  Fast Google Maps & Places API for scraping business data at scale
+                </p>
+              </div>
+            </a>
+
+            <a
+              href="https://zenrows.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-start gap-3 p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-muted/50 transition-colors group"
+            >
+              <div className="p-2 rounded-md bg-green-100 dark:bg-green-900/30">
+                <Search className="h-4 w-4 text-green-600 dark:text-green-400" />
+              </div>
+              <div className="flex-1">
+                <div className="font-medium group-hover:text-primary transition-colors">ZenRows</div>
+                <p className="text-sm text-muted-foreground">
+                  Web scraping API with anti-bot bypass, rotating proxies & JavaScript rendering
+                </p>
+              </div>
+            </a>
+
+            <a
+              href="https://rapidapi.com/rockapis-rockapis-default/api/google-map-places"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-start gap-3 p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-muted/50 transition-colors group"
+            >
+              <div className="p-2 rounded-md bg-blue-100 dark:bg-blue-900/30">
+                <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="flex-1">
+                <div className="font-medium group-hover:text-primary transition-colors">RapidAPI Rock API</div>
+                <p className="text-sm text-muted-foreground">
+                  Google Maps Places API on RapidAPI for business search & details
+                </p>
+              </div>
+            </a>
+
+            <a
+              href="https://texau.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-start gap-3 p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-muted/50 transition-colors group"
+            >
+              <div className="p-2 rounded-md bg-orange-100 dark:bg-orange-900/30">
+                <Search className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div className="flex-1">
+                <div className="font-medium group-hover:text-primary transition-colors">TexAu</div>
+                <p className="text-sm text-muted-foreground">
+                  Growth automation platform for LinkedIn, Twitter, and web scraping
+                </p>
+              </div>
+            </a>
+
+            <a
+              href="https://phantombuster.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-start gap-3 p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-muted/50 transition-colors group"
+            >
+              <div className="p-2 rounded-md bg-indigo-100 dark:bg-indigo-900/30">
+                <Search className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <div className="flex-1">
+                <div className="font-medium group-hover:text-primary transition-colors">PhantomBuster</div>
+                <p className="text-sm text-muted-foreground">
+                  No-code automation for LinkedIn, Sales Navigator, Google Maps & more
+                </p>
+              </div>
+            </a>
+
+            <a
+              href="https://chrome.google.com/webstore/detail/instant-data-scraper/ofaokhiedipichpaobibbnahnkdoiiah"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-start gap-3 p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-muted/50 transition-colors group"
+            >
+              <div className="p-2 rounded-md bg-yellow-100 dark:bg-yellow-900/30">
+                <Search className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div className="flex-1">
+                <div className="font-medium group-hover:text-primary transition-colors">Instant Data Scraper</div>
+                <p className="text-sm text-muted-foreground">
+                  Free Chrome extension for scraping data from any website with AI detection
+                </p>
+              </div>
+            </a>
+
+            <a
+              href="https://ahrefs.com/blog/google-advanced-search-operators/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-start gap-3 p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-muted/50 transition-colors group"
+            >
+              <div className="p-2 rounded-md bg-red-100 dark:bg-red-900/30">
+                <Search className="h-4 w-4 text-red-600 dark:text-red-400" />
+              </div>
+              <div className="flex-1">
+                <div className="font-medium group-hover:text-primary transition-colors">Google Search Operators</div>
+                <p className="text-sm text-muted-foreground">
+                  Advanced search operators guide for finding targeted leads on Google
+                </p>
+              </div>
+            </a>
+
+            <a
+              href="https://serper.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-start gap-3 p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-muted/50 transition-colors group"
+            >
+              <div className="p-2 rounded-md bg-teal-100 dark:bg-teal-900/30">
+                <Search className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+              </div>
+              <div className="flex-1">
+                <div className="font-medium group-hover:text-primary transition-colors">Serper</div>
+                <p className="text-sm text-muted-foreground">
+                  Google Search API for real-time SERP data, images, news & more
+                </p>
+              </div>
+            </a>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Placeholder for future scraping jobs */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Scraping Jobs</CardTitle>
