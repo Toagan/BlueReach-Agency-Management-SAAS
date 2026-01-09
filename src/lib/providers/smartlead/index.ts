@@ -253,9 +253,12 @@ export class SmartleadProvider implements EmailCampaignProvider {
     // Fetch sequences/email steps
     let sequences: ProviderCampaignDetails["sequences"] = undefined;
     try {
+      console.log(`[SmartleadProvider] Fetching sequences from /campaigns/${campaignId}/sequences`);
       const seqResponse = await this.client.get<SmartleadSequenceResponse>(
         `/campaigns/${campaignId}/sequences`
       );
+
+      console.log(`[SmartleadProvider] Sequences API response:`, JSON.stringify(seqResponse, null, 2).slice(0, 500));
 
       if (seqResponse.email_campaign_sequences && seqResponse.email_campaign_sequences.length > 0) {
         sequences = [{
@@ -271,10 +274,13 @@ export class SmartleadProvider implements EmailCampaignProvider {
           })),
         }];
         console.log(`[SmartleadProvider] Fetched ${seqResponse.email_campaign_sequences.length} sequence steps for campaign ${campaignId}`);
+      } else {
+        console.log(`[SmartleadProvider] No email_campaign_sequences found in response for campaign ${campaignId}`);
       }
     } catch (err) {
-      console.warn(`[SmartleadProvider] Could not fetch sequences for campaign ${campaignId}:`, err);
-      // Sequences may not be available, continue without them
+      console.error(`[SmartleadProvider] Error fetching sequences for campaign ${campaignId}:`, err);
+      // Re-throw the error so caller knows sequences fetch failed
+      throw new Error(`Failed to fetch sequences from Smartlead: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
 
     return {

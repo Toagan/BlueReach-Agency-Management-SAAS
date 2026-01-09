@@ -69,19 +69,29 @@ export async function POST(
   const supabase = getSupabase();
 
   try {
-    // Get campaign to find provider campaign ID
+    // Get campaign to find provider campaign ID AND api_key_encrypted
     const { data: campaign, error: campaignError } = await supabase
       .from("campaigns")
-      .select("id, provider_type, provider_campaign_id, instantly_campaign_id, smartlead_campaign_id, name")
+      .select("id, provider_type, provider_campaign_id, instantly_campaign_id, smartlead_campaign_id, name, api_key_encrypted")
       .eq("id", campaignId)
       .single();
 
     if (campaignError || !campaign) {
+      console.error("[Sequences] Campaign not found:", campaignId, campaignError);
       return NextResponse.json(
         { error: "Campaign not found" },
         { status: 404 }
       );
     }
+
+    console.log("[Sequences] Campaign data:", {
+      id: campaign.id,
+      provider_type: campaign.provider_type,
+      provider_campaign_id: campaign.provider_campaign_id,
+      instantly_campaign_id: campaign.instantly_campaign_id,
+      smartlead_campaign_id: campaign.smartlead_campaign_id,
+      has_api_key: !!campaign.api_key_encrypted,
+    });
 
     const providerCampaignId = campaign.provider_campaign_id ||
       campaign.instantly_campaign_id ||
@@ -90,6 +100,14 @@ export async function POST(
     if (!providerCampaignId) {
       return NextResponse.json(
         { error: "Campaign not linked to any provider" },
+        { status: 400 }
+      );
+    }
+
+    // Check if API key is configured
+    if (!campaign.api_key_encrypted) {
+      return NextResponse.json(
+        { error: `No API key configured for this ${campaign.provider_type === "smartlead" ? "Smartlead" : "Instantly"} campaign. Please update the campaign settings.` },
         { status: 400 }
       );
     }

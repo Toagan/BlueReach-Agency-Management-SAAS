@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users, Bell, BarChart3, Send } from "lucide-react";
+import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users, Bell, BarChart3, Send, Zap } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -1033,6 +1033,35 @@ export default function ClientSettingsPage() {
               )}
             </>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Automation */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Zap className="h-5 w-5" />
+            Automation
+          </CardTitle>
+          <CardDescription>
+            Automated workflows and integrations for this client
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 border border-dashed">
+            <div className="p-2 rounded-md bg-amber-100 dark:bg-amber-900/30">
+              <Zap className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <p className="font-medium text-sm">Automatic Reply Automations</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                We will push automatic reply automations via n8n soon. This will enable automated responses to incoming leads based on customizable workflows and triggers.
+              </p>
+              <p className="text-xs text-muted-foreground/70 mt-2">
+                Coming soon
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

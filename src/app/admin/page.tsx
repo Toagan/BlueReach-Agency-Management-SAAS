@@ -31,6 +31,7 @@ import {
   Target,
   Send,
   Settings,
+  Sparkles,
 } from "lucide-react";
 
 interface OverviewStats {
@@ -270,6 +271,13 @@ export default function AdminCommandCenter() {
           className="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors"
         >
           Scraping
+        </Link>
+        <Link
+          href="/admin/ai-campaigns"
+          className="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          AI Campaigns
         </Link>
       </div>
 

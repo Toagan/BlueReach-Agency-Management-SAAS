@@ -498,28 +498,28 @@ export default function ClientDashboardPage() {
   };
 
   return (
-    <div className="flex gap-6">
-      {/* Left Navigation Sidebar */}
-      <nav className="hidden lg:block w-48 flex-shrink-0">
-        <div className="sticky top-6 space-y-1">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 px-3">
-            Navigation
-          </p>
+    <div className="flex">
+      {/* Left Navigation Sidebar - Minimal */}
+      <nav className="hidden lg:flex flex-col items-center w-12 flex-shrink-0 pt-2">
+        <div className="sticky top-6 flex flex-col gap-1">
           {sections.map((section) => (
             <button
               key={section.id}
               onClick={() => scrollToSection(section.id)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors text-left"
+              className="group relative flex items-center justify-center w-9 h-9 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-all"
+              title={section.label}
             >
               <section.icon className="h-4 w-4" />
-              {section.label}
+              <span className="absolute left-full ml-2 px-2 py-1 text-xs font-medium bg-popover text-popover-foreground rounded-md shadow-md opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity border">
+                {section.label}
+              </span>
             </button>
           ))}
         </div>
       </nav>
 
       {/* Main Content */}
-      <div className="flex-1 min-w-0 space-y-6">
+      <div className="flex-1 min-w-0 space-y-6 pl-2 lg:pl-0">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
