@@ -576,7 +576,7 @@ export default function ClientDashboardPage() {
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">The Offer</p>
                 </div>
                 {client?.product_service ? (
-                  <p className="text-sm text-foreground leading-relaxed line-clamp-4">
+                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
                     {client.product_service}
                   </p>
                 ) : (
@@ -595,7 +595,7 @@ export default function ClientDashboardPage() {
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Ideal Customer Profile</p>
                 </div>
                 {client?.icp ? (
-                  <p className="text-sm text-foreground leading-relaxed line-clamp-4">
+                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
                     {client.icp}
                   </p>
                 ) : (
