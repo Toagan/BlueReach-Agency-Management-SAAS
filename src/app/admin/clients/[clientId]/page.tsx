@@ -482,10 +482,46 @@ export default function ClientDashboardPage() {
     );
   }
 
+  // Navigation sections
+  const sections = [
+    { id: "overview", label: "Overview", icon: Target },
+    { id: "stats", label: "Stats", icon: Mail },
+    { id: "workflow", label: "Lead Workflow", icon: Users },
+    { id: "campaigns", label: "Campaigns", icon: BarChart3 },
+  ];
+
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+    <div className="flex gap-6">
+      {/* Left Navigation Sidebar */}
+      <nav className="hidden lg:block w-48 flex-shrink-0">
+        <div className="sticky top-6 space-y-1">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 px-3">
+            Navigation
+          </p>
+          {sections.map((section) => (
+            <button
+              key={section.id}
+              onClick={() => scrollToSection(section.id)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors text-left"
+            >
+              <section.icon className="h-4 w-4" />
+              {section.label}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {/* Main Content */}
+      <div className="flex-1 min-w-0 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           {isAdmin && (
             <Link
@@ -543,6 +579,7 @@ export default function ClientDashboardPage() {
       )}
 
       {/* Client Overview Hero Card */}
+      <div id="overview">
       {(client?.tam || client?.product_service || client?.icp) && (
         <Card className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 border-slate-200 dark:border-slate-700 overflow-hidden">
           <CardContent className="p-0">
@@ -658,9 +695,10 @@ export default function ClientDashboardPage() {
           </CardContent>
         </Card>
       )}
+      </div>
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div id="stats" className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
@@ -725,7 +763,7 @@ export default function ClientDashboardPage() {
       </div>
 
       {/* Lead Workflow Management */}
-      <Card>
+      <Card id="workflow">
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
@@ -1216,7 +1254,7 @@ export default function ClientDashboardPage() {
       </Card>
 
       {/* Campaigns List */}
-      <Card>
+      <Card id="campaigns">
         <CardHeader className="flex flex-row items-center justify-between pb-4">
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
@@ -1274,6 +1312,7 @@ export default function ClientDashboardPage() {
           Last updated: {lastUpdated.toLocaleTimeString()}
         </p>
       )}
+      </div>
     </div>
   );
 }
