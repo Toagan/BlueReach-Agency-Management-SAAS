@@ -234,6 +234,10 @@ export async function POST(
       // For backwards compatibility with Instantly
       if (provider.providerType === "instantly") {
         leadData.instantly_lead_id = lead.id;
+        // Store original creation date from Instantly
+        if (lead.createdAt) {
+          leadData.instantly_created_at = lead.createdAt;
+        }
       }
 
       // Store custom fields in metadata
