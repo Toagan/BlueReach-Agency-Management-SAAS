@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendStatsReport } from "@/lib/email";
+import { getProviderForCampaign } from "@/lib/providers";
 
 function getSupabase() {
   return createClient(
@@ -94,7 +95,7 @@ function getDateRange(interval: string): { startDate: Date; endDate: Date; previ
 
 // Get stats for a client - supports date-filtered and all-time stats
 // For all-time: uses cached stats from campaigns (fast, matches dashboard)
-// For date ranges: uses leads table with date filters (accurate for period)
+// For date ranges: fetches daily analytics from Instantly API (accurate for period)
 async function getClientStats(
   supabase: ReturnType<typeof getSupabase>,
   clientId: string,
@@ -102,10 +103,10 @@ async function getClientStats(
   endDate: Date,
   isAllTime: boolean = false
 ): Promise<{ emailsSent: number; replies: number; positiveReplies: number; replyRate: number }> {
-  // Get all campaigns for this client
+  // Get all campaigns for this client with provider info
   const { data: campaigns } = await supabase
     .from("campaigns")
-    .select("id, cached_emails_sent, cached_reply_count, cached_emails_bounced")
+    .select("id, cached_emails_sent, cached_reply_count, cached_emails_bounced, provider_type, provider_campaign_id, instantly_campaign_id, api_key_encrypted")
     .eq("client_id", clientId);
 
   if (!campaigns || campaigns.length === 0) {
@@ -141,50 +142,65 @@ async function getClientStats(
     };
   }
 
-  // DATE-FILTERED REPORTING STRATEGY:
-  // - emailsSent: Use cached campaign stats (we don't have reliable send dates per lead)
-  // - replies/positiveReplies: Use date filtering on responded_at or updated_at (set when status changes)
+  // DATE-FILTERED REPORTING: Fetch daily analytics from Instantly API
+  // This gives us accurate period-specific stats for emails sent, opened, replied, etc.
+  const startDateStr = startDate.toISOString().split("T")[0]; // YYYY-MM-DD format
+  const endDateStr = endDate.toISOString().split("T")[0];
 
-  const startDateStr = startDate.toISOString();
-  const endDateStr = endDate.toISOString();
-
-  // Emails sent: Use cached stats (all-time) - most accurate since we don't track per-email send dates
   let emailsSent = 0;
+  let replies = 0;
+
+  // Fetch daily analytics from Instantly for each campaign
   for (const campaign of campaigns) {
-    emailsSent += campaign.cached_emails_sent || 0;
+    const providerCampaignId = campaign.provider_campaign_id || campaign.instantly_campaign_id;
+
+    // Skip campaigns without API key or provider ID
+    if (!campaign.api_key_encrypted || !providerCampaignId) {
+      continue;
+    }
+
+    try {
+      const provider = await getProviderForCampaign(campaign.id);
+
+      // Only Instantly supports daily analytics for now
+      if (provider.providerType === "instantly" && provider.fetchDailyAnalytics) {
+        const dailyStats = await provider.fetchDailyAnalytics(
+          providerCampaignId,
+          startDateStr,
+          endDateStr
+        );
+
+        // Sum up daily values for the period
+        for (const day of dailyStats) {
+          emailsSent += day.sent || 0;
+          replies += day.replied || 0;
+        }
+      } else {
+        // Fallback: use cached stats for non-Instantly campaigns
+        emailsSent += campaign.cached_emails_sent || 0;
+        replies += campaign.cached_reply_count || 0;
+      }
+    } catch (err) {
+      // If API call fails, fall back to cached stats
+      console.warn(`[Stats Report] Failed to fetch daily analytics for campaign ${campaign.id}:`, err);
+      emailsSent += campaign.cached_emails_sent || 0;
+      replies += campaign.cached_reply_count || 0;
+    }
   }
 
-  // Count leads that replied in the date range (using responded_at with updated_at fallback)
-  const { count: repliesWithRespondedAt } = await supabase
-    .from("leads")
-    .select("*", { count: "exact", head: true })
-    .in("campaign_id", campaignIds)
-    .eq("has_replied", true)
-    .not("responded_at", "is", null)
-    .gte("responded_at", startDateStr)
-    .lte("responded_at", endDateStr);
+  // For positive replies, still use date-filtered query on leads table
+  // (Instantly daily analytics doesn't break down by interest status)
+  const startDateIso = startDate.toISOString();
+  const endDateIso = endDate.toISOString();
 
-  // Also check leads where responded_at is null but updated_at is in range
-  const { count: repliesWithUpdatedAt } = await supabase
-    .from("leads")
-    .select("*", { count: "exact", head: true })
-    .in("campaign_id", campaignIds)
-    .eq("has_replied", true)
-    .is("responded_at", null)
-    .gte("updated_at", startDateStr)
-    .lte("updated_at", endDateStr);
-
-  const replies = (repliesWithRespondedAt || 0) + (repliesWithUpdatedAt || 0);
-
-  // Count positive replies in the date range
   const { count: positiveWithRespondedAt } = await supabase
     .from("leads")
     .select("*", { count: "exact", head: true })
     .in("campaign_id", campaignIds)
     .eq("is_positive_reply", true)
     .not("responded_at", "is", null)
-    .gte("responded_at", startDateStr)
-    .lte("responded_at", endDateStr);
+    .gte("responded_at", startDateIso)
+    .lte("responded_at", endDateIso);
 
   const { count: positiveWithUpdatedAt } = await supabase
     .from("leads")
@@ -192,8 +208,8 @@ async function getClientStats(
     .in("campaign_id", campaignIds)
     .eq("is_positive_reply", true)
     .is("responded_at", null)
-    .gte("updated_at", startDateStr)
-    .lte("updated_at", endDateStr);
+    .gte("updated_at", startDateIso)
+    .lte("updated_at", endDateIso);
 
   const positiveReplies = (positiveWithRespondedAt || 0) + (positiveWithUpdatedAt || 0);
 

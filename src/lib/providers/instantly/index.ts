@@ -540,7 +540,7 @@ export class InstantlyProvider implements EmailCampaignProvider {
     const response = await this.client.get<
       { daily: InstantlyDailyAnalytics[] } | InstantlyDailyAnalytics[]
     >("/campaigns/analytics/daily", {
-      id: campaignId,
+      campaign_id: campaignId,  // API v2 uses campaign_id, not id
       start_date: startDate,
       end_date: endDate,
     });
