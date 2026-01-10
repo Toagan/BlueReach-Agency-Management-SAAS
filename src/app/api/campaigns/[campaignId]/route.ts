@@ -44,13 +44,13 @@ export async function GET(request: Request, { params }: RouteParams) {
   }
 }
 
-// PATCH - Update campaign (name, etc.) - Safe update preserving associations
+// PATCH - Update campaign (name, api_key, etc.) - Safe update preserving associations
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const { campaignId } = await params;
     const supabase = getSupabase();
     const body = await request.json();
-    const { name, is_active } = body;
+    const { name, is_active, api_key } = body;
 
     // Build update object with only allowed fields
     // CRITICAL: Never allow updating instantly_campaign_id
@@ -63,6 +63,11 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     if (is_active !== undefined) {
       updateData.is_active = is_active;
+    }
+
+    // Allow updating the API key (stored as api_key_encrypted)
+    if (api_key !== undefined) {
+      updateData.api_key_encrypted = api_key;
     }
 
     if (Object.keys(updateData).length === 0) {

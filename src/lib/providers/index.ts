@@ -54,7 +54,7 @@ export function createProvider(
 
 /**
  * Get provider for a specific campaign by fetching its config from database
- * Falls back to environment variables if no campaign-specific API key is set
+ * Requires campaign-level API key (each campaign can use different Instantly/Smartlead accounts)
  */
 export async function getProviderForCampaign(
   campaignId: string
@@ -70,7 +70,7 @@ export async function getProviderForCampaign(
 
   const { data: campaign, error } = await supabase
     .from("campaigns")
-    .select("provider_type, api_key_encrypted")
+    .select("provider_type, api_key_encrypted, name")
     .eq("id", campaignId)
     .single();
 
@@ -78,24 +78,13 @@ export async function getProviderForCampaign(
     throw new Error(`Campaign not found: ${campaignId}`);
   }
 
-  // Use campaign-specific API key if available, otherwise fallback to environment variable
-  let apiKey = campaign.api_key_encrypted;
   const providerType = (campaign.provider_type || "instantly") as ProviderType;
+  const apiKey = campaign.api_key_encrypted;
 
   if (!apiKey) {
-    // Fallback to environment variables
-    if (providerType === "instantly") {
-      apiKey = process.env.INSTANTLY_API_KEY || null;
-    } else if (providerType === "smartlead") {
-      apiKey = process.env.SMARTLEAD_API_KEY || null;
-    }
-  }
-
-  if (!apiKey) {
+    const providerName = providerType === "smartlead" ? "Smartlead" : "Instantly";
     throw new Error(
-      `No API key configured for ${providerType}. Please set the ${
-        providerType === "instantly" ? "INSTANTLY_API_KEY" : "SMARTLEAD_API_KEY"
-      } environment variable or add an API key in campaign settings.`
+      `No ${providerName} API key configured for campaign "${campaign.name}". Please add the API key in the campaign linking settings.`
     );
   }
 
