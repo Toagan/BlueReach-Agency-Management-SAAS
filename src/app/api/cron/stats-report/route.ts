@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendStatsReport } from "@/lib/email";
-import { getProviderForCampaign } from "@/lib/providers";
 
 function getSupabase() {
   return createClient(
@@ -95,7 +94,7 @@ function getDateRange(interval: string): { startDate: Date; endDate: Date; previ
 
 // Get stats for a client - supports date-filtered and all-time stats
 // For all-time: uses cached stats from campaigns (fast, matches dashboard)
-// For date ranges: fetches daily analytics from Instantly API (accurate for period)
+// For date ranges: queries campaign_analytics_daily table (Supabase is source of truth)
 async function getClientStats(
   supabase: ReturnType<typeof getSupabase>,
   clientId: string,
@@ -103,10 +102,10 @@ async function getClientStats(
   endDate: Date,
   isAllTime: boolean = false
 ): Promise<{ emailsSent: number; replies: number; positiveReplies: number; replyRate: number }> {
-  // Get all campaigns for this client with provider info
+  // Get all campaigns for this client
   const { data: campaigns } = await supabase
     .from("campaigns")
-    .select("id, cached_emails_sent, cached_reply_count, cached_emails_bounced, provider_type, provider_campaign_id, instantly_campaign_id, api_key_encrypted")
+    .select("id, cached_emails_sent, cached_reply_count")
     .eq("client_id", clientId);
 
   if (!campaigns || campaigns.length === 0) {
@@ -142,54 +141,31 @@ async function getClientStats(
     };
   }
 
-  // DATE-FILTERED REPORTING: Fetch daily analytics from Instantly API
-  // This gives us accurate period-specific stats for emails sent, opened, replied, etc.
+  // DATE-FILTERED REPORTING: Query campaign_analytics_daily table (Supabase as source of truth)
+  // This ensures stats remain available even after campaigns are deleted from Instantly
   const startDateStr = startDate.toISOString().split("T")[0]; // YYYY-MM-DD format
   const endDateStr = endDate.toISOString().split("T")[0];
 
+  // Query daily analytics from Supabase
+  const { data: dailyStats } = await supabase
+    .from("campaign_analytics_daily")
+    .select("emails_sent, emails_replied")
+    .in("campaign_id", campaignIds)
+    .gte("snapshot_date", startDateStr)
+    .lte("snapshot_date", endDateStr);
+
+  // Sum up the daily values
   let emailsSent = 0;
   let replies = 0;
 
-  // Fetch daily analytics from Instantly for each campaign
-  for (const campaign of campaigns) {
-    const providerCampaignId = campaign.provider_campaign_id || campaign.instantly_campaign_id;
-
-    // Skip campaigns without API key or provider ID
-    if (!campaign.api_key_encrypted || !providerCampaignId) {
-      continue;
-    }
-
-    try {
-      const provider = await getProviderForCampaign(campaign.id);
-
-      // Only Instantly supports daily analytics for now
-      if (provider.providerType === "instantly" && provider.fetchDailyAnalytics) {
-        const dailyStats = await provider.fetchDailyAnalytics(
-          providerCampaignId,
-          startDateStr,
-          endDateStr
-        );
-
-        // Sum up daily values for the period
-        for (const day of dailyStats) {
-          emailsSent += day.sent || 0;
-          replies += day.replied || 0;
-        }
-      } else {
-        // Fallback: use cached stats for non-Instantly campaigns
-        emailsSent += campaign.cached_emails_sent || 0;
-        replies += campaign.cached_reply_count || 0;
-      }
-    } catch (err) {
-      // If API call fails, fall back to cached stats
-      console.warn(`[Stats Report] Failed to fetch daily analytics for campaign ${campaign.id}:`, err);
-      emailsSent += campaign.cached_emails_sent || 0;
-      replies += campaign.cached_reply_count || 0;
+  if (dailyStats) {
+    for (const day of dailyStats) {
+      emailsSent += day.emails_sent || 0;
+      replies += day.emails_replied || 0;
     }
   }
 
-  // For positive replies, still use date-filtered query on leads table
-  // (Instantly daily analytics doesn't break down by interest status)
+  // For positive replies, use date-filtered query on leads table
   const startDateIso = startDate.toISOString();
   const endDateIso = endDate.toISOString();
 

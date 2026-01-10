@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
-import { getDailyAnalytics } from "@/lib/instantly/analytics";
+import { NextRequest, NextResponse } from "next/server";
+import { getProviderForCampaign } from "@/lib/providers";
 
 function getSupabase() {
   return createClient(
@@ -13,15 +13,24 @@ function getSupabase() {
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // POST - Backfill historical daily analytics from Instantly
-export async function POST() {
+// Supports per-campaign API keys
+export async function POST(request: NextRequest) {
   try {
     const supabase = getSupabase();
+    const { searchParams } = new URL(request.url);
+    const clientId = searchParams.get("clientId");
 
-    // Get all campaigns with Instantly integration
-    const { data: campaigns, error: campaignsError } = await supabase
+    // Get campaigns with provider integration (optionally filtered by client)
+    let query = supabase
       .from("campaigns")
-      .select("id, name, instantly_campaign_id")
-      .not("instantly_campaign_id", "is", null);
+      .select("id, name, provider_campaign_id, instantly_campaign_id, api_key_encrypted, client_id")
+      .or("provider_campaign_id.not.is.null,instantly_campaign_id.not.is.null");
+
+    if (clientId) {
+      query = query.eq("client_id", clientId);
+    }
+
+    const { data: campaigns, error: campaignsError } = await query;
 
     if (campaignsError) {
       return NextResponse.json(
@@ -33,7 +42,7 @@ export async function POST() {
     if (!campaigns || campaigns.length === 0) {
       return NextResponse.json({
         success: true,
-        message: "No campaigns with Instantly integration found",
+        message: "No campaigns with provider integration found",
         campaignsProcessed: 0,
         recordsInserted: 0,
       });
@@ -43,6 +52,7 @@ export async function POST() {
 
     let totalRecordsInserted = 0;
     let campaignsProcessed = 0;
+    let campaignsSkipped = 0;
     let campaignsFailed = 0;
     const errors: Array<{ campaign: string; error: string }> = [];
     let earliestDate: string | null = null;
@@ -50,12 +60,33 @@ export async function POST() {
 
     for (const campaign of campaigns) {
       try {
+        const providerCampaignId = campaign.provider_campaign_id || campaign.instantly_campaign_id;
+
+        // Skip campaigns without API key
+        if (!campaign.api_key_encrypted) {
+          console.log(`[Backfill] Skipping ${campaign.name} - no API key`);
+          campaignsSkipped++;
+          continue;
+        }
+
         console.log(`[Backfill] Fetching daily analytics for: ${campaign.name}`);
 
-        // Fetch ALL historical daily analytics (no date filter)
-        const dailyAnalytics = await getDailyAnalytics({
-          campaign_id: campaign.instantly_campaign_id!,
-        });
+        // Get provider for this campaign (uses per-campaign API key)
+        const provider = await getProviderForCampaign(campaign.id);
+
+        // Only process Instantly campaigns with daily analytics support
+        if (provider.providerType !== "instantly" || !provider.fetchDailyAnalytics) {
+          console.log(`[Backfill] Skipping ${campaign.name} - provider doesn't support daily analytics`);
+          campaignsSkipped++;
+          continue;
+        }
+
+        // Fetch ALL historical daily analytics (wide date range)
+        const dailyAnalytics = await provider.fetchDailyAnalytics(
+          providerCampaignId!,
+          "2020-01-01",
+          "2030-12-31"
+        );
 
         if (!dailyAnalytics || dailyAnalytics.length === 0) {
           console.log(`[Backfill] No daily analytics for: ${campaign.name}`);
@@ -71,13 +102,13 @@ export async function POST() {
           snapshot_date: day.date,
           emails_sent: day.sent || 0,
           emails_opened: day.opened || 0,
-          emails_opened_unique: day.unique_opened || 0,
-          emails_clicked: day.clicks || 0,
-          emails_clicked_unique: day.unique_clicks || 0,
-          emails_replied: day.replies || 0,
-          emails_replied_unique: day.unique_replies || 0,
-          leads_contacted: day.contacted || 0,
-          positive_replies: day.opportunities || 0,
+          emails_opened_unique: day.uniqueOpened || 0,
+          emails_clicked: day.clicked || 0,
+          emails_clicked_unique: day.uniqueClicked || 0,
+          emails_replied: day.replied || 0,
+          emails_replied_unique: day.uniqueReplied || 0,
+          leads_contacted: day.sent || 0, // Use sent as contacted
+          positive_replies: 0, // Will be updated separately if needed
           updated_at: new Date().toISOString(),
         }));
 
@@ -121,12 +152,13 @@ export async function POST() {
       }
     }
 
-    console.log(`[Backfill] Complete: ${campaignsProcessed} campaigns, ${totalRecordsInserted} records`);
+    console.log(`[Backfill] Complete: ${campaignsProcessed} processed, ${campaignsSkipped} skipped, ${totalRecordsInserted} records`);
 
     return NextResponse.json({
       success: true,
       message: `Backfill complete`,
       campaignsProcessed,
+      campaignsSkipped,
       campaignsFailed,
       totalCampaigns: campaigns.length,
       recordsInserted: totalRecordsInserted,
