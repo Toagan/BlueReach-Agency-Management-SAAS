@@ -92,8 +92,9 @@ function getDateRange(interval: string): { startDate: Date; endDate: Date; previ
   return { startDate, endDate, previousStartDate, previousEndDate };
 }
 
-// Get stats for a client - uses the same data source as the client dashboard
-// This ensures the email report matches what's shown in the dashboard
+// Get stats for a client - supports date-filtered and all-time stats
+// For all-time: uses cached stats from campaigns (fast, matches dashboard)
+// For date ranges: uses leads table with date filters (accurate for period)
 async function getClientStats(
   supabase: ReturnType<typeof getSupabase>,
   clientId: string,
@@ -113,28 +114,95 @@ async function getClientStats(
 
   const campaignIds = campaigns.map((c) => c.id);
 
-  // Sum cached stats from campaigns (same as dashboard)
-  let emailsSent = 0;
-  let replies = 0;
+  if (isAllTime) {
+    // ALL-TIME: Use cached stats from campaigns (same as dashboard)
+    let emailsSent = 0;
+    let replies = 0;
 
-  for (const campaign of campaigns) {
-    emailsSent += campaign.cached_emails_sent || 0;
-    replies += campaign.cached_reply_count || 0;
+    for (const campaign of campaigns) {
+      emailsSent += campaign.cached_emails_sent || 0;
+      replies += campaign.cached_reply_count || 0;
+    }
+
+    // Count positive replies from leads
+    const { count: positiveReplies } = await supabase
+      .from("leads")
+      .select("*", { count: "exact", head: true })
+      .in("campaign_id", campaignIds)
+      .eq("is_positive_reply", true);
+
+    const replyRate = emailsSent > 0 ? (replies / emailsSent) * 100 : 0;
+
+    return {
+      emailsSent,
+      replies,
+      positiveReplies: positiveReplies || 0,
+      replyRate,
+    };
   }
 
-  // Count positive replies from leads via campaign_id (same as dashboard)
-  const { count: positiveReplies } = await supabase
+  // DATE-FILTERED REPORTING STRATEGY:
+  // - emailsSent: Use cached campaign stats (we don't have reliable send dates per lead)
+  // - replies/positiveReplies: Use date filtering on responded_at or updated_at (set when status changes)
+
+  const startDateStr = startDate.toISOString();
+  const endDateStr = endDate.toISOString();
+
+  // Emails sent: Use cached stats (all-time) - most accurate since we don't track per-email send dates
+  let emailsSent = 0;
+  for (const campaign of campaigns) {
+    emailsSent += campaign.cached_emails_sent || 0;
+  }
+
+  // Count leads that replied in the date range (using responded_at with updated_at fallback)
+  const { count: repliesWithRespondedAt } = await supabase
     .from("leads")
     .select("*", { count: "exact", head: true })
     .in("campaign_id", campaignIds)
-    .eq("is_positive_reply", true);
+    .eq("has_replied", true)
+    .not("responded_at", "is", null)
+    .gte("responded_at", startDateStr)
+    .lte("responded_at", endDateStr);
+
+  // Also check leads where responded_at is null but updated_at is in range
+  const { count: repliesWithUpdatedAt } = await supabase
+    .from("leads")
+    .select("*", { count: "exact", head: true })
+    .in("campaign_id", campaignIds)
+    .eq("has_replied", true)
+    .is("responded_at", null)
+    .gte("updated_at", startDateStr)
+    .lte("updated_at", endDateStr);
+
+  const replies = (repliesWithRespondedAt || 0) + (repliesWithUpdatedAt || 0);
+
+  // Count positive replies in the date range
+  const { count: positiveWithRespondedAt } = await supabase
+    .from("leads")
+    .select("*", { count: "exact", head: true })
+    .in("campaign_id", campaignIds)
+    .eq("is_positive_reply", true)
+    .not("responded_at", "is", null)
+    .gte("responded_at", startDateStr)
+    .lte("responded_at", endDateStr);
+
+  const { count: positiveWithUpdatedAt } = await supabase
+    .from("leads")
+    .select("*", { count: "exact", head: true })
+    .in("campaign_id", campaignIds)
+    .eq("is_positive_reply", true)
+    .is("responded_at", null)
+    .gte("updated_at", startDateStr)
+    .lte("updated_at", endDateStr);
+
+  const positiveReplies = (positiveWithRespondedAt || 0) + (positiveWithUpdatedAt || 0);
 
   const replyRate = emailsSent > 0 ? (replies / emailsSent) * 100 : 0;
 
   return {
     emailsSent,
     replies,
-    positiveReplies: positiveReplies || 0,
+    positiveReplies,
     replyRate,
   };
 }
