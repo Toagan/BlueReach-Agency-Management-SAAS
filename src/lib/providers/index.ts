@@ -54,6 +54,7 @@ export function createProvider(
 
 /**
  * Get provider for a specific campaign by fetching its config from database
+ * Falls back to environment variables if no campaign-specific API key is set
  */
 export async function getProviderForCampaign(
   campaignId: string
@@ -77,17 +78,28 @@ export async function getProviderForCampaign(
     throw new Error(`Campaign not found: ${campaignId}`);
   }
 
-  if (!campaign.api_key_encrypted) {
+  // Use campaign-specific API key if available, otherwise fallback to environment variable
+  let apiKey = campaign.api_key_encrypted;
+  const providerType = (campaign.provider_type || "instantly") as ProviderType;
+
+  if (!apiKey) {
+    // Fallback to environment variables
+    if (providerType === "instantly") {
+      apiKey = process.env.INSTANTLY_API_KEY || null;
+    } else if (providerType === "smartlead") {
+      apiKey = process.env.SMARTLEAD_API_KEY || null;
+    }
+  }
+
+  if (!apiKey) {
     throw new Error(
-      "Campaign API key not configured. Please add an API key in campaign settings."
+      `No API key configured for ${providerType}. Please set the ${
+        providerType === "instantly" ? "INSTANTLY_API_KEY" : "SMARTLEAD_API_KEY"
+      } environment variable or add an API key in campaign settings.`
     );
   }
 
-  // For now, we store the API key as plain text (api_key_encrypted is the field name)
-  // In production, you'd want to decrypt this
-  const apiKey = campaign.api_key_encrypted;
-
-  return createProvider(campaign.provider_type as ProviderType, apiKey);
+  return createProvider(providerType, apiKey);
 }
 
 /**

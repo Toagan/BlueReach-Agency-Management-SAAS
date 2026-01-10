@@ -90,7 +90,6 @@ export async function POST(
       provider_campaign_id: campaign.provider_campaign_id,
       instantly_campaign_id: campaign.instantly_campaign_id,
       smartlead_campaign_id: campaign.smartlead_campaign_id,
-      has_api_key: !!campaign.api_key_encrypted,
     });
 
     const providerCampaignId = campaign.provider_campaign_id ||
@@ -104,15 +103,7 @@ export async function POST(
       );
     }
 
-    // Check if API key is configured
-    if (!campaign.api_key_encrypted) {
-      return NextResponse.json(
-        { error: `No API key configured for this ${campaign.provider_type === "smartlead" ? "Smartlead" : "Instantly"} campaign. Please update the campaign settings.` },
-        { status: 400 }
-      );
-    }
-
-    // Get provider instance
+    // Get provider instance (uses campaign API key or falls back to env variable)
     const provider = await getProviderForCampaign(campaignId);
     const providerType = provider.providerType;
 
