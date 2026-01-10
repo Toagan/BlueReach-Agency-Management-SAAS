@@ -198,6 +198,10 @@ export default function ClientDashboardPage() {
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [notesInput, setNotesInput] = useState("");
 
+  // Collapsible sections state
+  const [showOffer, setShowOffer] = useState(false);
+  const [showICP, setShowICP] = useState(false);
+
   // Email viewing state
   const [expandedEmailLeadId, setExpandedEmailLeadId] = useState<string | null>(null);
   const [leadEmails, setLeadEmails] = useState<Record<string, LeadEmail[]>>({});
@@ -604,39 +608,73 @@ export default function ClientDashboardPage() {
                 </p>
               </div>
 
-              {/* Offer Section */}
+              {/* Offer Section - Collapsible */}
               <div className="p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                    <Lightbulb className="h-5 w-5 text-emerald-500" />
+                <button
+                  onClick={() => setShowOffer(!showOffer)}
+                  className="flex items-center justify-between w-full text-left group"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                      <Lightbulb className="h-5 w-5 text-emerald-500" />
+                    </div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">The Offer</p>
                   </div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">The Offer</p>
-                </div>
+                  {client?.product_service && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+                      <span>{showOffer ? "Hide" : "Show"}</span>
+                      {showOffer ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    </div>
+                  )}
+                </button>
                 {client?.product_service ? (
-                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                    {client.product_service}
-                  </p>
+                  showOffer ? (
+                    <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap mt-4">
+                      {client.product_service}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground mt-3 line-clamp-2">
+                      {client.product_service.slice(0, 100)}...
+                    </p>
+                  )
                 ) : (
-                  <p className="text-sm text-muted-foreground italic">
+                  <p className="text-sm text-muted-foreground italic mt-3">
                     No offer description defined yet
                   </p>
                 )}
               </div>
 
-              {/* ICP Section */}
+              {/* ICP Section - Collapsible */}
               <div className="p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
-                    <Users className="h-5 w-5 text-purple-500" />
+                <button
+                  onClick={() => setShowICP(!showICP)}
+                  className="flex items-center justify-between w-full text-left group"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                      <Users className="h-5 w-5 text-purple-500" />
+                    </div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Ideal Customer Profile</p>
                   </div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Ideal Customer Profile</p>
-                </div>
+                  {client?.icp && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+                      <span>{showICP ? "Hide" : "Show"}</span>
+                      {showICP ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    </div>
+                  )}
+                </button>
                 {client?.icp ? (
-                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                    {client.icp}
-                  </p>
+                  showICP ? (
+                    <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap mt-4">
+                      {client.icp}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground mt-3 line-clamp-2">
+                      {client.icp.slice(0, 100)}...
+                    </p>
+                  )
                 ) : (
-                  <p className="text-sm text-muted-foreground italic">
+                  <p className="text-sm text-muted-foreground italic mt-3">
                     No ICP defined yet
                   </p>
                 )}

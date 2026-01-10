@@ -9,6 +9,7 @@ import {
   Preview,
   Section,
   Text,
+  Img,
 } from "@react-email/components";
 import * as React from "react";
 
@@ -39,177 +40,323 @@ export const InvitationEmail = ({
     <Html>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="color-scheme" content="dark" />
+        <meta name="supported-color-schemes" content="dark" />
         <style>
           {`
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
+            :root { color-scheme: dark; }
+
+            /* Mobile Responsive Styles */
             @media only screen and (max-width: 600px) {
-              .mobile-pad { padding: 32px 24px !important; }
-              .hero-title { font-size: 36px !important; }
-              .cta-btn { width: 100% !important; }
-              .feature-cell { display: block !important; width: 100% !important; padding: 12px 0 !important; }
+              /* Main container */
+              .main-section {
+                padding: 32px 20px !important;
+                border-radius: 16px !important;
+              }
+
+              /* Typography */
+              .hero-title {
+                font-size: 24px !important;
+                line-height: 1.35 !important;
+              }
+              .hero-subtitle {
+                font-size: 14px !important;
+                line-height: 1.6 !important;
+              }
+
+              /* CTA Button - Full width on mobile */
+              .cta-button {
+                display: block !important;
+                width: 100% !important;
+                text-align: center !important;
+                padding: 16px 20px !important;
+                box-sizing: border-box !important;
+              }
+
+              /* Feature grid - Stack vertically */
+              .feature-grid tr {
+                display: block !important;
+              }
+              .feature-grid td {
+                display: block !important;
+                width: 100% !important;
+                padding: 12px 0 !important;
+                text-align: left !important;
+              }
+
+              /* Stats grid - Stack vertically */
+              .stats-grid tr {
+                display: block !important;
+              }
+              .stats-grid td {
+                display: block !important;
+                width: 100% !important;
+                padding: 12px 0 !important;
+                text-align: center !important;
+              }
+              .stats-grid .stat-divider {
+                display: none !important;
+              }
+
+              /* Account card - Stack on mobile */
+              .account-card-inner tr {
+                display: block !important;
+              }
+              .account-card-inner td {
+                display: block !important;
+                width: 100% !important;
+                text-align: left !important;
+              }
+              .account-card-inner td[align="right"] {
+                text-align: left !important;
+                padding-top: 12px !important;
+              }
+
+              /* Divider label */
+              .divider-label {
+                font-size: 9px !important;
+                padding: 0 10px !important;
+              }
+
+              /* Footer */
+              .footer-section {
+                padding: 32px 16px !important;
+              }
+              .footer-brand {
+                font-size: 16px !important;
+              }
+              .footer-links td {
+                display: inline-block !important;
+              }
+
+              /* Link fallback */
+              .link-fallback {
+                font-size: 11px !important;
+              }
+            }
+
+            /* Extra small devices */
+            @media only screen and (max-width: 400px) {
+              .main-section {
+                padding: 24px 16px !important;
+              }
+              .hero-title {
+                font-size: 22px !important;
+              }
+              .invite-badge {
+                font-size: 10px !important;
+                padding: 6px 12px !important;
+              }
             }
           `}
         </style>
       </Head>
       <Preview>
-        {firstName}, your {clientName} dashboard is ready
+        {firstName}, you've been invited to {clientName}'s dashboard on BlueReach
       </Preview>
       <Body style={body}>
-        <Container style={wrapper}>
+        <Container style={container}>
 
-          {/* ═══════════════════════════════════════════════════════════════ */}
-          {/* DARK HERO */}
-          {/* ═══════════════════════════════════════════════════════════════ */}
-          <Section style={hero}>
+          {/* ══════════════════════════════════════════════════════════════════
+              HEADER - Floating logo
+          ══════════════════════════════════════════════════════════════════ */}
+          <Section style={headerSection}>
             <table cellPadding="0" cellSpacing="0" width="100%">
               <tr>
-                <td style={heroInner} className="mobile-pad">
-
-                  {/* Wave Icon + Brand */}
-                  <table cellPadding="0" cellSpacing="0" style={brandRow}>
+                <td align="center">
+                  <table cellPadding="0" cellSpacing="0">
                     <tr>
-                      <td>
-                        <div style={waveIcon}>
-                          <span style={waveEmoji}>🌊</span>
-                        </div>
+                      <td style={logoIconCell}>
+                        <div style={logoIcon}>🌊</div>
                       </td>
-                      <td style={brandTextCell}>
-                        <Text style={brandText}>BlueReach</Text>
+                      <td style={logoTextCell}>
+                        <span style={logoText}>BlueReach</span>
                       </td>
                     </tr>
                   </table>
-
-                  {/* Headline */}
-                  <Heading style={heroTitle} className="hero-title">
-                    Your Dashboard<br />is Ready
-                  </Heading>
-
-                  <Text style={heroSub}>
-                    <strong style={heroHighlight}>{inviterName}</strong> invited you to access
-                    <br />
-                    <strong style={heroHighlight}>{clientName}</strong>&apos;s campaign dashboard
-                  </Text>
-
-                  {/* CTA */}
-                  <table cellPadding="0" cellSpacing="0" style={ctaRow}>
-                    <tr>
-                      <td>
-                        <Button style={ctaBtn} href={loginUrl} className="cta-btn">
-                          Access Dashboard →
-                        </Button>
-                      </td>
-                    </tr>
-                  </table>
-
                 </td>
               </tr>
             </table>
           </Section>
 
-          {/* ═══════════════════════════════════════════════════════════════ */}
-          {/* CONTENT CARD */}
-          {/* ═══════════════════════════════════════════════════════════════ */}
-          <Section style={card} className="mobile-pad">
+          {/* ══════════════════════════════════════════════════════════════════
+              MAIN CARD
+          ══════════════════════════════════════════════════════════════════ */}
+          <Section style={mainCard} className="main-section">
 
-            <Text style={sectionLabel}>WHAT YOU GET</Text>
+            {/* Decorative gradient bar at top */}
+            <div style={gradientBar}></div>
 
-            <table cellPadding="0" cellSpacing="0" style={featureGrid}>
+            {/* Invitation badge */}
+            <table cellPadding="0" cellSpacing="0" width="100%">
               <tr>
-                <td style={featureCell} className="feature-cell">
-                  <Text style={featureIcon}>📊</Text>
-                  <Text style={featureTitle}>Analytics</Text>
-                  <Text style={featureDesc}>Real-time metrics</Text>
-                </td>
-                <td style={featureCell} className="feature-cell">
-                  <Text style={featureIcon}>📈</Text>
-                  <Text style={featureTitle}>Pipeline</Text>
-                  <Text style={featureDesc}>Lead tracking</Text>
-                </td>
-                <td style={featureCell} className="feature-cell">
-                  <Text style={featureIcon}>💬</Text>
-                  <Text style={featureTitle}>Replies</Text>
-                  <Text style={featureDesc}>Response monitoring</Text>
-                </td>
-                <td style={featureCell} className="feature-cell">
-                  <Text style={featureIcon}>📧</Text>
-                  <Text style={featureTitle}>Threads</Text>
-                  <Text style={featureDesc}>Full history</Text>
+                <td align="center" style={{ paddingBottom: "32px" }}>
+                  <span style={inviteBadge} className="invite-badge">
+                    <span style={badgeDot}></span>
+                    You&apos;re Invited
+                  </span>
                 </td>
               </tr>
             </table>
 
-            <div style={divider}></div>
+            {/* Hero content */}
+            <Heading style={heroTitle} className="hero-title">
+              Your campaign dashboard<br />
+              for <span style={clientHighlight}>{clientName}</span><br />
+              is ready
+            </Heading>
 
-            {/* Info Rows */}
-            <table cellPadding="0" cellSpacing="0" style={infoTable}>
-              <tr>
-                <td style={infoCell}>
-                  <Text style={infoLabel}>Client</Text>
-                  <Text style={infoValue}>{clientName}</Text>
-                </td>
-                <td style={infoCell}>
-                  <Text style={infoLabel}>Access</Text>
-                  <Text style={infoBadge}>Full Dashboard</Text>
-                </td>
-              </tr>
-            </table>
+            <Text style={heroSubtitle} className="hero-subtitle">
+              {inviterName} has set up a dedicated workspace for you with
+              real-time analytics, lead tracking, and campaign insights.
+            </Text>
 
-            {/* Secondary CTA */}
-            <table cellPadding="0" cellSpacing="0" style={secondaryCtaRow}>
+            {/* Primary CTA */}
+            <table cellPadding="0" cellSpacing="0" width="100%">
               <tr>
-                <td>
-                  <Button style={secondaryCta} href={loginUrl}>
+                <td align="center" style={{ padding: "8px 0 48px 0" }}>
+                  <Button style={ctaButton} href={loginUrl} className="cta-button">
                     Open Dashboard
+                    <span style={ctaArrow}>→</span>
                   </Button>
                 </td>
               </tr>
             </table>
 
-            <Text style={linkNote}>
-              Or copy: <Link href={loginUrl} style={linkUrl}>{loginUrl}</Link>
-            </Text>
-
-          </Section>
-
-          {/* ═══════════════════════════════════════════════════════════════ */}
-          {/* FOOTER */}
-          {/* ═══════════════════════════════════════════════════════════════ */}
-          <Section style={footer}>
-
-            {/* Partners */}
-            <table cellPadding="0" cellSpacing="0" style={partnerBox}>
+            {/* Divider with label */}
+            <table cellPadding="0" cellSpacing="0" width="100%">
               <tr>
-                <td style={partnerInner}>
-                  <Text style={partnerLabel}>POWERED BY</Text>
-                  <Text style={partnerNames}>
-                    <span style={partnerName}>Instantly</span>
-                    <span style={partnerAnd}>&</span>
-                    <span style={partnerName}>Clay</span>
-                  </Text>
+                <td style={dividerLine}></td>
+                <td style={dividerLabel} className="divider-label">DASHBOARD FEATURES</td>
+                <td style={dividerLine}></td>
+              </tr>
+            </table>
+
+            {/* Feature grid */}
+            <table cellPadding="0" cellSpacing="0" width="100%" style={featureTable} className="feature-grid">
+              <tr>
+                <td style={featureCell}>
+                  <div style={featureIconWrapper}>
+                    <span style={featureIconText}>📊</span>
+                  </div>
+                  <Text style={featureTitle}>Analytics</Text>
+                  <Text style={featureDesc}>Live campaign metrics & performance data</Text>
+                </td>
+                <td style={featureCell}>
+                  <div style={featureIconWrapper}>
+                    <span style={featureIconText}>🎯</span>
+                  </div>
+                  <Text style={featureTitle}>Lead Pipeline</Text>
+                  <Text style={featureDesc}>Track prospects from contact to close</Text>
+                </td>
+              </tr>
+              <tr>
+                <td style={featureCell}>
+                  <div style={featureIconWrapper}>
+                    <span style={featureIconText}>💬</span>
+                  </div>
+                  <Text style={featureTitle}>Reply Management</Text>
+                  <Text style={featureDesc}>View and respond to all messages</Text>
+                </td>
+                <td style={featureCell}>
+                  <div style={featureIconWrapper}>
+                    <span style={featureIconText}>📈</span>
+                  </div>
+                  <Text style={featureTitle}>ROI Tracking</Text>
+                  <Text style={featureDesc}>Measure campaign revenue impact</Text>
                 </td>
               </tr>
             </table>
 
-            {/* Brand Footer */}
-            <Text style={footerBrand}>
-              <span style={footerWave}>🌊</span> BlueReach
+            {/* Stats preview */}
+            <table cellPadding="0" cellSpacing="0" width="100%" style={statsCard}>
+              <tr>
+                <td style={statsCardInner}>
+                  <table cellPadding="0" cellSpacing="0" width="100%" className="stats-grid">
+                    <tr>
+                      <td style={statItem}>
+                        <Text style={statNumber}>24/7</Text>
+                        <Text style={statLabel}>Access</Text>
+                      </td>
+                      <td style={statDivider} className="stat-divider"></td>
+                      <td style={statItem}>
+                        <Text style={statNumber}>Real-time</Text>
+                        <Text style={statLabel}>Updates</Text>
+                      </td>
+                      <td style={statDivider} className="stat-divider"></td>
+                      <td style={statItem}>
+                        <Text style={statNumber}>Secure</Text>
+                        <Text style={statLabel}>Platform</Text>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            {/* Account info */}
+            <table cellPadding="0" cellSpacing="0" width="100%" style={accountCard}>
+              <tr>
+                <td style={accountCardInner}>
+                  <table cellPadding="0" cellSpacing="0" width="100%" className="account-card-inner">
+                    <tr>
+                      <td>
+                        <Text style={accountLabel}>YOUR ACCOUNT</Text>
+                        <Text style={accountEmail}>{recipientEmail}</Text>
+                      </td>
+                      <td align="right" style={{ verticalAlign: "middle" }}>
+                        <span style={accountBadge}>Full Access</span>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            {/* Link fallback */}
+            <Text style={linkFallback} className="link-fallback">
+              Can&apos;t click the button? Copy this link:<br />
+              <Link href={loginUrl} style={linkUrl}>{loginUrl}</Link>
             </Text>
 
-            <Text style={footerLinks}>
-              <Link href={agencyWebsiteUrl} style={footerLink}>Website</Link>
-              <span style={footerDot}> · </span>
-              <Link href="mailto:support@blue-reach.com" style={footerLink}>Support</Link>
-            </Text>
+          </Section>
 
-            <Text style={copyright}>
-              © {new Date().getFullYear()} BlueReach · B2B Lead Generation
-            </Text>
-
-            <Text style={sentTo}>
-              Sent to {recipientEmail}
-            </Text>
-
+          {/* ══════════════════════════════════════════════════════════════════
+              FOOTER
+          ══════════════════════════════════════════════════════════════════ */}
+          <Section style={footerSection} className="footer-section">
+            <table cellPadding="0" cellSpacing="0" width="100%">
+              <tr>
+                <td align="center">
+                  <Text style={footerBrand} className="footer-brand">
+                    <span style={footerWave}>🌊</span>BlueReach
+                  </Text>
+                  <Text style={footerTagline}>
+                    B2B Lead Generation Platform
+                  </Text>
+                  <table cellPadding="0" cellSpacing="0" style={footerLinksTable} className="footer-links">
+                    <tr>
+                      <td>
+                        <Link href={agencyWebsiteUrl} style={footerLink}>Website</Link>
+                      </td>
+                      <td style={footerLinkDot}>·</td>
+                      <td>
+                        <Link href="mailto:support@blue-reach.com" style={footerLink}>Support</Link>
+                      </td>
+                      <td style={footerLinkDot}>·</td>
+                      <td>
+                        <Link href={`${agencyWebsiteUrl}/privacy`} style={footerLink}>Privacy</Link>
+                      </td>
+                    </tr>
+                  </table>
+                  <Text style={footerCopyright}>
+                    © {new Date().getFullYear()} BlueReach. All rights reserved.
+                  </Text>
+                </td>
+              </tr>
+            </table>
           </Section>
 
         </Container>
@@ -218,402 +365,433 @@ export const InvitationEmail = ({
   );
 };
 
-// Plain text
+// Plain text version
 export function generatePlainText(props: InvitationEmailProps): string {
-  const firstName = props.inviteeName.split(" ")[0] || "there";
   return `
 🌊 BLUEREACH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-YOUR DASHBOARD IS READY
+YOU'RE INVITED
 
-${props.inviterName} invited you to access
-${props.clientName}'s campaign dashboard
+Your campaign dashboard for ${props.clientName} is ready.
 
-→ ${props.loginUrl}
+${props.inviterName} has set up a dedicated workspace for you with
+real-time analytics, lead tracking, and campaign insights.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+▸ Open Dashboard: ${props.loginUrl}
 
-WHAT YOU GET:
-📊 Analytics - Real-time metrics
-📈 Pipeline - Lead tracking
-💬 Replies - Response monitoring
-📧 Threads - Full history
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Client: ${props.clientName}
+DASHBOARD FEATURES
+
+📊 Analytics
+   Live campaign metrics & performance data
+
+🎯 Lead Pipeline
+   Track prospects from contact to close
+
+💬 Reply Management
+   View and respond to all messages
+
+📈 ROI Tracking
+   Measure campaign revenue impact
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+YOUR ACCOUNT
+${props.recipientEmail}
 Access: Full Dashboard
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Powered by Instantly & Clay
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🌊 BlueReach
-B2B Lead Generation
-© ${new Date().getFullYear()}
+B2B Lead Generation Platform
+https://blue-reach.com
 
-Sent to ${props.recipientEmail}
+© ${new Date().getFullYear()} BlueReach. All rights reserved.
   `.trim();
 }
 
 export default InvitationEmail;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// DARK BLUE DESIGN SYSTEM
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// BLUEREACH DESIGN SYSTEM - Premium Dark Mode
+// ═══════════════════════════════════════════════════════════════════════════════
 
 const colors = {
-  // Dark blues
-  navy: "#0A1628",
-  navyLight: "#0F2140",
-  navyMid: "#1A3A5C",
+  // Core brand
+  brand: "#0066FF",
+  brandLight: "#3385FF",
+  brandGlow: "rgba(0, 102, 255, 0.15)",
 
-  // Accent blues
-  blue: "#3B82F6",
-  blueLight: "#60A5FA",
-  blueBright: "#93C5FD",
+  // Backgrounds - Rich dark with slight blue tint
+  bgDeep: "#05070A",
+  bgBase: "#0A0D12",
+  bgElevated: "#0F1318",
+  bgCard: "#141920",
+  bgHover: "#1A2028",
 
-  // Cyan accents
-  cyan: "#22D3EE",
-  cyanLight: "#67E8F9",
+  // Borders
+  borderSubtle: "#1E2530",
+  borderDefault: "#2A3240",
+  borderFocus: "#3A4555",
 
-  // Neutrals
-  white: "#FFFFFF",
-  gray100: "#F1F5F9",
-  gray200: "#E2E8F0",
-  gray300: "#CBD5E1",
-  gray400: "#94A3B8",
-  gray500: "#64748B",
-  gray600: "#475569",
-  gray700: "#334155",
-  gray800: "#1E293B",
+  // Text hierarchy
+  textPrimary: "#FFFFFF",
+  textSecondary: "#B0B8C4",
+  textTertiary: "#6B7585",
+  textMuted: "#4A5565",
+
+  // Accents
+  cyan: "#00D4FF",
+  cyanGlow: "rgba(0, 212, 255, 0.12)",
+  green: "#00C853",
+  greenGlow: "rgba(0, 200, 83, 0.12)",
 };
 
-// ─────────────────────────────────────────────────────────────────────────
-// BASE
-// ─────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// BASE STYLES
+// ─────────────────────────────────────────────────────────────────────────────
 
-const body = {
-  backgroundColor: colors.gray100,
-  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-  margin: "0",
-  padding: "0",
+const body: React.CSSProperties = {
+  backgroundColor: colors.bgDeep,
+  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif",
+  margin: 0,
+  padding: 0,
+  WebkitFontSmoothing: "antialiased",
 };
 
-const wrapper = {
+const container: React.CSSProperties = {
   margin: "0 auto",
-  maxWidth: "600px",
-  padding: "0",
+  maxWidth: "520px",
+  padding: "0 16px",
 };
 
-// ─────────────────────────────────────────────────────────────────────────
-// HERO
-// ─────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// HEADER
+// ─────────────────────────────────────────────────────────────────────────────
 
-const hero = {
-  backgroundColor: colors.navy,
-  backgroundImage: `linear-gradient(135deg, ${colors.navy} 0%, ${colors.navyLight} 50%, ${colors.navyMid} 100%)`,
-  borderRadius: "0 0 20px 20px",
+const headerSection: React.CSSProperties = {
+  padding: "40px 0 24px 0",
 };
 
-const heroInner = {
-  padding: "48px 40px 56px 40px",
-  textAlign: "center" as const,
-};
-
-const brandRow = {
-  margin: "0 auto 40px auto",
-};
-
-const waveIcon = {
-  width: "52px",
-  height: "52px",
-  borderRadius: "14px",
-  backgroundColor: "rgba(255,255,255,0.1)",
-  border: "1px solid rgba(255,255,255,0.15)",
-  display: "inline-block",
-  textAlign: "center" as const,
+const logoIconCell: React.CSSProperties = {
   verticalAlign: "middle",
 };
 
-const waveEmoji = {
+const logoIcon: React.CSSProperties = {
   fontSize: "28px",
-  lineHeight: "52px",
-  display: "block",
+  lineHeight: "1",
 };
 
-const brandTextCell = {
-  paddingLeft: "14px",
-  verticalAlign: "middle" as const,
+const logoTextCell: React.CSSProperties = {
+  paddingLeft: "10px",
+  verticalAlign: "middle",
 };
 
-const brandText = {
-  fontSize: "24px",
-  fontWeight: "700",
-  color: colors.white,
-  margin: "0",
-  letterSpacing: "-0.02em",
-};
-
-const heroTitle = {
-  fontSize: "42px",
-  fontWeight: "800",
-  color: colors.white,
-  lineHeight: "1.1",
-  margin: "0 0 24px 0",
+const logoText: React.CSSProperties = {
+  fontSize: "22px",
+  fontWeight: 700,
+  color: colors.textPrimary,
   letterSpacing: "-0.03em",
 };
 
-const heroSub = {
-  fontSize: "16px",
-  lineHeight: "1.7",
-  color: colors.gray400,
-  margin: "0 0 36px 0",
-};
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN CARD
+// ─────────────────────────────────────────────────────────────────────────────
 
-const heroHighlight = {
-  color: colors.white,
-};
-
-const ctaRow = {
-  margin: "0 auto",
-};
-
-const ctaBtn = {
-  backgroundColor: colors.cyan,
-  borderRadius: "10px",
-  color: colors.navy,
-  fontSize: "15px",
-  fontWeight: "700",
-  textDecoration: "none",
-  textAlign: "center" as const,
-  display: "inline-block",
-  padding: "16px 36px",
-  boxShadow: `0 4px 20px ${colors.cyan}50`,
-};
-
-// ─────────────────────────────────────────────────────────────────────────
-// CARD
-// ─────────────────────────────────────────────────────────────────────────
-
-const card = {
-  backgroundColor: colors.white,
-  borderRadius: "16px",
-  padding: "36px 32px",
-  margin: "-24px 16px 0 16px",
-  boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
-  border: `1px solid ${colors.gray200}`,
+const mainCard: React.CSSProperties = {
+  backgroundColor: colors.bgElevated,
+  borderRadius: "20px",
+  border: `1px solid ${colors.borderSubtle}`,
+  padding: "56px 48px",
   position: "relative" as const,
-  zIndex: "10",
+  overflow: "hidden",
 };
 
-const sectionLabel = {
-  fontSize: "11px",
-  fontWeight: "700",
-  color: colors.blue,
+const gradientBar: React.CSSProperties = {
+  position: "absolute" as const,
+  top: 0,
+  left: 0,
+  right: 0,
+  height: "3px",
+  background: `linear-gradient(90deg, ${colors.cyan} 0%, ${colors.brand} 50%, ${colors.cyan} 100%)`,
+};
+
+const inviteBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "8px",
+  fontSize: "12px",
+  fontWeight: 600,
+  color: colors.cyan,
+  backgroundColor: colors.cyanGlow,
+  padding: "8px 16px",
+  borderRadius: "100px",
   textTransform: "uppercase" as const,
-  letterSpacing: "0.12em",
+  letterSpacing: "0.06em",
+};
+
+const badgeDot: React.CSSProperties = {
+  width: "6px",
+  height: "6px",
+  borderRadius: "50%",
+  backgroundColor: colors.cyan,
+  display: "inline-block",
+};
+
+const heroTitle: React.CSSProperties = {
+  fontSize: "32px",
+  fontWeight: 700,
+  color: colors.textPrimary,
+  lineHeight: 1.3,
   margin: "0 0 20px 0",
   textAlign: "center" as const,
+  letterSpacing: "-0.02em",
 };
 
-// ─────────────────────────────────────────────────────────────────────────
-// FEATURES
-// ─────────────────────────────────────────────────────────────────────────
-
-const featureGrid = {
-  width: "100%",
-  marginBottom: "24px",
+const clientHighlight: React.CSSProperties = {
+  color: colors.brandLight,
 };
 
-const featureCell = {
-  width: "25%",
+const heroSubtitle: React.CSSProperties = {
+  fontSize: "15px",
+  lineHeight: 1.7,
+  color: colors.textSecondary,
+  margin: "0 0 32px 0",
   textAlign: "center" as const,
-  padding: "0 8px",
+};
+
+const ctaButton: React.CSSProperties = {
+  backgroundColor: colors.brand,
+  borderRadius: "12px",
+  color: "#FFFFFF",
+  fontSize: "16px",
+  fontWeight: 600,
+  textDecoration: "none",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "8px",
+  padding: "16px 32px",
+  boxShadow: `0 8px 32px ${colors.brandGlow}, 0 2px 8px rgba(0,0,0,0.2)`,
+};
+
+const ctaArrow: React.CSSProperties = {
+  fontSize: "18px",
+  marginLeft: "4px",
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DIVIDER
+// ─────────────────────────────────────────────────────────────────────────────
+
+const dividerLine: React.CSSProperties = {
+  height: "1px",
+  backgroundColor: colors.borderSubtle,
+  width: "100%",
+};
+
+const dividerLabel: React.CSSProperties = {
+  fontSize: "10px",
+  fontWeight: 700,
+  color: colors.textMuted,
+  textTransform: "uppercase" as const,
+  letterSpacing: "0.1em",
+  padding: "0 16px",
+  whiteSpace: "nowrap" as const,
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURES
+// ─────────────────────────────────────────────────────────────────────────────
+
+const featureTable: React.CSSProperties = {
+  marginTop: "32px",
+  marginBottom: "32px",
+};
+
+const featureCell: React.CSSProperties = {
+  width: "50%",
+  padding: "16px 12px",
   verticalAlign: "top" as const,
 };
 
-const featureIcon = {
-  fontSize: "28px",
-  margin: "0 0 8px 0",
+const featureIconWrapper: React.CSSProperties = {
+  width: "44px",
+  height: "44px",
+  borderRadius: "12px",
+  backgroundColor: colors.bgCard,
+  border: `1px solid ${colors.borderSubtle}`,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  marginBottom: "14px",
+  lineHeight: "44px",
+  textAlign: "center" as const,
 };
 
-const featureTitle = {
+const featureIconText: React.CSSProperties = {
+  fontSize: "20px",
+};
+
+const featureTitle: React.CSSProperties = {
+  fontSize: "14px",
+  fontWeight: 600,
+  color: colors.textPrimary,
+  margin: "0 0 6px 0",
+};
+
+const featureDesc: React.CSSProperties = {
   fontSize: "13px",
-  fontWeight: "700",
-  color: colors.gray800,
-  margin: "0 0 2px 0",
+  lineHeight: 1.5,
+  color: colors.textTertiary,
+  margin: 0,
 };
 
-const featureDesc = {
+// ─────────────────────────────────────────────────────────────────────────────
+// STATS CARD
+// ─────────────────────────────────────────────────────────────────────────────
+
+const statsCard: React.CSSProperties = {
+  backgroundColor: colors.bgCard,
+  borderRadius: "14px",
+  border: `1px solid ${colors.borderSubtle}`,
+  marginBottom: "20px",
+};
+
+const statsCardInner: React.CSSProperties = {
+  padding: "24px 20px",
+};
+
+const statItem: React.CSSProperties = {
+  textAlign: "center" as const,
+  padding: "0 12px",
+};
+
+const statNumber: React.CSSProperties = {
+  fontSize: "15px",
+  fontWeight: 700,
+  color: colors.textPrimary,
+  margin: "0 0 4px 0",
+};
+
+const statLabel: React.CSSProperties = {
   fontSize: "11px",
-  color: colors.gray500,
-  margin: "0",
+  fontWeight: 500,
+  color: colors.textTertiary,
+  textTransform: "uppercase" as const,
+  letterSpacing: "0.05em",
+  margin: 0,
 };
 
-// ─────────────────────────────────────────────────────────────────────────
-// INFO
-// ─────────────────────────────────────────────────────────────────────────
-
-const divider = {
-  height: "1px",
-  backgroundColor: colors.gray200,
-  margin: "0 0 24px 0",
+const statDivider: React.CSSProperties = {
+  width: "1px",
+  backgroundColor: colors.borderSubtle,
 };
 
-const infoTable = {
-  width: "100%",
+// ─────────────────────────────────────────────────────────────────────────────
+// ACCOUNT CARD
+// ─────────────────────────────────────────────────────────────────────────────
+
+const accountCard: React.CSSProperties = {
+  backgroundColor: colors.bgCard,
+  borderRadius: "14px",
+  border: `1px solid ${colors.borderSubtle}`,
   marginBottom: "28px",
 };
 
-const infoCell = {
-  width: "50%",
-  padding: "12px 16px",
-  backgroundColor: colors.gray100,
-  borderRadius: "10px",
-  verticalAlign: "top" as const,
+const accountCardInner: React.CSSProperties = {
+  padding: "20px 24px",
 };
 
-const infoLabel = {
-  fontSize: "11px",
-  fontWeight: "600",
-  color: colors.gray500,
+const accountLabel: React.CSSProperties = {
+  fontSize: "10px",
+  fontWeight: 700,
+  color: colors.textMuted,
   textTransform: "uppercase" as const,
-  letterSpacing: "0.05em",
-  margin: "0 0 4px 0",
+  letterSpacing: "0.08em",
+  margin: "0 0 6px 0",
 };
 
-const infoValue = {
+const accountEmail: React.CSSProperties = {
   fontSize: "14px",
-  fontWeight: "700",
-  color: colors.gray800,
-  margin: "0",
+  fontWeight: 500,
+  color: colors.textPrimary,
+  margin: 0,
 };
 
-const infoBadge = {
-  fontSize: "12px",
-  fontWeight: "700",
-  color: colors.blue,
-  backgroundColor: `${colors.blue}15`,
-  padding: "4px 12px",
-  borderRadius: "20px",
+const accountBadge: React.CSSProperties = {
+  fontSize: "11px",
+  fontWeight: 600,
+  color: colors.green,
+  backgroundColor: colors.greenGlow,
+  padding: "6px 12px",
+  borderRadius: "8px",
   display: "inline-block",
-  margin: "0",
 };
 
-// ─────────────────────────────────────────────────────────────────────────
-// SECONDARY CTA
-// ─────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// LINK FALLBACK
+// ─────────────────────────────────────────────────────────────────────────────
 
-const secondaryCtaRow = {
+const linkFallback: React.CSSProperties = {
+  fontSize: "12px",
+  lineHeight: 1.6,
+  color: colors.textMuted,
   textAlign: "center" as const,
-  marginBottom: "16px",
+  margin: 0,
 };
 
-const secondaryCta = {
-  backgroundColor: colors.navy,
-  borderRadius: "10px",
-  color: colors.white,
-  fontSize: "14px",
-  fontWeight: "600",
+const linkUrl: React.CSSProperties = {
+  color: colors.brandLight,
   textDecoration: "none",
-  textAlign: "center" as const,
-  display: "inline-block",
-  padding: "12px 28px",
-};
-
-const linkNote = {
-  fontSize: "12px",
-  color: colors.gray400,
-  textAlign: "center" as const,
-  margin: "0",
-};
-
-const linkUrl = {
-  color: colors.blue,
-  textDecoration: "underline",
   wordBreak: "break-all" as const,
 };
 
-// ─────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // FOOTER
-// ─────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
-const footer = {
-  padding: "28px 24px",
-  textAlign: "center" as const,
+const footerSection: React.CSSProperties = {
+  padding: "40px 24px",
 };
 
-const partnerBox = {
-  margin: "0 auto 20px auto",
-  backgroundColor: colors.white,
-  borderRadius: "10px",
-  border: `1px solid ${colors.gray200}`,
-  width: "auto",
-  display: "inline-block",
+const footerBrand: React.CSSProperties = {
+  fontSize: "18px",
+  fontWeight: 700,
+  color: colors.textPrimary,
+  margin: "0 0 6px 0",
+  letterSpacing: "-0.02em",
 };
 
-const partnerInner = {
-  padding: "16px 32px",
-  textAlign: "center" as const,
+const footerWave: React.CSSProperties = {
+  marginRight: "6px",
 };
 
-const partnerLabel = {
-  fontSize: "9px",
-  fontWeight: "700",
-  color: colors.gray400,
-  textTransform: "uppercase" as const,
-  letterSpacing: "0.12em",
-  margin: "0 0 8px 0",
-};
-
-const partnerNames = {
-  fontSize: "14px",
-  margin: "0",
-};
-
-const partnerName = {
-  fontWeight: "700",
-  color: colors.gray700,
-};
-
-const partnerAnd = {
-  color: colors.gray400,
-  margin: "0 8px",
-  fontWeight: "400",
-};
-
-const footerBrand = {
-  fontSize: "16px",
-  fontWeight: "700",
-  color: colors.gray800,
-  margin: "0 0 8px 0",
-};
-
-const footerWave = {
-  marginRight: "4px",
-};
-
-const footerLinks = {
+const footerTagline: React.CSSProperties = {
   fontSize: "13px",
-  margin: "0 0 12px 0",
+  color: colors.textTertiary,
+  margin: "0 0 20px 0",
 };
 
-const footerLink = {
-  color: colors.gray500,
+const footerLinksTable: React.CSSProperties = {
+  margin: "0 auto 20px auto",
+};
+
+const footerLink: React.CSSProperties = {
+  fontSize: "12px",
+  color: colors.textSecondary,
   textDecoration: "none",
 };
 
-const footerDot = {
-  color: colors.gray300,
+const footerLinkDot: React.CSSProperties = {
+  color: colors.textMuted,
+  padding: "0 10px",
+  fontSize: "12px",
 };
 
-const copyright = {
+const footerCopyright: React.CSSProperties = {
   fontSize: "11px",
-  color: colors.gray400,
-  margin: "0 0 4px 0",
-};
-
-const sentTo = {
-  fontSize: "10px",
-  color: colors.gray400,
-  margin: "0",
+  color: colors.textMuted,
+  margin: 0,
 };

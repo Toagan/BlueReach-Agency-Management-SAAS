@@ -92,7 +92,8 @@ function getDateRange(interval: string): { startDate: Date; endDate: Date; previ
   return { startDate, endDate, previousStartDate, previousEndDate };
 }
 
-// Get stats for a client within a date range
+// Get stats for a client - uses the same data source as the client dashboard
+// This ensures the email report matches what's shown in the dashboard
 async function getClientStats(
   supabase: ReturnType<typeof getSupabase>,
   clientId: string,
@@ -100,73 +101,42 @@ async function getClientStats(
   endDate: Date,
   isAllTime: boolean = false
 ): Promise<{ emailsSent: number; replies: number; positiveReplies: number; replyRate: number }> {
-  const startDateStr = startDate.toISOString();
-  const endDateStr = endDate.toISOString();
+  // Get all campaigns for this client
+  const { data: campaigns } = await supabase
+    .from("campaigns")
+    .select("id, cached_emails_sent, cached_reply_count, cached_emails_bounced")
+    .eq("client_id", clientId);
 
+  if (!campaigns || campaigns.length === 0) {
+    return { emailsSent: 0, replies: 0, positiveReplies: 0, replyRate: 0 };
+  }
+
+  const campaignIds = campaigns.map((c) => c.id);
+
+  // Sum cached stats from campaigns (same as dashboard)
   let emailsSent = 0;
   let replies = 0;
-  let positiveReplies = 0;
 
-  if (isAllTime) {
-    // For all-time stats, count ALL leads for this client (no date filter)
-    const { count: totalLeads } = await supabase
-      .from("leads")
-      .select("*", { count: "exact", head: true })
-      .eq("client_id", clientId);
-
-    // Count ALL replies for this client
-    const { count: totalReplies } = await supabase
-      .from("leads")
-      .select("*", { count: "exact", head: true })
-      .eq("client_id", clientId)
-      .eq("has_replied", true);
-
-    // Count ALL positive replies for this client
-    const { count: totalPositive } = await supabase
-      .from("leads")
-      .select("*", { count: "exact", head: true })
-      .eq("client_id", clientId)
-      .eq("is_positive_reply", true);
-
-    emailsSent = totalLeads || 0;
-    replies = totalReplies || 0;
-    positiveReplies = totalPositive || 0;
-  } else {
-    // For date-range stats, use date filters
-    // Count leads created in the date range
-    const { count: leadsCount } = await supabase
-      .from("leads")
-      .select("*", { count: "exact", head: true })
-      .eq("client_id", clientId)
-      .gte("created_at", startDateStr)
-      .lte("created_at", endDateStr);
-
-    // Count replies in the date range (based on when they replied)
-    const { count: repliesCount } = await supabase
-      .from("leads")
-      .select("*", { count: "exact", head: true })
-      .eq("client_id", clientId)
-      .eq("has_replied", true)
-      .gte("responded_at", startDateStr)
-      .lte("responded_at", endDateStr);
-
-    // Count positive replies in the date range
-    const { count: positiveCount } = await supabase
-      .from("leads")
-      .select("*", { count: "exact", head: true })
-      .eq("client_id", clientId)
-      .eq("is_positive_reply", true)
-      .gte("responded_at", startDateStr)
-      .lte("responded_at", endDateStr);
-
-    emailsSent = leadsCount || 0;
-    replies = repliesCount || 0;
-    positiveReplies = positiveCount || 0;
+  for (const campaign of campaigns) {
+    emailsSent += campaign.cached_emails_sent || 0;
+    replies += campaign.cached_reply_count || 0;
   }
+
+  // Count positive replies from leads via campaign_id (same as dashboard)
+  const { count: positiveReplies } = await supabase
+    .from("leads")
+    .select("*", { count: "exact", head: true })
+    .in("campaign_id", campaignIds)
+    .eq("is_positive_reply", true);
 
   const replyRate = emailsSent > 0 ? (replies / emailsSent) * 100 : 0;
 
-  return { emailsSent, replies, positiveReplies, replyRate };
+  return {
+    emailsSent,
+    replies,
+    positiveReplies: positiveReplies || 0,
+    replyRate,
+  };
 }
 
 // POST - Send stats reports (called by cron job)
