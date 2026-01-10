@@ -72,7 +72,7 @@ export async function POST(
     // Get campaign to find provider campaign ID AND api_key_encrypted
     const { data: campaign, error: campaignError } = await supabase
       .from("campaigns")
-      .select("id, provider_type, provider_campaign_id, instantly_campaign_id, smartlead_campaign_id, name, api_key_encrypted")
+      .select("id, provider_type, provider_campaign_id, instantly_campaign_id, name, api_key_encrypted")
       .eq("id", campaignId)
       .single();
 
@@ -89,12 +89,11 @@ export async function POST(
       provider_type: campaign.provider_type,
       provider_campaign_id: campaign.provider_campaign_id,
       instantly_campaign_id: campaign.instantly_campaign_id,
-      smartlead_campaign_id: campaign.smartlead_campaign_id,
     });
 
+    // provider_campaign_id is the unified field, instantly_campaign_id is legacy
     const providerCampaignId = campaign.provider_campaign_id ||
-      campaign.instantly_campaign_id ||
-      campaign.smartlead_campaign_id;
+      campaign.instantly_campaign_id;
 
     if (!providerCampaignId) {
       return NextResponse.json(
