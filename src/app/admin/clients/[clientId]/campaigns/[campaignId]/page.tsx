@@ -25,6 +25,7 @@ import {
   FileDown,
   ChevronDown,
 } from "lucide-react";
+import { VariantAnalytics } from "@/components/campaigns/variant-analytics";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -814,6 +815,9 @@ export default function CampaignDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* A/B Test Variant Analytics */}
+      <VariantAnalytics campaignId={campaignId} />
 
       {/* Email Sequences */}
       <Card>

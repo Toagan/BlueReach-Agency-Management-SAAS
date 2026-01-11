@@ -571,6 +571,163 @@ export class SmartleadProvider implements EmailCampaignProvider {
     return statsMap;
   }
 
+  // Fetch variant mapping (variant_id → variant_label) for a campaign
+  async fetchVariantMapping(campaignId: string): Promise<Map<number, string>> {
+    const variantMap = new Map<number, string>();
+
+    try {
+      // API can return array directly or wrapped in object
+      const rawResponse = await this.client.get<SmartleadSequenceResponse | SmartleadSequenceStep[]>(
+        `/campaigns/${campaignId}/sequences`
+      );
+
+      // Handle both response formats
+      const sequences = Array.isArray(rawResponse)
+        ? rawResponse
+        : (rawResponse as SmartleadSequenceResponse).email_campaign_sequences || [];
+
+      for (const step of sequences) {
+        // Handle both field names: sequence_variants or seq_variants
+        const variants = (step as { sequence_variants?: SmartleadSequenceVariant[] }).sequence_variants || step.seq_variants || [];
+        for (const variant of variants) {
+          // Handle both ID field names: id or variant_id
+          const variantId = (variant as { id?: number }).id || variant.variant_id;
+          if (variantId && variant.variant_label) {
+            variantMap.set(variantId, variant.variant_label);
+          }
+        }
+      }
+      console.log(`[SmartleadProvider] Built variant mapping with ${variantMap.size} variants`);
+    } catch (error) {
+      console.error(`[SmartleadProvider] Error fetching variant mapping:`, error);
+    }
+
+    return variantMap;
+  }
+
+  // Fetch lead statistics with variant info for reply tracking
+  // Returns which step/variant the lead replied to
+  async fetchLeadStatisticsWithVariants(campaignId: string): Promise<Map<string, {
+    category: string | null;
+    openCount: number;
+    clickCount: number;
+    hasReplied: boolean;
+    replyTime: string | null;
+    replyFromStep: number | null;
+    replyFromVariant: number | null;
+    replyFromVariantLabel: string | null;
+    emailStats: Array<{
+      sequenceNumber: number;
+      variantId: number;
+      variantLabel: string | null;
+      subject: string;
+      sentTime: string | null;
+      replyTime: string | null;
+    }>;
+  }>> {
+    console.log(`[SmartleadProvider] Fetching lead statistics with variants for campaign ${campaignId}`);
+
+    // First fetch variant mapping
+    const variantMap = await this.fetchVariantMapping(campaignId);
+
+    const statsMap = new Map<string, {
+      category: string | null;
+      openCount: number;
+      clickCount: number;
+      hasReplied: boolean;
+      replyTime: string | null;
+      replyFromStep: number | null;
+      replyFromVariant: number | null;
+      replyFromVariantLabel: string | null;
+      emailStats: Array<{
+        sequenceNumber: number;
+        variantId: number;
+        variantLabel: string | null;
+        subject: string;
+        sentTime: string | null;
+        replyTime: string | null;
+      }>;
+    }>();
+
+    const limit = 100;
+    let offset = 0;
+    let hasMore = true;
+    let totalFetched = 0;
+
+    while (hasMore) {
+      try {
+        const response = await this.client.get<SmartleadStatisticsResponse>(
+          `/campaigns/${campaignId}/statistics`,
+          { limit, offset }
+        );
+
+        if (!response.data || response.data.length === 0) {
+          break;
+        }
+
+        for (const stat of response.data) {
+          const email = stat.lead_email?.toLowerCase();
+          if (!email) continue;
+
+          const variantLabel = variantMap.get(stat.seq_variant_id) || null;
+          const emailStat = {
+            sequenceNumber: stat.sequence_number,
+            variantId: stat.seq_variant_id,
+            variantLabel,
+            subject: stat.email_subject,
+            sentTime: stat.sent_time,
+            replyTime: stat.reply_time,
+          };
+
+          const existing = statsMap.get(email);
+          if (existing) {
+            existing.openCount = Math.max(existing.openCount, stat.open_count || 0);
+            existing.clickCount = Math.max(existing.clickCount, stat.click_count || 0);
+            existing.emailStats.push(emailStat);
+
+            // Track which email triggered the reply
+            if (stat.reply_time && !existing.replyFromStep) {
+              existing.hasReplied = true;
+              existing.replyTime = stat.reply_time;
+              existing.replyFromStep = stat.sequence_number;
+              existing.replyFromVariant = stat.seq_variant_id;
+              existing.replyFromVariantLabel = variantLabel;
+            }
+            if (!existing.category && stat.lead_category) {
+              existing.category = stat.lead_category;
+            }
+          } else {
+            statsMap.set(email, {
+              category: stat.lead_category,
+              openCount: stat.open_count || 0,
+              clickCount: stat.click_count || 0,
+              hasReplied: !!stat.reply_time,
+              replyTime: stat.reply_time,
+              replyFromStep: stat.reply_time ? stat.sequence_number : null,
+              replyFromVariant: stat.reply_time ? stat.seq_variant_id : null,
+              replyFromVariantLabel: stat.reply_time ? variantLabel : null,
+              emailStats: [emailStat],
+            });
+          }
+        }
+
+        totalFetched += response.data.length;
+        offset += limit;
+        hasMore = response.data.length === limit;
+
+        if (totalFetched % 500 === 0) {
+          console.log(`[SmartleadProvider] Fetched ${totalFetched} statistics with variants...`);
+        }
+      } catch (error) {
+        console.error(`[SmartleadProvider] Error fetching statistics at offset ${offset}:`, error);
+        break;
+      }
+    }
+
+    console.log(`[SmartleadProvider] Fetched statistics with variants for ${statsMap.size} unique leads`);
+    return statsMap;
+  }
+
   // Fetch all leads with engagement statistics merged in
   async fetchAllLeadsWithStats(campaignId: string): Promise<ProviderLead[]> {
     console.log(`[SmartleadProvider] Fetching all leads with statistics for campaign ${campaignId}`);

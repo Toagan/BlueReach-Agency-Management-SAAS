@@ -204,11 +204,24 @@ export async function POST(request: Request, { params }: RouteParams) {
       updated_at: new Date().toISOString(),
     };
 
+    // Convert variant number to label for lead tracking (0=A, 1=B, 2=C)
+    const replyVariantLabel = payload.variant !== undefined
+      ? String.fromCharCode(65 + payload.variant)
+      : null;
+
     // Handle different event types
     if (isPositive) {
       updateData.is_positive_reply = true;
       updateData.has_replied = true;
       updateData.status = "replied";
+      // Track which email variant triggered the positive reply
+      if (payload.step !== undefined) {
+        updateData.reply_from_step = payload.step;
+      }
+      if (payload.variant !== undefined) {
+        updateData.reply_from_variant = payload.variant;
+        updateData.reply_from_variant_label = replyVariantLabel;
+      }
     } else if (isNegative) {
       updateData.is_positive_reply = false;
     }
@@ -216,6 +229,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (isReply) {
       updateData.has_replied = true;
       updateData.status = "replied";
+      // Track which email variant triggered the reply (if not already set by positive)
+      if (!updateData.reply_from_step && payload.step !== undefined) {
+        updateData.reply_from_step = payload.step;
+      }
+      if (!updateData.reply_from_variant && payload.variant !== undefined) {
+        updateData.reply_from_variant = payload.variant;
+        updateData.reply_from_variant_label = replyVariantLabel;
+      }
       // Increment campaign's cached_reply_count
       const { data: campaignData } = await supabase
         .from("campaigns")
@@ -331,6 +352,11 @@ export async function POST(request: Request, { params }: RouteParams) {
 
       // Only save if we have some content
       if (subject || bodyText || bodyHtml) {
+        // Convert variant number to label (0=A, 1=B, 2=C)
+        const variantLabel = payload.variant !== undefined
+          ? String.fromCharCode(65 + payload.variant)  // 65 = 'A'
+          : null;
+
         const emailRecord = {
           lead_id: leadDbId,
           campaign_id: campaignId,
@@ -342,6 +368,8 @@ export async function POST(request: Request, { params }: RouteParams) {
           body_text: bodyText,
           body_html: bodyHtml,
           sequence_step: payload.step || null,
+          sequence_variant: payload.variant ?? null,
+          sequence_variant_label: variantLabel,
           is_auto_reply: eventType === "auto_reply_received",
           sent_at: payload.timestamp || new Date().toISOString(),
         };

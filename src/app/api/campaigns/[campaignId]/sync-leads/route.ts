@@ -666,12 +666,98 @@ export async function POST(
     // ═══════════════════════════════════════════════════════════════════════════
     // STEP 5: Sync positive leads from Smartlead statistics (category-based)
     // The basic leads endpoint doesn't return category, so we fetch from statistics
+    // Also sync variant tracking info for which email triggered replies
     // ═══════════════════════════════════════════════════════════════════════════
     let positiveLeadsFromStats = 0;
+    let variantsSynced = 0;
 
-    if (provider.providerType === "smartlead" && 'fetchLeadStatistics' in provider) {
+    if (provider.providerType === "smartlead" && 'fetchLeadStatisticsWithVariants' in provider) {
       try {
-        console.log(`[SyncLeads] Fetching positive leads from Smartlead statistics...`);
+        console.log(`[SyncLeads] Fetching positive leads from Smartlead statistics with variant tracking...`);
+
+        // Use the enhanced method that includes variant info
+        const statsMap = await (provider as {
+          fetchLeadStatisticsWithVariants: (id: string) => Promise<Map<string, {
+            category: string | null;
+            hasReplied: boolean;
+            replyFromStep: number | null;
+            replyFromVariant: number | null;
+            replyFromVariantLabel: string | null;
+            emailStats: Array<{
+              sequenceNumber: number;
+              variantId: number;
+              variantLabel: string | null;
+              subject: string;
+              sentTime: string | null;
+              replyTime: string | null;
+            }>;
+          }>>
+        }).fetchLeadStatisticsWithVariants(providerCampaignId);
+
+        const positiveCategories = ["Interested", "Meeting Request"];
+
+        // Process leads with stats - update positive leads AND variant tracking
+        for (const [email, stats] of statsMap) {
+          const isPositive = stats.category && positiveCategories.includes(stats.category);
+
+          // Build update payload
+          const updatePayload: Record<string, unknown> = {};
+
+          if (isPositive) {
+            updatePayload.is_positive_reply = true;
+            updatePayload.has_replied = true;
+            updatePayload.status = "replied";
+          }
+
+          // Track which email variant triggered the reply (for all replied leads, not just positive)
+          if (stats.hasReplied && stats.replyFromStep !== null) {
+            updatePayload.reply_from_step = stats.replyFromStep;
+            updatePayload.reply_from_variant = stats.replyFromVariant;
+            updatePayload.reply_from_variant_label = stats.replyFromVariantLabel;
+            variantsSynced++;
+          }
+
+          // Only update if we have something to update
+          if (Object.keys(updatePayload).length > 0) {
+            const { error } = await supabase
+              .from("leads")
+              .update(updatePayload)
+              .eq("campaign_id", campaignId)
+              .ilike("email", email);
+
+            if (!error && isPositive) {
+              positiveLeadsFromStats++;
+            }
+          }
+
+          // Also update lead_emails with variant info for outbound emails
+          if (stats.emailStats && stats.emailStats.length > 0) {
+            for (const emailStat of stats.emailStats) {
+              if (emailStat.sentTime && emailStat.variantLabel) {
+                // Update outbound emails with variant info based on subject + sent time match
+                await supabase
+                  .from("lead_emails")
+                  .update({
+                    sequence_step: emailStat.sequenceNumber,
+                    sequence_variant: emailStat.variantId,
+                    sequence_variant_label: emailStat.variantLabel,
+                  })
+                  .eq("campaign_id", campaignId)
+                  .eq("direction", "outbound")
+                  .ilike("subject", emailStat.subject);
+              }
+            }
+          }
+        }
+
+        console.log(`[SyncLeads] Updated ${positiveLeadsFromStats} positive leads, ${variantsSynced} with variant tracking from statistics`);
+      } catch (statsError) {
+        console.error(`[SyncLeads] Error syncing positive leads from statistics:`, statsError);
+      }
+    } else if (provider.providerType === "smartlead" && 'fetchLeadStatistics' in provider) {
+      // Fallback to basic stats if enhanced method not available
+      try {
+        console.log(`[SyncLeads] Fetching positive leads from Smartlead statistics (basic)...`);
 
         const statsMap = await (provider as { fetchLeadStatistics: (id: string) => Promise<Map<string, { category: string | null; hasReplied: boolean }>> }).fetchLeadStatistics(providerCampaignId);
 
@@ -686,7 +772,6 @@ export async function POST(
 
         console.log(`[SyncLeads] Found ${positiveEmails.length} positive leads in statistics`);
 
-        // Update positive leads in batches
         for (let i = 0; i < positiveEmails.length; i += 50) {
           const batch = positiveEmails.slice(i, i + 50);
           for (const email of batch) {

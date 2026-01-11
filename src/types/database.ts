@@ -89,6 +89,10 @@ export interface Lead {
   // Multi-provider support
   provider_type: ProviderType | null;
   provider_lead_id: string | null;
+  // Variant tracking - which email triggered the reply
+  reply_from_step: number | null;
+  reply_from_variant: number | null;
+  reply_from_variant_label: string | null;
 }
 
 export interface ClientUser {
@@ -203,6 +207,8 @@ export interface LeadEmail {
   body_text: string | null;
   body_html: string | null;
   sequence_step: number | null;
+  sequence_variant: number | null;
+  sequence_variant_label: string | null;
   is_auto_reply: boolean;
   sent_at: string | null;
   opened_at: string | null;
