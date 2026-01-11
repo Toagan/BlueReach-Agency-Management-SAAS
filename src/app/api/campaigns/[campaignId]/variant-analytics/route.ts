@@ -42,16 +42,22 @@ interface VariantAnalyticsResponse {
   };
 }
 
-// Fetch sent counts per variant from Smartlead API
+// Fetch sent counts per variant from Smartlead API with parallel requests
 async function fetchSmartleadSentCounts(
   apiKey: string,
   providerCampaignId: string
 ): Promise<Map<string, { step: number; variant: string; variantId: number; sent: number }>> {
   const baseUrl = "https://server.smartlead.ai/api/v1";
 
-  // First get variant mapping (variant ID -> label)
-  const seqRes = await fetch(`${baseUrl}/campaigns/${providerCampaignId}/sequences?api_key=${apiKey}`);
+  // First get variant mapping (variant ID -> label) and total count
+  const [seqRes, analyticsRes] = await Promise.all([
+    fetch(`${baseUrl}/campaigns/${providerCampaignId}/sequences?api_key=${apiKey}`),
+    fetch(`${baseUrl}/campaigns/${providerCampaignId}/analytics?api_key=${apiKey}`),
+  ]);
+
   const seqData = await seqRes.json();
+  const analytics = await analyticsRes.json();
+  const totalSent = parseInt(analytics.sent_count) || 0;
 
   const variantMap = new Map<number, { label: string; stepNumber: number }>();
   const sequences = Array.isArray(seqData) ? seqData : seqData.email_campaign_sequences || [];
@@ -69,24 +75,34 @@ async function fetchSmartleadSentCounts(
     }
   }
 
-  // Fetch all statistics with pagination
+  // Fetch statistics with parallel requests (batches of 10 pages at a time)
   const allStats: Array<{ sequence_number: number; seq_variant_id: number }> = [];
-  let offset = 0;
-  const limit = 100;
-  let hasMore = true;
+  const limit = 500; // Try higher limit for fewer requests
+  const totalPages = Math.ceil(totalSent / limit);
+  const batchSize = 10; // Fetch 10 pages in parallel
 
-  while (hasMore) {
-    const statsRes = await fetch(
-      `${baseUrl}/campaigns/${providerCampaignId}/statistics?api_key=${apiKey}&limit=${limit}&offset=${offset}`
-    );
-    const statsData = await statsRes.json();
+  for (let batchStart = 0; batchStart < totalPages; batchStart += batchSize) {
+    const batchEnd = Math.min(batchStart + batchSize, totalPages);
+    const pagePromises = [];
 
-    if (!statsData.data || statsData.data.length === 0) {
-      hasMore = false;
-    } else {
-      allStats.push(...statsData.data);
-      offset += limit;
-      hasMore = statsData.data.length === limit;
+    for (let page = batchStart; page < batchEnd; page++) {
+      const offset = page * limit;
+      pagePromises.push(
+        fetch(`${baseUrl}/campaigns/${providerCampaignId}/statistics?api_key=${apiKey}&limit=${limit}&offset=${offset}`)
+          .then(res => res.json())
+          .then(data => data.data || [])
+          .catch(() => [])
+      );
+    }
+
+    const batchResults = await Promise.all(pagePromises);
+    for (const pageData of batchResults) {
+      allStats.push(...pageData);
+    }
+
+    // Small delay between batches to respect rate limits
+    if (batchStart + batchSize < totalPages) {
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
 
