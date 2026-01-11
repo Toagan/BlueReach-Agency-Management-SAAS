@@ -135,6 +135,9 @@ async function fetchSmartleadSentCounts(
   return sentCounts;
 }
 
+// Cache duration in hours
+const CACHE_DURATION_HOURS = 24;
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ campaignId: string }> }
@@ -142,11 +145,15 @@ export async function GET(
   const { campaignId } = await params;
   const supabase = getSupabase();
 
+  // Check for force refresh query param
+  const url = new URL(request.url);
+  const forceRefresh = url.searchParams.get("refresh") === "true";
+
   try {
-    // Get campaign info including API key for Smartlead
+    // Get campaign info including API key and cached stats
     const { data: campaign, error: campaignError } = await supabase
       .from("campaigns")
-      .select("id, name, provider_type, provider_campaign_id, api_key_encrypted")
+      .select("id, name, provider_type, provider_campaign_id, api_key_encrypted, cached_variant_stats, variant_stats_updated_at")
       .eq("id", campaignId)
       .single();
 
@@ -157,7 +164,16 @@ export async function GET(
       );
     }
 
-    // Initialize variant map
+    // Check if we have valid cached data (less than CACHE_DURATION_HOURS old)
+    const cacheAge = campaign.variant_stats_updated_at
+      ? (Date.now() - new Date(campaign.variant_stats_updated_at).getTime()) / (1000 * 60 * 60)
+      : Infinity;
+
+    const hasFreshCache = !forceRefresh &&
+      campaign.cached_variant_stats &&
+      cacheAge < CACHE_DURATION_HOURS;
+
+    // Initialize variant map - either from cache or fresh fetch
     const variantMap = new Map<string, {
       step: number;
       variant: string;
@@ -167,16 +183,22 @@ export async function GET(
       positiveReplies: number;
     }>();
 
-    // For Smartlead campaigns, fetch sent counts from API
-    if (campaign.provider_type === "smartlead" && campaign.api_key_encrypted && campaign.provider_campaign_id) {
-      try {
-        const smartleadSentCounts = await fetchSmartleadSentCounts(
-          campaign.api_key_encrypted,
-          campaign.provider_campaign_id
-        );
+    let usedCache = false;
 
-        // Add sent counts to variant map
-        for (const [key, data] of smartleadSentCounts) {
+    // For Smartlead campaigns, use cache or fetch from API
+    if (campaign.provider_type === "smartlead" && campaign.api_key_encrypted && campaign.provider_campaign_id) {
+      if (hasFreshCache && campaign.cached_variant_stats) {
+        // Use cached sent counts
+        console.log(`[VariantAnalytics] Using cached data (${cacheAge.toFixed(1)}h old)`);
+        const cachedData = campaign.cached_variant_stats as Array<{
+          step: number;
+          variant: string;
+          variantId: number;
+          sent: number;
+        }>;
+
+        for (const data of cachedData) {
+          const key = `${data.step}-${data.variant}`;
           variantMap.set(key, {
             step: data.step,
             variant: data.variant,
@@ -186,8 +208,54 @@ export async function GET(
             positiveReplies: 0,
           });
         }
-      } catch (err) {
-        console.error("[VariantAnalytics] Error fetching Smartlead sent counts:", err);
+        usedCache = true;
+      } else {
+        // Fetch fresh data from Smartlead API
+        console.log(`[VariantAnalytics] Fetching fresh data from Smartlead API`);
+        try {
+          const smartleadSentCounts = await fetchSmartleadSentCounts(
+            campaign.api_key_encrypted,
+            campaign.provider_campaign_id
+          );
+
+          // Add sent counts to variant map
+          const cacheData: Array<{ step: number; variant: string; variantId: number; sent: number }> = [];
+
+          for (const [key, data] of smartleadSentCounts) {
+            variantMap.set(key, {
+              step: data.step,
+              variant: data.variant,
+              variantId: data.variantId,
+              sent: data.sent,
+              replies: 0,
+              positiveReplies: 0,
+            });
+            cacheData.push({
+              step: data.step,
+              variant: data.variant,
+              variantId: data.variantId,
+              sent: data.sent,
+            });
+          }
+
+          // Store in cache (don't await to avoid slowing response)
+          supabase
+            .from("campaigns")
+            .update({
+              cached_variant_stats: cacheData,
+              variant_stats_updated_at: new Date().toISOString(),
+            })
+            .eq("id", campaignId)
+            .then(({ error }) => {
+              if (error) {
+                console.error("[VariantAnalytics] Error caching stats:", error);
+              } else {
+                console.log("[VariantAnalytics] Cached variant stats for campaign", campaignId);
+              }
+            });
+        } catch (err) {
+          console.error("[VariantAnalytics] Error fetching Smartlead sent counts:", err);
+        }
       }
     } else {
       // For Instantly or when Smartlead API not available, use lead_emails table
