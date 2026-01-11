@@ -296,11 +296,13 @@ export async function GET(
     }
 
     // Query reply tracking from leads table (works for both providers)
+    // Use email_reply_count > 0 OR is_positive_reply = true as reliable reply indicators
+    // Note: has_replied may include false positives from "completed" status
     const { data: leadStats, error: leadError } = await supabase
       .from("leads")
-      .select("reply_from_step, reply_from_variant, reply_from_variant_label, is_positive_reply, has_replied")
+      .select("reply_from_step, reply_from_variant, reply_from_variant_label, is_positive_reply, email_reply_count")
       .eq("campaign_id", campaignId)
-      .eq("has_replied", true);
+      .or("email_reply_count.gt.0,is_positive_reply.eq.true");
 
     if (leadError) {
       console.error("[VariantAnalytics] Error fetching lead stats:", leadError);
