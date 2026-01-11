@@ -24,7 +24,9 @@ import {
   Code,
   FileDown,
   ChevronDown,
+  Sparkles,
 } from "lucide-react";
+import { createBrowserClient } from "@supabase/ssr";
 import { VariantAnalytics } from "@/components/campaigns/variant-analytics";
 import {
   DropdownMenu,
@@ -125,6 +127,29 @@ export default function CampaignDetailPage() {
   const [syncLeadsResult, setSyncLeadsResult] = useState<string | null>(null);
   const [syncElapsed, setSyncElapsed] = useState(0);
   const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Admin state
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
+  // Fetch user role
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+        setIsAdmin(profile?.role === "admin");
+      }
+    };
+    checkAdmin();
+  }, []);
 
 
   // Calculate estimated sync time based on lead count
@@ -433,6 +458,37 @@ export default function CampaignDetailPage() {
     }
   };
 
+  // Download Claude skill file for A/B test optimization
+  const handleDownloadSkill = async () => {
+    try {
+      const response = await fetch(`/api/campaigns/${campaignId}/generate-skill`);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate skill file");
+      }
+
+      // Get filename from Content-Disposition header
+      const contentDisposition = response.headers.get("Content-Disposition");
+      const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
+      const filename = filenameMatch ? filenameMatch[1] : `campaign-ab-optimizer.md`;
+
+      // Download the file
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error("Skill download error:", err);
+      setError(err instanceof Error ? err.message : "Failed to download skill file");
+    }
+  };
+
   // Sync sequences from Instantly
   const handleSyncSequences = async () => {
     setIsSyncingSequences(true);
@@ -678,6 +734,19 @@ export default function CampaignDetailPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* AI Skill Download - Admin Only */}
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadSkill}
+              title="Download Claude skill file for A/B test optimization"
+            >
+              <Sparkles className="h-4 w-4 mr-2 text-purple-500" />
+              AI Skill
+            </Button>
+          )}
 
           {/* Options Dropdown - Secondary Actions */}
           <DropdownMenu>
