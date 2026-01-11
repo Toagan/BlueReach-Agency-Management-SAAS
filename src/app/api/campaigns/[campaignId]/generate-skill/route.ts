@@ -174,162 +174,104 @@ function generateSkillFile(
       .trim();
   };
 
-  // Build the skill file
-  let content = `---
-name: ${campaign.name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-ab-optimizer
-description: Generate optimized A/B test email variants for ${client.name}'s cold outreach campaign. Use when asked to create new email variations, optimize copy, or improve response rates.
----
+  // Build the prompt file
+  let content = `# Generate 5 New A/B Test Email Variations
 
-# Email A/B Test Optimizer
-
-## Campaign: ${campaign.name}
-${campaign.original_name && campaign.original_name !== campaign.name ? `Original Name: ${campaign.original_name}` : ""}
+## Your Task
+Based on the campaign context, current email copy, and performance data below, generate **5 new email variations** that will likely outperform the current ones. Each variation should test a different hypothesis while maintaining the core message.
 
 ---
 
-## Client Context
+## Client: ${client.name}
+${client.website ? `Website: ${client.website}` : ""}
 
-**Company:** ${client.name}
-${client.website ? `**Website:** ${client.website}` : ""}
+**What they sell:** ${client.product_service || "Not specified"}
 
-### Product/Service
-${client.product_service || "Not specified"}
+**Target audience:** ${client.icp || "Not specified"}
 
-### Target Verticals
-${client.verticals && client.verticals.length > 0 ? client.verticals.map(v => `- ${v}`).join("\n") : "Not specified"}
+**Industries:** ${client.verticals && client.verticals.length > 0 ? client.verticals.join(", ") : "Not specified"}
 
-### Ideal Customer Profile (ICP)
-${client.icp || "Not specified"}
+**Value proposition:** ${client.offer || "Not specified"}
 
-### Value Proposition / Offer
-${client.offer || "Not specified"}
+${client.acv ? `**Deal size:** $${client.acv.toLocaleString()} ACV` : ""}
 
-### Deal Size
-${client.acv ? `- Average Contract Value (ACV): $${client.acv.toLocaleString()}` : ""}
-${client.tcv ? `- Total Contract Value (TCV): $${client.tcv.toLocaleString()}` : ""}
-${client.tam ? `- Total Addressable Market: ${client.tam.toLocaleString()} leads` : ""}
-
-${client.notes ? `### Additional Notes\n${client.notes}` : ""}
+${client.notes ? `**Notes:** ${client.notes}` : ""}
 
 ---
 
-## Performance Data
-
-### What Has Worked Best
+## What's Working (Performance Data)
 `;
 
   // Add performance summary
   if (performanceData.length > 0) {
-    content += `
-| Step | Variant | Total Replies | Positive Replies | Win Rate |
-|------|---------|---------------|------------------|----------|
-`;
-    for (const perf of performanceData.slice(0, 10)) {
+    content += `\n`;
+    for (const perf of performanceData.slice(0, 8)) {
       const winRate = perf.replies > 0 ? ((perf.positiveReplies / perf.replies) * 100).toFixed(0) : "0";
       const isBest = bestPerStep.get(perf.step)?.variant === perf.variant;
-      content += `| ${perf.step} | ${perf.variant}${isBest ? " **BEST**" : ""} | ${perf.replies} | ${perf.positiveReplies} | ${winRate}% |\n`;
+      content += `- Step ${perf.step}, Variant ${perf.variant}${isBest ? " (BEST)" : ""}: ${perf.positiveReplies} positive replies, ${winRate}% conversion\n`;
     }
 
-    content += `
-### Key Insights
-`;
-    for (const [step, best] of Array.from(bestPerStep.entries()).sort((a, b) => a[0] - b[0])) {
-      content += `- **Step ${step}:** Variant ${best.variant} performs best with ${best.positiveReplies} positive replies\n`;
+    content += `\n**Key insight:** `;
+    const bestOverall = performanceData[0];
+    if (bestOverall) {
+      content += `Variant ${bestOverall.variant} on Step ${bestOverall.step} is the top performer. Analyze what makes it work and build on those elements.\n`;
     }
   } else {
-    content += `No performance data available yet. Generate variations based on email copy best practices.\n`;
+    content += `No performance data yet. Create variations based on cold email best practices.\n`;
   }
 
   // Add current email sequences
   content += `
 ---
 
-## Current Email Sequences
-
+## Current Email Copy
 `;
 
   for (const [stepNum, variants] of Array.from(stepGroups.entries()).sort((a, b) => a[0] - b[0])) {
-    content += `### Step ${stepNum}${stepNum === 1 ? " (Initial Email)" : ` (Follow-up, +${variants[0]?.delay_days || 0} days)`}\n\n`;
+    content += `\n### Step ${stepNum}${stepNum === 1 ? " (Initial Email)" : " (Follow-up)"}\n`;
 
     for (const variant of variants) {
       const isBest = bestPerStep.get(stepNum)?.variant === variant.variant;
-      content += `#### Variant ${variant.variant}${isBest ? " - TOP PERFORMER" : ""}\n\n`;
-      content += `**Subject:** ${variant.subject || "(No subject)"}\n\n`;
-      content += `**Body:**\n\`\`\`\n${stripHtml(variant.body_html) || variant.body_text || "(No body)"}\n\`\`\`\n\n`;
+      content += `\n**Variant ${variant.variant}${isBest ? " - TOP PERFORMER" : ""}**\n`;
+      content += `Subject: ${variant.subject || "(No subject)"}\n`;
+      content += `\n${stripHtml(variant.body_html) || variant.body_text || "(No body)"}\n`;
     }
   }
 
-  // Add instructions for generating new variants
-  content += `---
+  // Clear instruction to generate variations
+  content += `
+---
 
-## Your Task
+## Generate 5 New Variations
 
-When asked to generate new email variants, follow these guidelines:
+Create 5 new email variations for Step 1 (initial outreach). For each variation:
 
-### Step 1: Ask Which Step to Optimize
-Ask the user: "Which email step would you like to optimize? Available steps: ${Array.from(stepGroups.keys()).sort().join(", ")}"
+1. **Analyze** what makes the top-performing variant work (tone, structure, hooks, CTA)
+2. **Keep** the personalization variables: {{firstName}}, {{companyName}}, {{1st line}}
+3. **Test different approaches:**
+   - Different subject line angles
+   - Different opening hooks
+   - Different value prop framing
+   - Different CTAs
+4. **Stay concise:** 50-125 words max
 
-### Step 2: Analyze Top Performers
-Review the performance data above. Identify what makes the best-performing variants successful:
-- Subject line patterns (curiosity, personalization, length)
-- Opening hooks (problem statement, personalization, pattern interrupt)
-- Value proposition framing
-- Call-to-action style
-- Tone and voice
+### Output Format
 
-### Step 3: Generate New Variants
-Create 3 NEW variants (labeled with next available letters) that:
+For each of the 5 variations, provide:
 
-1. **Build on what works:** Incorporate successful elements from top performers
-2. **Test new hypotheses:** Each variant should test a different approach:
-   - Variant A alternative: Different subject line angle
-   - Variant B alternative: Different opening hook
-   - Variant C alternative: Different CTA approach
-3. **Maintain brand voice:** Match the professional tone of existing emails
-4. **Keep personalization:** Preserve {{firstName}}, {{companyName}}, and custom variables
-
-### Step 4: Output Format
-For each new variant, provide:
-
-\`\`\`
-VARIANT [LETTER]
+**VARIATION 1**
 Subject: [subject line]
 
-Body:
-[email body with personalization variables preserved]
+[email body]
 
-Hypothesis: [what this variant is testing]
-\`\`\`
+*Testing: [what this variation tests differently]*
 
 ---
 
-## Best Practices for Cold Email
+**VARIATION 2**
+...and so on for all 5 variations.
 
-1. **Subject Lines:** 3-5 words, lowercase, curiosity-driven, avoid spam triggers
-2. **First Line:** Personalized reference or pattern interrupt (not "I hope this finds you well")
-3. **Value Prop:** Lead with outcome, not features
-4. **Social Proof:** Brief mention of similar companies/results when relevant
-5. **CTA:** Soft ask (interest-based) for first email, stronger for follow-ups
-6. **Length:** 50-125 words for initial email, shorter for follow-ups
-7. **Mobile First:** Most emails read on mobile, keep paragraphs short
-
-## Variables Available
-- {{firstName}} - Lead's first name
-- {{lastName}} - Lead's last name
-- {{companyName}} - Lead's company
-- {{company_domain}} - Lead's website domain
-- {{1st line}} / {{personalization}} - Custom personalization line
-- {{2nd line}} - Secondary personalization (if available)
-
----
-
-## Example Prompt to Use This Skill
-
-"Generate 3 new A/B test variants for Step 1 that build on what's working in Variant B but test different subject line approaches."
-
-"Create follow-up email variants for Step 2 that are more direct and outcome-focused."
-
-"Analyze my current email performance and suggest which elements to keep vs. change in new variants."
+## Go ahead and generate the 5 variations now.
 `;
 
   return content;
