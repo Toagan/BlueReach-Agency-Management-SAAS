@@ -89,9 +89,9 @@ export async function GET(
     }
 
     // Get campaign to check provider and sync status
-    const { data: campaign } = await supabase
+    const { data: campaign, error: campaignError } = await supabase
       .from("campaigns")
-      .select("provider_type, provider_campaign_id, instantly_campaign_id, smartlead_campaign_id, last_synced_at, api_key_encrypted")
+      .select("provider_type, provider_campaign_id, instantly_campaign_id, last_synced_at, api_key_encrypted")
       .eq("id", campaignId)
       .single();
 
