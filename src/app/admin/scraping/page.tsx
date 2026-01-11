@@ -637,7 +637,7 @@ export default function ScrapingPage() {
                             }`}
                             onClick={() => toggleBundesland(bl.code)}
                           >
-                            {bl.name.length > 15 ? bl.code : bl.name}
+                            {bl.name}
                           </Badge>
                         ))}
                       </div>
