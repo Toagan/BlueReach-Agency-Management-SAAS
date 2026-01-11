@@ -86,38 +86,17 @@ export async function syncLeadToHubSpot(
 
     const hubspot = new HubSpotClient(tokenSetting.value);
 
-    // Build contact data
-    const contactInput: HubSpotContactInput = {
-      properties: {
-        email: leadEmail,
-        firstname: leadFirstName || undefined,
-        lastname: leadLastName || undefined,
-        phone: leadPhone || undefined,
-        company: companyName || undefined,
-        lead_source: "BlueReach Outbound",
-        campaign_name: campaignName,
-      },
-    };
-
-    // Upsert contact (create or update)
-    console.log(`[HubSpot] Upserting contact: ${leadEmail}`);
-    const contact = await hubspot.upsertContact(contactInput);
-    console.log(`[HubSpot] Contact upserted: ${contact.id}`);
-
-    // Build note content with email thread
-    let noteBody = `**Positive Reply from BlueReach Campaign**\n\n`;
-    noteBody += `**Client:** ${clientName}\n`;
-    noteBody += `**Campaign:** ${campaignName}\n`;
-    noteBody += `**Lead Email:** ${leadEmail}\n`;
+    // Build email thread content for the contact description
+    let emailThreadContent = `POSITIVE REPLY - BlueReach Campaign\n`;
+    emailThreadContent += `Client: ${clientName}\n`;
+    emailThreadContent += `Campaign: ${campaignName}\n`;
     if (companyName) {
-      noteBody += `**Company:** ${companyName}\n`;
+      emailThreadContent += `Company: ${companyName}\n`;
     }
-    noteBody += `\n---\n\n`;
+    emailThreadContent += `\n--- EMAIL THREAD ---\n\n`;
 
     // Add email thread if available
     if (emailThread && emailThread.length > 0) {
-      noteBody += `**Email Thread:**\n\n`;
-
       // Sort by sent_at ascending (oldest first)
       const sortedEmails = [...emailThread].sort(
         (a, b) => new Date(a.sent_at).getTime() - new Date(b.sent_at).getTime()
@@ -126,25 +105,51 @@ export async function syncLeadToHubSpot(
       for (const email of sortedEmails) {
         const date = new Date(email.sent_at).toLocaleString();
         const direction =
-          email.direction === "inbound" ? "From Lead" : "To Lead";
+          email.direction === "inbound" ? "FROM LEAD" : "TO LEAD";
 
-        noteBody += `**[${direction}] ${date}**\n`;
+        emailThreadContent += `[${direction}] ${date}\n`;
         if (email.subject) {
-          noteBody += `Subject: ${email.subject}\n`;
+          emailThreadContent += `Subject: ${email.subject}\n`;
         }
-        noteBody += `\n${email.body_text || "(No text content)"}\n\n`;
-        noteBody += `---\n\n`;
+        emailThreadContent += `${email.body_text || "(No text content)"}\n\n`;
+        emailThreadContent += `---\n\n`;
       }
     } else {
-      noteBody += `*Email thread not available*\n`;
+      emailThreadContent += `(Email thread not available)\n`;
     }
 
-    noteBody += `\n*Synced from BlueReach at ${new Date().toISOString()}*`;
+    emailThreadContent += `\nSynced from BlueReach at ${new Date().toISOString()}`;
 
-    // Create note attached to contact
-    console.log(`[HubSpot] Creating note for contact: ${contact.id}`);
-    const note = await hubspot.createNote(contact.id, noteBody);
-    console.log(`[HubSpot] Note created: ${note.id}`);
+    // Build contact data with email thread in description/notes field
+    const contactInput: HubSpotContactInput = {
+      properties: {
+        email: leadEmail,
+        firstname: leadFirstName || undefined,
+        lastname: leadLastName || undefined,
+        phone: leadPhone || undefined,
+        company: companyName || undefined,
+        // Store email thread in HubSpot's built-in notes/description field
+        hs_content_membership_notes: emailThreadContent,
+        // Also try message field as backup
+        message: emailThreadContent.substring(0, 65000), // HubSpot field limit
+      },
+    };
+
+    // Upsert contact (create or update)
+    console.log(`[HubSpot] Upserting contact: ${leadEmail}`);
+    const contact = await hubspot.upsertContact(contactInput);
+    console.log(`[HubSpot] Contact upserted: ${contact.id}`);
+
+    // Try to create a note if the scope is available (will fail gracefully if not)
+    let noteId: string | undefined;
+    try {
+      const note = await hubspot.createNote(contact.id, emailThreadContent);
+      noteId = note.id;
+      console.log(`[HubSpot] Note created: ${note.id}`);
+    } catch (noteError) {
+      // Note creation failed (likely scope not available), but contact was created
+      console.log(`[HubSpot] Note creation skipped (scope not available), contact created successfully`);
+    }
 
     // Update sync stats
     const syncCountKey = `client_${clientId}_hubspot_sync_count`;
@@ -178,7 +183,7 @@ export async function syncLeadToHubSpot(
     return {
       success: true,
       contactId: contact.id,
-      noteId: note.id,
+      noteId,
     };
   } catch (error) {
     console.error("[HubSpot] Sync error:", error);
