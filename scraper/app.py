@@ -980,14 +980,16 @@ def plz_scraper_worker(search_term, num_leads, match_type, filename,
         if not job_status["is_running"]:
             break
 
+        processed_plz = plz_idx + 1  # 1-indexed for display
+
         # Update progress tracking
-        job_status["processed_locations"] = plz_idx
+        job_status["processed_locations"] = processed_plz
         elapsed = time.time() - job_status["start_time"]
         if elapsed > 0 and job_status["total_leads"] > 0:
             job_status["leads_per_minute"] = round(job_status["total_leads"] / (elapsed / 60), 1)
-            remaining_plz = total_plz - plz_idx
+            remaining_plz = total_plz - processed_plz
             if job_status["leads_per_minute"] > 0:
-                avg_leads_per_plz = job_status["total_leads"] / max(plz_idx, 1)
+                avg_leads_per_plz = job_status["total_leads"] / max(processed_plz, 1)
                 estimated_remaining = remaining_plz * avg_leads_per_plz
                 job_status["eta_minutes"] = round(estimated_remaining / job_status["leads_per_minute"], 1)
         plz = plz_data['plz']
