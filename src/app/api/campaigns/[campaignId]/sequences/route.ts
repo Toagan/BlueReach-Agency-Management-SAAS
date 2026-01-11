@@ -10,7 +10,59 @@ function getSupabase() {
   );
 }
 
-// GET: Fetch sequences for a campaign (from DB)
+// Fetch sequences directly from Smartlead API (for auto-loading)
+async function fetchSmartleadSequencesDirect(
+  apiKey: string,
+  providerCampaignId: string
+): Promise<Array<{
+  step_number: number;
+  variant: string;
+  subject: string | null;
+  body_text: string | null;
+  body_html: string | null;
+  delay_days: number;
+}>> {
+  const baseUrl = "https://server.smartlead.ai/api/v1";
+
+  const seqRes = await fetch(
+    `${baseUrl}/campaigns/${providerCampaignId}/sequences?api_key=${apiKey}`
+  );
+  const seqData = await seqRes.json();
+
+  const sequences: Array<{
+    step_number: number;
+    variant: string;
+    subject: string | null;
+    body_text: string | null;
+    body_html: string | null;
+    delay_days: number;
+  }> = [];
+
+  const steps = Array.isArray(seqData)
+    ? seqData
+    : seqData.email_campaign_sequences || [];
+
+  for (const step of steps) {
+    const stepNumber = step.seq_number || step.sequence_number || 1;
+    const variants = step.sequence_variants || step.seq_variants || [];
+
+    for (const variant of variants) {
+      const variantLabel = variant.variant_label || "A";
+      sequences.push({
+        step_number: stepNumber,
+        variant: variantLabel,
+        subject: variant.subject || step.subject || null,
+        body_text: null,
+        body_html: variant.email_body || step.email_body || null,
+        delay_days: step.seq_delay_details?.delay_in_days || 0,
+      });
+    }
+  }
+
+  return sequences;
+}
+
+// GET: Fetch sequences for a campaign (from DB, auto-fetch from provider if empty)
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ campaignId: string }> }
@@ -39,15 +91,58 @@ export async function GET(
     // Get campaign to check provider and sync status
     const { data: campaign } = await supabase
       .from("campaigns")
-      .select("provider_type, instantly_campaign_id, smartlead_campaign_id, last_synced_at")
+      .select("provider_type, provider_campaign_id, instantly_campaign_id, smartlead_campaign_id, last_synced_at, api_key_encrypted")
       .eq("id", campaignId)
       .single();
 
-    const needsSync = !sequences || sequences.length === 0;
+    // If we have local sequences, return them
+    if (sequences && sequences.length > 0) {
+      return NextResponse.json({
+        sequences,
+        needsSync: false,
+        lastSyncedAt: campaign?.last_synced_at,
+        providerType: campaign?.provider_type,
+      });
+    }
 
+    // Auto-fetch from Smartlead if no local sequences
+    if (
+      campaign?.provider_type === "smartlead" &&
+      campaign.api_key_encrypted &&
+      campaign.provider_campaign_id
+    ) {
+      try {
+        console.log("[Sequences GET] Auto-fetching from Smartlead API");
+        const smartleadSequences = await fetchSmartleadSequencesDirect(
+          campaign.api_key_encrypted,
+          campaign.provider_campaign_id
+        );
+
+        if (smartleadSequences.length > 0) {
+          console.log(`[Sequences GET] Got ${smartleadSequences.length} sequences from Smartlead`);
+          return NextResponse.json({
+            sequences: smartleadSequences.map((s, idx) => ({
+              id: `smartlead-${idx}`,
+              campaign_id: campaignId,
+              sequence_index: 0,
+              ...s,
+            })),
+            needsSync: false, // We got sequences from API
+            lastSyncedAt: campaign.last_synced_at,
+            providerType: campaign.provider_type,
+            source: "smartlead_api",
+          });
+        }
+      } catch (err) {
+        console.error("[Sequences GET] Error fetching from Smartlead:", err);
+        // Fall through to return empty sequences
+      }
+    }
+
+    // No sequences found
     return NextResponse.json({
-      sequences: sequences || [],
-      needsSync,
+      sequences: [],
+      needsSync: true,
       lastSyncedAt: campaign?.last_synced_at,
       providerType: campaign?.provider_type,
     });
