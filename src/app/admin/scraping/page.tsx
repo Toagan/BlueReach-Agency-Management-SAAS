@@ -107,7 +107,7 @@ export default function ScrapingPage() {
   const [scrapeMode, setScrapeMode] = useState("smart");
   const [minRating, setMinRating] = useState("0");
   const [minReviews, setMinReviews] = useState("0");
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("custom");
   const [expandQueries, setExpandQueries] = useState(false);
   const [selectedBundeslaender, setSelectedBundeslaender] = useState<string[]>([]);
 
@@ -240,7 +240,7 @@ export default function ScrapingPage() {
 
   // Start Single Search
   const handleStartSingleSearch = async () => {
-    if (!searchTerm && !selectedCategory) {
+    if (!searchTerm && selectedCategory === "custom") {
       alert("Please enter a search term or select a category");
       return;
     }
@@ -259,7 +259,7 @@ export default function ScrapingPage() {
           min_reviews: parseInt(minReviews),
           scrape_mode: scrapeMode,
           bundeslaender: selectedBundeslaender,
-          category: selectedCategory || null,
+          category: selectedCategory !== "custom" ? selectedCategory : null,
           expand_queries: expandQueries,
         }),
       });
@@ -507,7 +507,7 @@ export default function ScrapingPage() {
                         placeholder="e.g., Marketing Agency"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        disabled={!!selectedCategory}
+                        disabled={selectedCategory !== "custom"}
                       />
                     </div>
                     <div className="space-y-2">
@@ -517,7 +517,7 @@ export default function ScrapingPage() {
                           <SelectValue placeholder="Choose category bundle" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Custom Search</SelectItem>
+                          <SelectItem value="custom">Custom Search</SelectItem>
                           {categories.map(cat => (
                             <SelectItem key={cat.key} value={cat.key}>
                               {cat.name} ({cat.query_count} queries)
@@ -637,7 +637,7 @@ export default function ScrapingPage() {
                   )}
 
                   {/* Expand Queries Option */}
-                  {!selectedCategory && selectedCountry === "de" && (
+                  {selectedCategory === "custom" && selectedCountry === "de" && (
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id="expand"
