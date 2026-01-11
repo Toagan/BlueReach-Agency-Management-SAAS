@@ -453,8 +453,7 @@ def get_bundesland(lat, lon):
 
 # Ensure directories exist for data storage
 DATA_DIR = "data_exports"
-if not os.path.exists(DATA_DIR):
-    os.makedirs(DATA_DIR)
+os.makedirs(DATA_DIR, exist_ok=True)
 
 HISTORY_FILE = "search_history.json"
 SEARCH_TERMS_CONFIG = "search_terms_config.json"
