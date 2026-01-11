@@ -118,6 +118,7 @@ export default function ClientSettingsPage() {
   const [loadingHubspot, setLoadingHubspot] = useState(true);
   const [savingHubspot, setSavingHubspot] = useState(false);
   const [disconnectingHubspot, setDisconnectingHubspot] = useState(false);
+  const [testingHubspot, setTestingHubspot] = useState(false);
 
   const fetchNotificationPreferences = async () => {
     setLoadingNotifications(true);
@@ -295,6 +296,31 @@ export default function ClientSettingsPage() {
       setError("Failed to disconnect HubSpot");
     } finally {
       setDisconnectingHubspot(false);
+    }
+  };
+
+  const testHubspotSync = async () => {
+    setTestingHubspot(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/test-hubspot`, {
+        method: "POST",
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setSuccess(data.message || "Test contact synced to HubSpot!");
+        fetchHubspotSettings(); // Refresh to show updated count
+        setTimeout(() => setSuccess(null), 5000);
+      } else {
+        setError(data.error || "Failed to sync test contact");
+      }
+    } catch (error) {
+      console.error("Error testing HubSpot sync:", error);
+      setError("Failed to test HubSpot sync");
+    } finally {
+      setTestingHubspot(false);
     }
   };
 
@@ -1212,22 +1238,45 @@ export default function ClientSettingsPage() {
 
               {/* Connection Form or Stats */}
               {hubspotHasToken ? (
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Contacts synced:</span>
-                    <span className="font-medium text-foreground">{hubspotSyncCount}</span>
-                  </div>
-                  {hubspotLastSync && (
+                <div className="space-y-4">
+                  <div className="space-y-2 text-sm">
                     <div className="flex justify-between text-muted-foreground">
-                      <span>Last sync:</span>
-                      <span className="font-medium text-foreground">
-                        {new Date(hubspotLastSync).toLocaleString()}
-                      </span>
+                      <span>Contacts synced:</span>
+                      <span className="font-medium text-foreground">{hubspotSyncCount}</span>
                     </div>
-                  )}
-                  <p className="text-xs text-muted-foreground pt-2">
-                    Positive replies are automatically synced to HubSpot as contacts with the email thread attached as a note.
-                  </p>
+                    {hubspotLastSync && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Last sync:</span>
+                        <span className="font-medium text-foreground">
+                          {new Date(hubspotLastSync).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground pt-2">
+                      Positive replies are automatically synced to HubSpot as contacts with the email thread attached.
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t">
+                    <div>
+                      <p className="text-sm font-medium">Test Sync</p>
+                      <p className="text-xs text-muted-foreground">
+                        Send a test contact to HubSpot to verify the integration
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={testHubspotSync}
+                      disabled={testingHubspot || !hubspotEnabled}
+                    >
+                      {testingHubspot ? (
+                        <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <Send className="h-4 w-4 mr-2" />
+                      )}
+                      Test Now
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
