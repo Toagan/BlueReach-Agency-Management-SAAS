@@ -15,14 +15,8 @@ from supabase import create_client, Client
 load_dotenv()
 app = Flask(__name__)
 
-# Enable CORS for Next.js frontend
-CORS(app, origins=[
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "https://*.up.railway.app",
-    "https://*.vercel.app",
-    os.getenv("FRONTEND_URL", "")
-], supports_credentials=True)
+# Enable CORS for Next.js frontend - allow all origins for internal API
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Configuration
 API_KEY = os.getenv("SERPER_API_KEY")
