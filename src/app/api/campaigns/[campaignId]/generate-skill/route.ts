@@ -20,6 +20,52 @@ interface VariantPerformance {
   positiveRate: number;
 }
 
+interface SequenceData {
+  step_number: number;
+  variant: string;
+  subject: string | null;
+  body_text: string | null;
+  body_html: string | null;
+  delay_days: number;
+}
+
+// Fetch sequences directly from Smartlead API
+async function fetchSmartleadSequences(
+  apiKey: string,
+  providerCampaignId: string
+): Promise<SequenceData[]> {
+  const baseUrl = "https://server.smartlead.ai/api/v1";
+
+  const seqRes = await fetch(
+    `${baseUrl}/campaigns/${providerCampaignId}/sequences?api_key=${apiKey}`
+  );
+  const seqData = await seqRes.json();
+
+  const sequences: SequenceData[] = [];
+  const steps = Array.isArray(seqData)
+    ? seqData
+    : seqData.email_campaign_sequences || [];
+
+  for (const step of steps) {
+    const stepNumber = step.seq_number || step.sequence_number || 1;
+    const variants = step.sequence_variants || step.seq_variants || [];
+
+    for (const variant of variants) {
+      const variantLabel = variant.variant_label || "A";
+      sequences.push({
+        step_number: stepNumber,
+        variant: variantLabel,
+        subject: variant.subject || step.subject || null,
+        body_text: null,
+        body_html: variant.email_body || step.email_body || null,
+        delay_days: step.seq_delay_details?.delay_in_days || 0,
+      });
+    }
+  }
+
+  return sequences;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ campaignId: string }> }
@@ -28,10 +74,10 @@ export async function GET(
   const supabase = getSupabase();
 
   try {
-    // 1. Fetch campaign details
+    // 1. Fetch campaign details including API key for Smartlead
     const { data: campaign, error: campaignError } = await supabase
       .from("campaigns")
-      .select("id, name, original_name, provider_type, client_id")
+      .select("id, name, original_name, provider_type, provider_campaign_id, client_id, api_key_encrypted")
       .eq("id", campaignId)
       .single();
 
@@ -50,13 +96,32 @@ export async function GET(
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
     }
 
-    // 3. Fetch email sequences
-    const { data: sequences, error: seqError } = await supabase
+    // 3. Fetch email sequences from local DB first
+    let sequences: SequenceData[] = [];
+    const { data: localSequences } = await supabase
       .from("campaign_sequences")
       .select("step_number, variant, subject, body_text, body_html, delay_days")
       .eq("campaign_id", campaignId)
       .order("step_number", { ascending: true })
       .order("variant", { ascending: true });
+
+    if (localSequences && localSequences.length > 0) {
+      sequences = localSequences;
+    } else if (
+      campaign.provider_type === "smartlead" &&
+      campaign.api_key_encrypted &&
+      campaign.provider_campaign_id
+    ) {
+      // Fetch sequences directly from Smartlead API if not synced locally
+      try {
+        sequences = await fetchSmartleadSequences(
+          campaign.api_key_encrypted,
+          campaign.provider_campaign_id
+        );
+      } catch (err) {
+        console.error("[GenerateSkill] Error fetching Smartlead sequences:", err);
+      }
+    }
 
     // 4. Fetch variant performance from leads table
     const { data: leadsWithReplies, error: leadsError } = await supabase
@@ -106,7 +171,7 @@ export async function GET(
     }
 
     // 6. Generate the skill file content
-    const skillContent = generateSkillFile(campaign, client, sequences || [], performanceData, bestPerStep);
+    const skillContent = generateSkillFile(campaign, client, sequences, performanceData, bestPerStep);
 
     // 7. Return as downloadable file
     const filename = `${campaign.name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-ab-optimizer.md`;
@@ -127,7 +192,13 @@ export async function GET(
 }
 
 function generateSkillFile(
-  campaign: { name: string; original_name: string | null; provider_type: string | null },
+  campaign: {
+    name: string;
+    original_name: string | null;
+    provider_type: string | null;
+    provider_campaign_id: string | null;
+    api_key_encrypted: string | null;
+  },
   client: {
     name: string;
     product_service: string | null;
@@ -139,14 +210,7 @@ function generateSkillFile(
     website: string | null;
     notes: string | null;
   },
-  sequences: Array<{
-    step_number: number;
-    variant: string;
-    subject: string | null;
-    body_text: string | null;
-    body_html: string | null;
-    delay_days: number;
-  }>,
+  sequences: SequenceData[],
   performanceData: VariantPerformance[],
   bestPerStep: Map<number, VariantPerformance>
 ): string {
