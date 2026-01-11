@@ -175,14 +175,21 @@ function generateSkillFile(
   };
 
   // Build the prompt file
-  let content = `# Generate 5 New A/B Test Email Variations
+  let content = `# Email A/B Test Copy Generator
 
-## Your Task
-Based on the campaign context, current email copy, and performance data below, generate **5 new email variations** that will likely outperform the current ones. Each variation should test a different hypothesis while maintaining the core message.
+You are a top 1% cold email copywriter. I need you to help me create new email variations for my outreach campaign.
+
+## How This Works
+1. First, review the campaign context and performance data below
+2. Ask me clarifying multiple choice questions (include your recommendations)
+3. I'll answer your questions
+4. Then provide me with 5 final copy variations based on the best performing copy
 
 ---
 
-## Client: ${client.name}
+## Campaign: ${campaign.name}
+
+### Client: ${client.name}
 ${client.website ? `Website: ${client.website}` : ""}
 
 **What they sell:** ${client.product_service || "Not specified"}
@@ -199,7 +206,7 @@ ${client.notes ? `**Notes:** ${client.notes}` : ""}
 
 ---
 
-## What's Working (Performance Data)
+## Performance Data (What's Working)
 `;
 
   // Add performance summary
@@ -238,40 +245,38 @@ ${client.notes ? `**Notes:** ${client.notes}` : ""}
     }
   }
 
-  // Clear instruction to generate variations
+  // Instruction to ask clarifying questions first
   content += `
 ---
 
-## Generate 5 New Variations
-
-Create 5 new email variations for Step 1 (initial outreach). For each variation:
-
-1. **Analyze** what makes the top-performing variant work (tone, structure, hooks, CTA)
-2. **Keep** the personalization variables: {{firstName}}, {{companyName}}, {{1st line}}
-3. **Test different approaches:**
-   - Different subject line angles
-   - Different opening hooks
-   - Different value prop framing
-   - Different CTAs
-4. **Stay concise:** 50-125 words max
-
-### Output Format
-
-For each of the 5 variations, provide:
-
-**VARIATION 1**
-Subject: [subject line]
-
-[email body]
-
-*Testing: [what this variation tests differently]*
+## Available Personalization Variables
+- {{firstName}} - Lead's first name
+- {{lastName}} - Lead's last name
+- {{companyName}} - Lead's company
+- {{1st line}} - Custom personalization/icebreaker
 
 ---
 
-**VARIATION 2**
-...and so on for all 5 variations.
+## Your Instructions
 
-## Go ahead and generate the 5 variations now.
+Now that you've reviewed the campaign context and performance data:
+
+1. **Ask me 3-5 clarifying multiple choice questions** to understand what I want to optimize. For each question, provide options and mark your recommendation. Example questions might cover:
+   - Which email step to focus on (Step 1, Step 2, etc.)
+   - Tone direction (more casual, more professional, more provocative, etc.)
+   - What element to test (subject lines, opening hooks, CTAs, value props)
+   - Length preference (shorter, same, longer)
+   - Any specific angle or pain point to emphasize
+
+2. **Wait for my answers** before generating copy
+
+3. **After I answer**, provide 5 email variations that:
+   - Build on what's working in the top-performing variants
+   - Each tests a different hypothesis
+   - Keep the personalization variables
+   - Stay concise (50-125 words)
+
+**Start by asking your clarifying questions now.**
 `;
 
   return content;
