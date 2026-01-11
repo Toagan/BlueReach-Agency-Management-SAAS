@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Trophy, TrendingUp, Mail, ThumbsUp, RefreshCw } from "lucide-react";
+import { Trophy, TrendingUp, Mail, ThumbsUp, RefreshCw, Clock } from "lucide-react";
 
 interface VariantStats {
   step: number;
@@ -44,11 +44,20 @@ export function VariantAnalytics({ campaignId }: VariantAnalyticsProps) {
   const [data, setData] = useState<VariantAnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        setElapsedTime(0);
+
+        // Start timer
+        timerRef.current = setInterval(() => {
+          setElapsedTime(prev => prev + 1);
+        }, 1000);
+
         const res = await fetch(`/api/campaigns/${campaignId}/variant-analytics`);
         if (!res.ok) {
           throw new Error("Failed to fetch variant analytics");
@@ -59,17 +68,59 @@ export function VariantAnalytics({ campaignId }: VariantAnalyticsProps) {
         setError(err instanceof Error ? err.message : "Failed to load variant analytics");
       } finally {
         setLoading(false);
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
       }
     };
 
     fetchData();
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
   }, [campaignId]);
 
   if (loading) {
+    // Estimate ~15-20 seconds for large campaigns
+    const estimatedTime = 20;
+    const progress = Math.min((elapsedTime / estimatedTime) * 100, 95);
+
     return (
       <Card>
-        <CardContent className="flex items-center justify-center py-8">
-          <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            A/B Test Performance
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="py-8">
+          <div className="flex flex-col items-center gap-4">
+            <RefreshCw className="h-8 w-8 animate-spin text-blue-500" />
+            <div className="text-center">
+              <p className="text-sm font-medium text-foreground">
+                Loading variant statistics...
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 flex items-center justify-center gap-1">
+                <Clock className="h-3 w-3" />
+                {elapsedTime}s elapsed
+                {elapsedTime < estimatedTime && (
+                  <span> (typically ~{estimatedTime}s for large campaigns)</span>
+                )}
+              </p>
+            </div>
+            <div className="w-full max-w-xs">
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-500 transition-all duration-1000 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
     );
