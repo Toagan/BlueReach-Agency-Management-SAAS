@@ -42,6 +42,83 @@ interface VariantAnalyticsResponse {
   };
 }
 
+// Fetch sent counts per variant from Smartlead API
+async function fetchSmartleadSentCounts(
+  apiKey: string,
+  providerCampaignId: string
+): Promise<Map<string, { step: number; variant: string; variantId: number; sent: number }>> {
+  const baseUrl = "https://server.smartlead.ai/api/v1";
+
+  // First get variant mapping (variant ID -> label)
+  const seqRes = await fetch(`${baseUrl}/campaigns/${providerCampaignId}/sequences?api_key=${apiKey}`);
+  const seqData = await seqRes.json();
+
+  const variantMap = new Map<number, { label: string; stepNumber: number }>();
+  const sequences = Array.isArray(seqData) ? seqData : seqData.email_campaign_sequences || [];
+
+  for (const step of sequences) {
+    const variants = step.sequence_variants || step.seq_variants || [];
+    for (const variant of variants) {
+      const variantId = variant.id || variant.variant_id;
+      if (variantId && variant.variant_label) {
+        variantMap.set(variantId, {
+          label: variant.variant_label,
+          stepNumber: step.seq_number || step.sequence_number || 1,
+        });
+      }
+    }
+  }
+
+  // Fetch all statistics with pagination
+  const allStats: Array<{ sequence_number: number; seq_variant_id: number }> = [];
+  let offset = 0;
+  const limit = 100;
+  let hasMore = true;
+
+  while (hasMore) {
+    const statsRes = await fetch(
+      `${baseUrl}/campaigns/${providerCampaignId}/statistics?api_key=${apiKey}&limit=${limit}&offset=${offset}`
+    );
+    const statsData = await statsRes.json();
+
+    if (!statsData.data || statsData.data.length === 0) {
+      hasMore = false;
+    } else {
+      allStats.push(...statsData.data);
+      offset += limit;
+      hasMore = statsData.data.length === limit;
+    }
+  }
+
+  // Count sent emails per step/variant
+  const sentCounts = new Map<string, { step: number; variant: string; variantId: number; sent: number }>();
+
+  for (const stat of allStats) {
+    const stepNumber = stat.sequence_number;
+    const variantId = stat.seq_variant_id;
+
+    if (!stepNumber || !variantId) continue;
+
+    const variantInfo = variantMap.get(variantId);
+    const variantLabel = variantInfo?.label || `Unknown`;
+
+    const key = `${stepNumber}-${variantLabel}`;
+
+    if (!sentCounts.has(key)) {
+      sentCounts.set(key, {
+        step: stepNumber,
+        variant: variantLabel,
+        variantId: variantId,
+        sent: 0,
+      });
+    }
+
+    sentCounts.get(key)!.sent++;
+  }
+
+  return sentCounts;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ campaignId: string }> }
@@ -50,10 +127,10 @@ export async function GET(
   const supabase = getSupabase();
 
   try {
-    // Get campaign info
+    // Get campaign info including API key for Smartlead
     const { data: campaign, error: campaignError } = await supabase
       .from("campaigns")
-      .select("id, name, provider_type")
+      .select("id, name, provider_type, provider_campaign_id, api_key_encrypted")
       .eq("id", campaignId)
       .single();
 
@@ -64,30 +141,7 @@ export async function GET(
       );
     }
 
-    // Query 1: Get emails sent by step/variant from lead_emails
-    const { data: emailStats, error: emailError } = await supabase
-      .from("lead_emails")
-      .select("sequence_step, sequence_variant, sequence_variant_label")
-      .eq("campaign_id", campaignId)
-      .eq("direction", "outbound")
-      .not("sequence_step", "is", null);
-
-    if (emailError) {
-      console.error("[VariantAnalytics] Error fetching email stats:", emailError);
-    }
-
-    // Query 2: Get reply tracking from leads table
-    const { data: leadStats, error: leadError } = await supabase
-      .from("leads")
-      .select("reply_from_step, reply_from_variant, reply_from_variant_label, is_positive_reply, has_replied")
-      .eq("campaign_id", campaignId)
-      .eq("has_replied", true);
-
-    if (leadError) {
-      console.error("[VariantAnalytics] Error fetching lead stats:", leadError);
-    }
-
-    // Aggregate stats by step + variant
+    // Initialize variant map
     const variantMap = new Map<string, {
       step: number;
       variant: string;
@@ -97,29 +151,76 @@ export async function GET(
       positiveReplies: number;
     }>();
 
-    // Count emails sent per step/variant
-    (emailStats || []).forEach((email) => {
-      if (email.sequence_step === null) return;
+    // For Smartlead campaigns, fetch sent counts from API
+    if (campaign.provider_type === "smartlead" && campaign.api_key_encrypted && campaign.provider_campaign_id) {
+      try {
+        const smartleadSentCounts = await fetchSmartleadSentCounts(
+          campaign.api_key_encrypted,
+          campaign.provider_campaign_id
+        );
 
-      const step = email.sequence_step;
-      const variant = email.sequence_variant_label || "Unknown";
-      const variantId = email.sequence_variant;
-      const key = `${step}-${variant}`;
-
-      const existing = variantMap.get(key);
-      if (existing) {
-        existing.sent++;
-      } else {
-        variantMap.set(key, {
-          step,
-          variant,
-          variantId,
-          sent: 1,
-          replies: 0,
-          positiveReplies: 0,
-        });
+        // Add sent counts to variant map
+        for (const [key, data] of smartleadSentCounts) {
+          variantMap.set(key, {
+            step: data.step,
+            variant: data.variant,
+            variantId: data.variantId,
+            sent: data.sent,
+            replies: 0,
+            positiveReplies: 0,
+          });
+        }
+      } catch (err) {
+        console.error("[VariantAnalytics] Error fetching Smartlead sent counts:", err);
       }
-    });
+    } else {
+      // For Instantly or when Smartlead API not available, use lead_emails table
+      const { data: emailStats, error: emailError } = await supabase
+        .from("lead_emails")
+        .select("sequence_step, sequence_variant, sequence_variant_label")
+        .eq("campaign_id", campaignId)
+        .eq("direction", "outbound")
+        .not("sequence_step", "is", null);
+
+      if (emailError) {
+        console.error("[VariantAnalytics] Error fetching email stats:", emailError);
+      }
+
+      // Count emails sent per step/variant
+      (emailStats || []).forEach((email) => {
+        if (email.sequence_step === null) return;
+
+        const step = email.sequence_step;
+        const variant = email.sequence_variant_label || "Unknown";
+        const variantId = email.sequence_variant;
+        const key = `${step}-${variant}`;
+
+        const existing = variantMap.get(key);
+        if (existing) {
+          existing.sent++;
+        } else {
+          variantMap.set(key, {
+            step,
+            variant,
+            variantId,
+            sent: 1,
+            replies: 0,
+            positiveReplies: 0,
+          });
+        }
+      });
+    }
+
+    // Query reply tracking from leads table (works for both providers)
+    const { data: leadStats, error: leadError } = await supabase
+      .from("leads")
+      .select("reply_from_step, reply_from_variant, reply_from_variant_label, is_positive_reply, has_replied")
+      .eq("campaign_id", campaignId)
+      .eq("has_replied", true);
+
+    if (leadError) {
+      console.error("[VariantAnalytics] Error fetching lead stats:", leadError);
+    }
 
     // Count replies and positive replies per step/variant
     (leadStats || []).forEach((lead) => {
@@ -163,9 +264,9 @@ export async function GET(
         positiveReplyRate: stats.sent > 0 ? Number(((stats.positiveReplies / stats.sent) * 100).toFixed(2)) : 0,
       }))
       .sort((a, b) => {
-        // Sort by step, then by variant
+        // Sort by step, then by positive replies (descending)
         if (a.step !== b.step) return a.step - b.step;
-        return a.variant.localeCompare(b.variant);
+        return b.positiveReplies - a.positiveReplies;
       });
 
     // Calculate totals
@@ -182,9 +283,9 @@ export async function GET(
       totals.overallPositiveRate = Number(((totals.totalPositiveReplies / totals.totalEmailsSent) * 100).toFixed(2));
     }
 
-    // Find winner (highest positive reply rate with minimum 10 emails sent)
+    // Find winner (highest positive reply rate with minimum 100 emails sent)
     let winner: VariantAnalyticsResponse["winner"] = null;
-    const eligibleVariants = variants.filter((v) => v.emailsSent >= 10);
+    const eligibleVariants = variants.filter((v) => v.emailsSent >= 100);
 
     if (eligibleVariants.length > 0) {
       const bestVariant = eligibleVariants.reduce((best, current) => {
