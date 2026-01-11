@@ -42,7 +42,7 @@ export async function GET(
     // 2. Fetch client details
     const { data: client, error: clientError } = await supabase
       .from("clients")
-      .select("name, product_service, verticals, offer, icp, acv, tcv, tam, website, notes")
+      .select("name, product_service, verticals, icp, acv, tcv, tam, website, notes")
       .eq("id", campaign.client_id)
       .single();
 
@@ -132,7 +132,6 @@ function generateSkillFile(
     name: string;
     product_service: string | null;
     verticals: string[] | null;
-    offer: string | null;
     icp: string | null;
     acv: number | null;
     tcv: number | null;
@@ -197,8 +196,6 @@ ${client.website ? `Website: ${client.website}` : ""}
 **Target audience:** ${client.icp || "Not specified"}
 
 **Industries:** ${client.verticals && client.verticals.length > 0 ? client.verticals.join(", ") : "Not specified"}
-
-**Value proposition:** ${client.offer || "Not specified"}
 
 ${client.acv ? `**Deal size:** $${client.acv.toLocaleString()} ACV` : ""}
 
