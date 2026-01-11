@@ -612,28 +612,35 @@ export default function ScrapingPage() {
                   {/* Germany-specific: Bundesland Filter */}
                   {selectedCountry === "de" && (
                     <div className="space-y-2">
-                      <Label>Filter by States (optional)</Label>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm">Filter by States</Label>
+                        {selectedBundeslaender.length > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-xs text-muted-foreground hover:text-foreground"
+                            onClick={() => setSelectedBundeslaender([])}
+                          >
+                            Clear ({selectedBundeslaender.length})
+                          </Button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
                         {bundeslaender.map(bl => (
                           <Badge
                             key={bl.code}
                             variant={selectedBundeslaender.includes(bl.code) ? "default" : "outline"}
-                            className="cursor-pointer"
+                            className={`cursor-pointer text-xs py-0.5 px-2 ${
+                              selectedBundeslaender.includes(bl.code)
+                                ? ""
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
                             onClick={() => toggleBundesland(bl.code)}
                           >
-                            {bl.name}
+                            {bl.name.length > 15 ? bl.code : bl.name}
                           </Badge>
                         ))}
                       </div>
-                      {selectedBundeslaender.length > 0 && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSelectedBundeslaender([])}
-                        >
-                          Clear selection
-                        </Button>
-                      )}
                     </div>
                   )}
 
@@ -958,120 +965,107 @@ export default function ScrapingPage() {
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Database Stats */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Database className="h-5 w-5" />
-                Database Stats
-              </CardTitle>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Database className="h-4 w-4" />
+                  Database
+                </CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={fetchDbStats}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3">
               {dbStats ? (
                 <>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold">
-                      {dbStats.total_leads.toLocaleString()}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-muted/50 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold">{dbStats.total_leads.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">Total Leads</div>
                     </div>
-                    <div className="text-sm text-muted-foreground">Total Leads</div>
+                    <div className="bg-muted/50 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-green-500">+{dbStats.last_24h.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">Last 24h</div>
+                    </div>
                   </div>
 
-                  <div className="text-sm">
-                    <div className="flex justify-between py-1">
-                      <span className="text-muted-foreground">Last 24h</span>
-                      <span className="font-medium">+{dbStats.last_24h.toLocaleString()}</span>
+                  {Object.entries(dbStats.by_country).length > 0 && (
+                    <div className="text-xs space-y-1">
+                      {Object.entries(dbStats.by_country).slice(0, 3).map(([code, count]) => (
+                        <div key={code} className="flex justify-between text-muted-foreground">
+                          <span className="uppercase">{code}</span>
+                          <span>{count.toLocaleString()}</span>
+                        </div>
+                      ))}
                     </div>
-                    {Object.entries(dbStats.by_country).slice(0, 5).map(([code, count]) => (
-                      <div key={code} className="flex justify-between py-1">
-                        <span className="text-muted-foreground uppercase">{code}</span>
-                        <span>{count.toLocaleString()}</span>
-                      </div>
-                    ))}
-                  </div>
+                  )}
 
-                  <div className="flex flex-col gap-2">
-                    <Button variant="outline" size="sm" onClick={() => handleExportDb()}>
-                      <Download className="h-4 w-4 mr-2" />
-                      Export All
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => handleExportDb()}>
+                      <Download className="h-3 w-3 mr-1" />
+                      All
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleExportDb({ hasWebsite: true })}>
-                      <Download className="h-4 w-4 mr-2" />
-                      With Website
+                    <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => handleExportDb({ hasWebsite: true })}>
+                      <Globe className="h-3 w-3 mr-1" />
+                      Web
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleExportDb({ hasPhone: true })}>
-                      <Download className="h-4 w-4 mr-2" />
-                      With Phone
+                    <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => handleExportDb({ hasPhone: true })}>
+                      <Download className="h-3 w-3 mr-1" />
+                      Phone
                     </Button>
                   </div>
                 </>
               ) : (
-                <div className="text-center text-muted-foreground py-4">
+                <div className="text-center text-muted-foreground py-3 text-sm">
                   {isConnected === false ? "Scraper offline" : "Loading..."}
                 </div>
               )}
-
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full"
-                onClick={fetchDbStats}
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh Stats
-              </Button>
             </CardContent>
           </Card>
 
           {/* Recent History */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Clock className="h-5 w-5" />
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-4 w-4" />
                 Recent Scrapes
               </CardTitle>
             </CardHeader>
             <CardContent>
               {history.length === 0 ? (
-                <div className="text-center text-muted-foreground py-4">
+                <div className="text-center text-muted-foreground py-3 text-sm">
                   No scraping history yet
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {history.slice(0, 10).map((entry, i) => (
-                    <div key={i} className="text-sm border-b last:border-0 pb-2">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="font-medium truncate max-w-[180px]" title={entry.term}>
-                            {entry.term}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {entry.region.toUpperCase()} • {entry.leads_requested} leads
-                          </div>
+                <div className="space-y-2">
+                  {history.slice(0, 5).map((entry, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm py-1.5 border-b last:border-0">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium truncate" title={entry.term}>
+                          {entry.term.replace(/"/g, '')}
                         </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <div className="text-xs text-muted-foreground">{entry.date}</div>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2"
-                              onClick={() => handleDownload(entry.filename)}
-                            >
-                              <Download className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2"
-                              onClick={() => handleDownload(entry.filename, "website")}
-                              title="Download with website only"
-                            >
-                              <Globe className="h-3 w-3" />
-                            </Button>
-                          </div>
+                        <div className="text-xs text-muted-foreground">
+                          {entry.region.toUpperCase()} • {entry.leads_requested} leads
                         </div>
                       </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 ml-2"
+                        onClick={() => handleDownload(entry.filename)}
+                        title="Download CSV"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   ))}
                 </div>
