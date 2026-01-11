@@ -318,24 +318,73 @@ ${client.notes ? `**Notes:** ${client.notes}` : ""}
 
 ---
 
+## A/B Testing Best Practices (From Industry Experts)
+
+The following frameworks come from Eric Nowoslawski (Growth Engine X, 1.5M+ emails/month) and Nick Abraham (10M+ cold emails):
+
+### Email Structure Options
+- **Trigger → Problem → Proof → Soft CTA** (Eric's framework): Open with observable trigger (hiring, funding, traffic), connect to business problem, share specific proof point with metrics, soft ask
+- **Problem → Value → Social Proof → CTA** (Classic): Lead with pain point, present solution value, back with proof, call to action
+- **Personalized Observation → Insight → Offer** (Nick's approach): Hyper-personalized opener, unique insight they haven't heard, specific offer
+
+### Length Guidelines
+- **Ultra-short (<75 words)** - Nick Abraham's recommendation for maximum conversions
+- **Short (<100 words)** - Eric Nowoslawski's standard, "write like a human"
+- **Medium (100-125 words)** - When more context/proof is needed
+
+### CTA Philosophy
+- **Never ask for a call** (Nick): "We're simply asking to show them how we did something they should care about"
+- **Micro-CTA** (Eric): "Want the video?" / "Should I send the teardown?" / "If I map this for two reps first, want it?"
+- **Value-first offer**: Offer audit, video breakdown, ROI model, or playbook before asking for time
+
+### What to Test (One Element Per Variant)
+- **Subject lines**: Curiosity vs clarity, question vs statement, personalized vs generic
+- **Opening hook**: Trigger-based vs problem-based vs compliment-based
+- **Proof format**: Specific metrics vs client names vs industry results
+- **CTA style**: Question vs statement, specific vs open-ended
+- **Tone**: Casual/conversational vs professional vs provocative
+- **Length**: Test shorter vs current length
+
+### Copy Refresh Strategy (After 1 Month)
+When copy fatigues, keep the core offer but completely change structure and format. Each refresh should "read totally differently but not compromise the original offer."
+
+---
+
 ## Your Instructions
 
-Now that you've reviewed the campaign context and performance data:
+Now that you've reviewed the campaign context, performance data, and best practices:
 
-1. **Ask me 3-5 clarifying multiple choice questions** to understand what I want to optimize. For each question, provide options and mark your recommendation. Example questions might cover:
-   - Which email step to focus on (Step 1, Step 2, etc.)
-   - Tone direction (more casual, more professional, more provocative, etc.)
-   - What element to test (subject lines, opening hooks, CTAs, value props)
-   - Length preference (shorter, same, longer)
-   - Any specific angle or pain point to emphasize
+1. **Ask me 5-7 clarifying multiple choice questions** to understand what I want to optimize. Include your recommendation for each. Questions should cover:
+
+   **Required questions:**
+   - Which email step to focus on
+   - Which structure framework to follow (Trigger→Problem→Proof→CTA, Problem→Value→Proof→CTA, or Personalized Observation→Insight→Offer)
+   - Target length (<75 words, <100 words, or 100-125 words)
+   - CTA style (never ask for call + offer value, micro-CTA question, or direct meeting ask)
+
+   **Optional questions based on context:**
+   - What single element to A/B test across variants
+   - Tone direction
+   - Whether this is a refresh of existing copy or new angles
+   - Specific pain point or trigger to emphasize
 
 2. **Wait for my answers** before generating copy
 
 3. **After I answer**, provide 5 email variations that:
+   - Follow the chosen framework structure
+   - Respect the length limit chosen
+   - Use the CTA style selected
+   - Each variant tests ONE different element (document what each tests)
    - Build on what's working in the top-performing variants
-   - Each tests a different hypothesis
    - Keep the personalization variables
-   - Stay concise (50-125 words)
+
+4. **Label each variant** with what it's testing:
+   \`\`\`
+   Variant A: Control (based on top performer)
+   Variant B: Testing [specific element]
+   Variant C: Testing [specific element]
+   etc.
+   \`\`\`
 
 **Start by asking your clarifying questions now.**
 `;
