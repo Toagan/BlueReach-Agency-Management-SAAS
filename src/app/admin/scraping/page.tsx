@@ -88,8 +88,8 @@ interface DbStats {
 }
 
 // Scraper API base URL - configurable via environment
-const SCRAPER_API_URL = process.env.NEXT_PUBLIC_SCRAPER_API_URL || "http://localhost:5000";
-console.log("[Scraping] Using scraper API URL:", SCRAPER_API_URL);
+// Fallback to Railway scraper URL if env var not set at build time
+const SCRAPER_API_URL = process.env.NEXT_PUBLIC_SCRAPER_API_URL || "https://enchanting-patience-production-6a3e.up.railway.app";
 
 export default function ScrapingPage() {
   // State
