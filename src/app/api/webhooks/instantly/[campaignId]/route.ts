@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
 import { sendPositiveReplyNotification } from "@/lib/email";
 import { fetchEmailsForLead } from "@/lib/instantly/emails";
+import { syncLeadToHubSpot, getEmailThreadForLead } from "@/lib/hubspot";
 
 function getSupabase() {
   return createClient(
@@ -408,7 +409,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         // Get lead details for the notification
         const { data: leadDetails } = await supabase
           .from("leads")
-          .select("first_name, last_name, company_name")
+          .select("first_name, last_name, company_name, phone")
           .eq("campaign_id", campaignId)
           .eq("email", leadEmail)
           .maybeSingle();
@@ -441,6 +442,48 @@ export async function POST(request: Request, { params }: RouteParams) {
       } catch (notifyError) {
         // Don't fail the webhook if notification fails
         console.error("[Webhook] Error sending notification:", notifyError);
+      }
+
+      // Sync positive reply to HubSpot CRM
+      if (leadDbId) {
+        try {
+          // Get email thread for the lead
+          const emailThread = await getEmailThreadForLead(leadDbId);
+
+          // Get lead details for HubSpot
+          const { data: leadDetails } = await supabase
+            .from("leads")
+            .select("first_name, last_name, company_name, phone")
+            .eq("id", leadDbId)
+            .single();
+
+          console.log(`[Webhook] Syncing positive reply to HubSpot for ${leadEmail}`);
+
+          const hubspotResult = await syncLeadToHubSpot({
+            leadEmail,
+            leadFirstName: leadDetails?.first_name || undefined,
+            leadLastName: leadDetails?.last_name || undefined,
+            leadPhone: leadDetails?.phone || undefined,
+            companyName: leadDetails?.company_name || undefined,
+            campaignName: campaign.name,
+            clientId,
+            clientName,
+            emailThread,
+          });
+
+          if (hubspotResult.success) {
+            if (hubspotResult.skipped) {
+              console.log(`[Webhook] HubSpot sync skipped (not enabled for client)`);
+            } else {
+              console.log(`[Webhook] HubSpot sync complete - Contact: ${hubspotResult.contactId}, Note: ${hubspotResult.noteId}`);
+            }
+          } else {
+            console.error(`[Webhook] HubSpot sync failed: ${hubspotResult.error}`);
+          }
+        } catch (hubspotError) {
+          // Don't fail the webhook if HubSpot sync fails
+          console.error("[Webhook] Error syncing to HubSpot:", hubspotError);
+        }
       }
     }
 

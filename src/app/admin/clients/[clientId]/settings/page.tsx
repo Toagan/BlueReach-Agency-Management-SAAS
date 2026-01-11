@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users, Bell, BarChart3, Send, Zap } from "lucide-react";
+import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users, Bell, BarChart3, Send, Zap, Link2, Unlink } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -109,6 +109,16 @@ export default function ClientSettingsPage() {
   const [savingStatsSettings, setSavingStatsSettings] = useState(false);
   const [sendingTestReport, setSendingTestReport] = useState(false);
 
+  // HubSpot settings
+  const [hubspotEnabled, setHubspotEnabled] = useState(false);
+  const [hubspotHasToken, setHubspotHasToken] = useState(false);
+  const [hubspotAccessToken, setHubspotAccessToken] = useState("");
+  const [hubspotLastSync, setHubspotLastSync] = useState<string | null>(null);
+  const [hubspotSyncCount, setHubspotSyncCount] = useState(0);
+  const [loadingHubspot, setLoadingHubspot] = useState(true);
+  const [savingHubspot, setSavingHubspot] = useState(false);
+  const [disconnectingHubspot, setDisconnectingHubspot] = useState(false);
+
   const fetchNotificationPreferences = async () => {
     setLoadingNotifications(true);
     try {
@@ -209,11 +219,91 @@ export default function ClientSettingsPage() {
     }
   };
 
+  const fetchHubspotSettings = async () => {
+    setLoadingHubspot(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/hubspot-settings`);
+      if (res.ok) {
+        const data = await res.json();
+        setHubspotEnabled(data.enabled || false);
+        setHubspotHasToken(data.hasAccessToken || false);
+        setHubspotLastSync(data.lastSync || null);
+        setHubspotSyncCount(data.syncCount || 0);
+      }
+    } catch (error) {
+      console.error("Error fetching HubSpot settings:", error);
+    } finally {
+      setLoadingHubspot(false);
+    }
+  };
+
+  const saveHubspotSettings = async () => {
+    setSavingHubspot(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/hubspot-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabled: hubspotEnabled,
+          accessToken: hubspotAccessToken || undefined,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setSuccess(data.message || "HubSpot settings saved");
+        setHubspotAccessToken(""); // Clear the input after saving
+        fetchHubspotSettings(); // Refresh settings
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        setError(data.error || "Failed to save HubSpot settings");
+      }
+    } catch (error) {
+      console.error("Error saving HubSpot settings:", error);
+      setError("Failed to save HubSpot settings");
+    } finally {
+      setSavingHubspot(false);
+    }
+  };
+
+  const disconnectHubspot = async () => {
+    if (!confirm("Are you sure you want to disconnect HubSpot? This will stop syncing positive replies.")) {
+      return;
+    }
+
+    setDisconnectingHubspot(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/hubspot-settings`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setHubspotEnabled(false);
+        setHubspotHasToken(false);
+        setHubspotLastSync(null);
+        setHubspotSyncCount(0);
+        setSuccess("HubSpot disconnected");
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        const data = await res.json();
+        setError(data.error || "Failed to disconnect HubSpot");
+      }
+    } catch (error) {
+      console.error("Error disconnecting HubSpot:", error);
+      setError("Failed to disconnect HubSpot");
+    } finally {
+      setDisconnectingHubspot(false);
+    }
+  };
+
   useEffect(() => {
     fetchClient();
     fetchTeamMembers();
     fetchNotificationPreferences();
     fetchStatsSettings();
+    fetchHubspotSettings();
   }, [clientId]);
 
   const fetchTeamMembers = async () => {
@@ -1036,32 +1126,139 @@ export default function ClientSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Automation */}
+      {/* HubSpot CRM Sync */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Zap className="h-5 w-5" />
-            Automation
+            CRM Integration
           </CardTitle>
           <CardDescription>
-            Automated workflows and integrations for this client
+            Automatically sync positive replies to your CRM
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 border border-dashed">
-            <div className="p-2 rounded-md bg-amber-100 dark:bg-amber-900/30">
-              <Zap className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+        <CardContent className="space-y-4">
+          {loadingHubspot ? (
+            <div className="flex items-center justify-center py-4">
+              <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
-            <div>
-              <p className="font-medium text-sm">Automatic Reply Automations</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                We will push automatic reply automations via n8n soon. This will enable automated responses to incoming leads based on customizable workflows and triggers.
-              </p>
-              <p className="text-xs text-muted-foreground/70 mt-2">
-                Coming soon
-              </p>
-            </div>
-          </div>
+          ) : (
+            <>
+              {/* HubSpot Connection Status */}
+              <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-md ${hubspotHasToken ? "bg-green-100 dark:bg-green-900/30" : "bg-gray-100 dark:bg-gray-800"}`}>
+                    <svg className={`h-5 w-5 ${hubspotHasToken ? "text-green-600" : "text-gray-500"}`} viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M18.164 7.93V5.084a2.198 2.198 0 001.267-1.984 2.21 2.21 0 00-4.42 0c0 .873.514 1.626 1.254 1.984v2.846c-.87.162-1.64.549-2.255 1.114l-7.12-5.548a2.206 2.206 0 00-4.678 1.004 2.2 2.2 0 001.947 2.185v5.63A2.2 2.2 0 002.212 14.5a2.21 2.21 0 004.42 0c0-.685-.321-1.3-.82-1.699v-5.63a2.19 2.19 0 00.82-3.099l7.12 5.548a3.631 3.631 0 00-.487 1.816 3.65 3.65 0 003.645 3.646 3.65 3.65 0 003.645-3.646 3.646 3.646 0 00-2.39-3.436z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">HubSpot CRM</p>
+                    <p className="text-xs text-muted-foreground">
+                      {hubspotHasToken ? (
+                        hubspotEnabled ? (
+                          <span className="text-green-600">Connected and syncing</span>
+                        ) : (
+                          <span className="text-amber-600">Connected but disabled</span>
+                        )
+                      ) : (
+                        "Not connected"
+                      )}
+                    </p>
+                  </div>
+                </div>
+                {hubspotHasToken && (
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={hubspotEnabled}
+                      onCheckedChange={async (checked) => {
+                        setHubspotEnabled(checked);
+                        // Auto-save when toggling
+                        setSavingHubspot(true);
+                        try {
+                          const res = await fetch(`/api/clients/${clientId}/hubspot-settings`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ enabled: checked }),
+                          });
+                          if (res.ok) {
+                            setSuccess(checked ? "HubSpot sync enabled" : "HubSpot sync disabled");
+                            setTimeout(() => setSuccess(null), 3000);
+                          }
+                        } catch (e) {
+                          console.error(e);
+                        } finally {
+                          setSavingHubspot(false);
+                        }
+                      }}
+                      disabled={savingHubspot}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={disconnectHubspot}
+                      disabled={disconnectingHubspot}
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                    >
+                      {disconnectingHubspot ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Unlink className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Connection Form or Stats */}
+              {hubspotHasToken ? (
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Contacts synced:</span>
+                    <span className="font-medium text-foreground">{hubspotSyncCount}</span>
+                  </div>
+                  {hubspotLastSync && (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Last sync:</span>
+                      <span className="font-medium text-foreground">
+                        {new Date(hubspotLastSync).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground pt-2">
+                    Positive replies are automatically synced to HubSpot as contacts with the email thread attached as a note.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="hubspotToken">HubSpot Private App Token</Label>
+                    <Input
+                      id="hubspotToken"
+                      type="password"
+                      value={hubspotAccessToken}
+                      onChange={(e) => setHubspotAccessToken(e.target.value)}
+                      placeholder="pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Create a Private App in HubSpot with scopes: <code className="bg-muted px-1 rounded">crm.objects.contacts.read</code>, <code className="bg-muted px-1 rounded">crm.objects.contacts.write</code>, <code className="bg-muted px-1 rounded">crm.objects.notes.write</code>
+                    </p>
+                  </div>
+                  <Button
+                    onClick={saveHubspotSettings}
+                    disabled={savingHubspot || !hubspotAccessToken}
+                  >
+                    {savingHubspot ? (
+                      <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Link2 className="h-4 w-4 mr-2" />
+                    )}
+                    Connect HubSpot
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 
