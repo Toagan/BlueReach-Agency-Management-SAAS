@@ -307,8 +307,19 @@ export async function GET(
     }
 
     // Count replies and positive replies per step/variant
+    // Also track untracked replies (those without reply_from_step)
+    let untrackedReplies = 0;
+    let untrackedPositiveReplies = 0;
+
     (leadStats || []).forEach((lead) => {
-      if (lead.reply_from_step === null) return;
+      if (lead.reply_from_step === null) {
+        // Track replies that couldn't be attributed to a specific variant
+        untrackedReplies++;
+        if (lead.is_positive_reply) {
+          untrackedPositiveReplies++;
+        }
+        return;
+      }
 
       const step = lead.reply_from_step;
       const variant = lead.reply_from_variant_label || "Unknown";
@@ -353,11 +364,20 @@ export async function GET(
         return b.positiveReplies - a.positiveReplies;
       });
 
-    // Calculate totals
+    // Calculate totals (tracked variants only)
+    const trackedReplies = variants.reduce((sum, v) => sum + v.replies, 0);
+    const trackedPositiveReplies = variants.reduce((sum, v) => sum + v.positiveReplies, 0);
+
     const totals = {
       totalEmailsSent: variants.reduce((sum, v) => sum + v.emailsSent, 0),
-      totalReplies: variants.reduce((sum, v) => sum + v.replies, 0),
-      totalPositiveReplies: variants.reduce((sum, v) => sum + v.positiveReplies, 0),
+      totalReplies: trackedReplies,
+      totalPositiveReplies: trackedPositiveReplies,
+      // Include untracked counts so UI can show the full picture
+      untrackedReplies,
+      untrackedPositiveReplies,
+      // Grand totals including untracked
+      allReplies: trackedReplies + untrackedReplies,
+      allPositiveReplies: trackedPositiveReplies + untrackedPositiveReplies,
       overallReplyRate: 0,
       overallPositiveRate: 0,
     };

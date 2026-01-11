@@ -416,10 +416,11 @@ export async function POST(
             let needsIdBackfill = false;
 
             // Step 1: Try matching by provider lead ID
+            let existingReplyFromStep: number | null = null;
             if (providerLeadId) {
               const { data: idMatch, error: idMatchError } = await supabase
                 .from("leads")
-                .select("id, instantly_lead_id")
+                .select("id, instantly_lead_id, reply_from_step")
                 .eq("campaign_id", campaignId)
                 .eq("instantly_lead_id", providerLeadId)
                 .maybeSingle();
@@ -428,6 +429,7 @@ export async function POST(
                 console.warn(`[SyncLeads] Error matching by ID for ${emailLower}:`, idMatchError);
               } else if (idMatch) {
                 matchedLeadId = idMatch.id;
+                existingReplyFromStep = idMatch.reply_from_step;
               }
             }
 
@@ -435,7 +437,7 @@ export async function POST(
             if (!matchedLeadId) {
               const { data: emailMatch, error: emailMatchError } = await supabase
                 .from("leads")
-                .select("id, instantly_lead_id")
+                .select("id, instantly_lead_id, reply_from_step")
                 .eq("campaign_id", campaignId)
                 .ilike("email", emailLower)
                 .maybeSingle();
@@ -444,6 +446,7 @@ export async function POST(
                 console.warn(`[SyncLeads] Error matching by email for ${emailLower}:`, emailMatchError);
               } else if (emailMatch) {
                 matchedLeadId = emailMatch.id;
+                existingReplyFromStep = emailMatch.reply_from_step;
                 // Check if we need to backfill the ID
                 if (providerLeadId && !emailMatch.instantly_lead_id) {
                   needsIdBackfill = true;
@@ -465,6 +468,31 @@ export async function POST(
                 updatePayload.provider_lead_id = providerLeadId;
                 positiveLeadsBackfilled++;
                 console.log(`[SyncLeads] Backfilling instantly_lead_id for positive lead ${emailLower}`);
+              }
+
+              // Variant tracking: If reply_from_step is not set, try to infer from lead_emails
+              // Look up the most recent outbound email sent to this lead to determine which variant they replied to
+              if (existingReplyFromStep === null) {
+                const { data: lastOutboundEmail } = await supabase
+                  .from("lead_emails")
+                  .select("sequence_step, sequence_variant, sequence_variant_label")
+                  .eq("lead_id", matchedLeadId)
+                  .eq("direction", "outbound")
+                  .not("sequence_step", "is", null)
+                  .order("sent_at", { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+
+                if (lastOutboundEmail && lastOutboundEmail.sequence_step !== null) {
+                  updatePayload.reply_from_step = lastOutboundEmail.sequence_step;
+                  if (lastOutboundEmail.sequence_variant !== null) {
+                    updatePayload.reply_from_variant = lastOutboundEmail.sequence_variant;
+                  }
+                  if (lastOutboundEmail.sequence_variant_label) {
+                    updatePayload.reply_from_variant_label = lastOutboundEmail.sequence_variant_label;
+                  }
+                  console.log(`[SyncLeads] Inferred variant for ${emailLower}: step=${lastOutboundEmail.sequence_step}, variant=${lastOutboundEmail.sequence_variant_label || 'Unknown'}`);
+                }
               }
 
               const { error: updateError } = await supabase

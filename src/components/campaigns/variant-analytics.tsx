@@ -31,6 +31,10 @@ interface VariantAnalyticsData {
     totalEmailsSent: number;
     totalReplies: number;
     totalPositiveReplies: number;
+    untrackedReplies?: number;
+    untrackedPositiveReplies?: number;
+    allReplies?: number;
+    allPositiveReplies?: number;
     overallReplyRate: number;
     overallPositiveRate: number;
   };
@@ -284,6 +288,20 @@ export function VariantAnalytics({ campaignId }: VariantAnalyticsProps) {
             <p className="text-xs text-muted-foreground">Reply Rate</p>
           </div>
         </div>
+
+        {/* Untracked Replies Notice */}
+        {(data.totals.untrackedReplies || 0) > 0 && (
+          <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 flex items-start gap-2">
+            <span className="text-amber-500">*</span>
+            <span>
+              {data.totals.untrackedReplies} additional repl{data.totals.untrackedReplies === 1 ? "y" : "ies"}
+              {(data.totals.untrackedPositiveReplies || 0) > 0 && (
+                <> ({data.totals.untrackedPositiveReplies} positive)</>
+              )}
+              {" "}not tracked to a specific variant. Re-sync the campaign to attribute them if possible.
+            </span>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
