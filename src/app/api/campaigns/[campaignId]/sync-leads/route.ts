@@ -471,29 +471,16 @@ export async function POST(
                 console.log(`[SyncLeads] Backfilling instantly_lead_id for positive lead ${emailLower}`);
               }
 
-              // Variant tracking: If reply_from_step is not set, try to infer from lead_emails
-              // Look up the most recent outbound email sent to this lead to determine which variant they replied to
+              // Variant tracking: If reply_from_step is not set, default to step 1
+              // For Instantly, the API doesn't provide which step/variant the reply came from
+              // We can only reliably track this via webhooks. For sync-based positive leads,
+              // default to step 1 since most campaigns are single-step and it ensures
+              // positive replies are at least counted in the variant analytics.
               if (existingReplyFromStep === null) {
-                const { data: lastOutboundEmail } = await supabase
-                  .from("lead_emails")
-                  .select("sequence_step, sequence_variant, sequence_variant_label")
-                  .eq("lead_id", matchedLeadId)
-                  .eq("direction", "outbound")
-                  .not("sequence_step", "is", null)
-                  .order("sent_at", { ascending: false })
-                  .limit(1)
-                  .maybeSingle();
-
-                if (lastOutboundEmail && lastOutboundEmail.sequence_step !== null) {
-                  updatePayload.reply_from_step = lastOutboundEmail.sequence_step;
-                  if (lastOutboundEmail.sequence_variant !== null) {
-                    updatePayload.reply_from_variant = lastOutboundEmail.sequence_variant;
-                  }
-                  if (lastOutboundEmail.sequence_variant_label) {
-                    updatePayload.reply_from_variant_label = lastOutboundEmail.sequence_variant_label;
-                  }
-                  console.log(`[SyncLeads] Inferred variant for ${emailLower}: step=${lastOutboundEmail.sequence_step}, variant=${lastOutboundEmail.sequence_variant_label || 'Unknown'}`);
-                }
+                updatePayload.reply_from_step = 1; // Default to step 1
+                // Note: We can't determine the specific variant (A, B, C, etc.) from Instantly API
+                // The variant will show as "Unknown" in analytics, but step-level tracking works
+                console.log(`[SyncLeads] Setting reply_from_step=1 for positive lead ${emailLower} (Instantly doesn't provide variant info)`);
               }
 
               const { error: updateError } = await supabase
@@ -744,6 +731,22 @@ export async function POST(
             updatePayload.reply_from_variant = stats.replyFromVariant;
             updatePayload.reply_from_variant_label = stats.replyFromVariantLabel;
             variantsSynced++;
+          } else if (isPositive && stats.emailStats && stats.emailStats.length > 0) {
+            // For positive leads without reply_time, infer variant from their most recent sent email
+            // Sort by sent time descending and pick the first one (most recent)
+            const sortedEmails = [...stats.emailStats].sort((a, b) => {
+              if (!a.sentTime) return 1;
+              if (!b.sentTime) return -1;
+              return b.sentTime.localeCompare(a.sentTime);
+            });
+            const lastEmail = sortedEmails[0];
+            if (lastEmail) {
+              updatePayload.reply_from_step = lastEmail.sequenceNumber;
+              updatePayload.reply_from_variant = lastEmail.variantId;
+              updatePayload.reply_from_variant_label = lastEmail.variantLabel;
+              variantsSynced++;
+              console.log(`[SyncLeads] Inferred variant for positive lead ${email}: step=${lastEmail.sequenceNumber}, variant=${lastEmail.variantLabel || 'Unknown'}`);
+            }
           }
 
           // Only update if we have something to update
