@@ -483,6 +483,7 @@ job_status = {
     "total_skipped": 0,
     "status_message": "Idle",
     "new_logs": [],
+    "all_logs": [],  # Complete log history for reconnection
     "current_filename": "",
     # Progress tracking
     "start_time": None,
@@ -725,6 +726,7 @@ def scraper_worker(search_term, num_leads, match_type, region, filename,
     job_status["total_leads"] = 0
     job_status["total_skipped"] = 0
     job_status["new_logs"] = []
+    job_status["all_logs"] = []  # Clear full log history for new job
     job_status["current_filename"] = filename
     job_status["status_message"] = f"Starting scrape for '{search_term}' in {region.upper()}..."
     job_status["start_time"] = time.time()
@@ -990,6 +992,7 @@ def plz_scraper_worker(search_term, num_leads, match_type, filename,
     job_status["total_leads"] = 0
     job_status["total_skipped"] = 0
     job_status["new_logs"] = []
+    job_status["all_logs"] = []  # Clear full log history for new job
     job_status["current_filename"] = filename
     job_status["status_message"] = f"Starting PLZ-based scrape for '{search_term}'..."
     job_status["start_time"] = time.time()
@@ -1243,6 +1246,7 @@ def multi_query_scraper_worker(queries, num_leads, region, filename,
     job_status["total_leads"] = 0
     job_status["total_skipped"] = 0
     job_status["new_logs"] = []
+    job_status["all_logs"] = []  # Clear full log history for new job
     job_status["current_filename"] = filename
     job_status["status_message"] = f"Starting multi-query scrape ({len(queries)} variations)..."
     job_status["start_time"] = time.time()
@@ -1564,9 +1568,17 @@ def run_scrape():
 
 @app.route('/status', methods=['GET'])
 def status():
+    # Append new_logs to all_logs before clearing (for reconnection support)
+    if job_status["new_logs"]:
+        job_status["all_logs"].extend(job_status["new_logs"])
+        # Limit all_logs to last 500 entries to prevent memory issues
+        if len(job_status["all_logs"]) > 500:
+            job_status["all_logs"] = job_status["all_logs"][-500:]
+
     response = job_status.copy()
-    # Clear logs after sending so we don't duplicate on frontend
-    job_status["new_logs"] = [] 
+    # Clear new_logs after sending so we don't duplicate on frontend
+    # But keep all_logs for reconnection after page reload
+    job_status["new_logs"] = []
     return jsonify(response)
 
 @app.route('/history', methods=['GET'])
@@ -1718,6 +1730,7 @@ def batch_scraper_worker(selected_countries, num_leads_per_term, match_type,
     job_status["total_leads"] = 0
     job_status["total_skipped"] = 0
     job_status["new_logs"] = []
+    job_status["all_logs"] = []  # Clear full log history for new job
     job_status["status_message"] = "Starting batch scrape..."
 
     try:

@@ -46,6 +46,7 @@ interface JobStatus {
   total_skipped: number;
   status_message: string;
   new_logs: string[];
+  all_logs: string[];  // Complete log history for reconnection
   current_filename: string;
   start_time: number | null;
   processed_locations: number;
@@ -241,8 +242,11 @@ export default function ScrapingPage() {
           const status: JobStatus = await res.json();
           setJobStatus(status);
           if (status.is_running) {
-            // Job is already running - reconnect to it
-            setLogs(["Reconnected to running job..."]);
+            // Job is already running - reconnect with full log history
+            const reconnectLogs = status.all_logs && status.all_logs.length > 0
+              ? ["--- Reconnected to running job ---", ...status.all_logs]
+              : ["Reconnected to running job..."];
+            setLogs(reconnectLogs);
             startPolling();
           }
         }
