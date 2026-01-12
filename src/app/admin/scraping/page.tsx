@@ -100,6 +100,7 @@ export default function ScrapingPage() {
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [isPolling, setIsPolling] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
 
   // Form state - Single Search
   const [searchTerm, setSearchTerm] = useState("");
@@ -264,6 +265,7 @@ export default function ScrapingPage() {
       return;
     }
 
+    setIsStarting(true);
     setLogs([]);
     try {
       const res = await fetch(`${SCRAPER_API_URL}/run-scrape`, {
@@ -293,6 +295,8 @@ export default function ScrapingPage() {
     } catch (err) {
       console.error("Error starting scrape:", err);
       alert("Failed to connect to scraper service");
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -304,6 +308,7 @@ export default function ScrapingPage() {
       return;
     }
 
+    setIsStarting(true);
     setLogs([]);
     try {
       const res = await fetch(`${SCRAPER_API_URL}/run-bulk-keywords`, {
@@ -329,6 +334,8 @@ export default function ScrapingPage() {
     } catch (err) {
       console.error("Error starting bulk scrape:", err);
       alert("Failed to connect to scraper service");
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -339,6 +346,7 @@ export default function ScrapingPage() {
       return;
     }
 
+    setIsStarting(true);
     setLogs([]);
     try {
       const res = await fetch(`${SCRAPER_API_URL}/run-batch-scrape`, {
@@ -364,6 +372,8 @@ export default function ScrapingPage() {
     } catch (err) {
       console.error("Error starting batch scrape:", err);
       alert("Failed to connect to scraper service");
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -684,9 +694,13 @@ export default function ScrapingPage() {
                         Stop Scraping
                       </Button>
                     ) : (
-                      <Button onClick={handleStartSingleSearch} disabled={!isConnected} className="flex-1">
-                        <Play className="h-4 w-4 mr-2" />
-                        Start Scraping
+                      <Button onClick={handleStartSingleSearch} disabled={!isConnected || isStarting} className="flex-1">
+                        {isStarting ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Play className="h-4 w-4 mr-2" />
+                        )}
+                        {isStarting ? "Starting..." : "Start Scraping"}
                       </Button>
                     )}
                   </div>
@@ -763,9 +777,13 @@ export default function ScrapingPage() {
                         Stop Scraping
                       </Button>
                     ) : (
-                      <Button onClick={handleStartBulkKeywords} disabled={!isConnected} className="flex-1">
-                        <Play className="h-4 w-4 mr-2" />
-                        Start Bulk Scrape
+                      <Button onClick={handleStartBulkKeywords} disabled={!isConnected || isStarting} className="flex-1">
+                        {isStarting ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Play className="h-4 w-4 mr-2" />
+                        )}
+                        {isStarting ? "Starting..." : "Start Bulk Scrape"}
                       </Button>
                     )}
                   </div>
@@ -844,11 +862,15 @@ export default function ScrapingPage() {
                     ) : (
                       <Button
                         onClick={handleStartBatchSearch}
-                        disabled={!isConnected || batchCountries.length === 0}
+                        disabled={!isConnected || batchCountries.length === 0 || isStarting}
                         className="flex-1"
                       >
-                        <Play className="h-4 w-4 mr-2" />
-                        Start Batch Scrape ({batchCountries.length} countries)
+                        {isStarting ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Play className="h-4 w-4 mr-2" />
+                        )}
+                        {isStarting ? "Starting..." : `Start Batch Scrape (${batchCountries.length} countries)`}
                       </Button>
                     )}
                   </div>
