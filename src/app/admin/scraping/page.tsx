@@ -204,14 +204,20 @@ export default function ScrapingPage() {
 
   const startPolling = useCallback(() => {
     setIsPolling(true);
+    let pollCount = 0;
     pollingIntervalRef.current = setInterval(async () => {
       try {
+        pollCount++;
         const res = await fetch(`${SCRAPER_API_URL}/status`);
         if (res.ok) {
           const status: JobStatus = await res.json();
           setJobStatus(status);
           if (status.new_logs && status.new_logs.length > 0) {
             setLogs(prev => [...prev, ...status.new_logs]);
+          }
+          // Refresh DB stats every 10 seconds during scraping
+          if (pollCount % 10 === 0) {
+            fetchDbStats();
           }
           if (!status.is_running) {
             stopPolling();
