@@ -6,6 +6,7 @@ import time
 import threading
 import requests
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -81,6 +82,10 @@ def get_city_scrape_config(population):
 # Minimum population thresholds for different scrape modes
 MIN_POPULATION_DEFAULT = 10000  # Skip cities smaller than this by default
 MIN_POPULATION_THOROUGH = 5000  # Thorough mode includes smaller cities
+
+# Parallel processing configuration
+PARALLEL_WORKERS = 8  # Number of concurrent API requests (8 parallel = ~4x faster)
+PARALLEL_DELAY = 0.05  # Brief delay between batches (seconds)
 
 # PLZ (Postal Code) file for maximum Germany coverage
 PLZ_FILE = 'data/plz_germany.csv'
@@ -714,6 +719,314 @@ def get_places_by_gps(query, lat, lon, country_code, start_index=0, zoom=14):
             job_status["new_logs"].append(f"API Exception: {str(e)[:50]}")
         return None
 
+# Thread-safe locks for parallel processing
+_seen_ids_lock = threading.Lock()
+_csv_lock = threading.Lock()
+_stats_lock = threading.Lock()
+_logs_lock = threading.Lock()
+
+
+def _process_single_city(city, final_query, region, min_rating, min_reviews, seen_ids):
+    """
+    Process a single city and return found places.
+    Thread-safe - designed to be called in parallel.
+    Returns: (places_found, skipped_count)
+    """
+    zoom_level, max_pages = get_city_scrape_config(city['population'])
+    city_specific_query = f"{final_query} in {city['name']}"
+
+    places_found = []
+    skipped = 0
+
+    for page in range(max_pages):
+        data = get_places_by_gps(city_specific_query, city['lat'], city['lon'], region, page * 20, zoom_level)
+
+        if not data or 'places' not in data or not data['places']:
+            break
+
+        new_items = 0
+        for p in data['places']:
+            place_data = extract_place_data(p, final_query, city['name'])
+            pid = place_data['place_id']
+
+            if not pid:
+                continue
+
+            # Thread-safe check and add to seen_ids
+            with _seen_ids_lock:
+                if pid in seen_ids:
+                    continue
+                seen_ids.add(pid)
+
+            # Apply filters
+            if not passes_filters(place_data, min_rating, min_reviews, False, False):
+                skipped += 1
+                continue
+
+            place_data['city'] = city['name']
+            place_data['bundesland'] = get_bundesland(city['lat'], city['lon']) if region == 'de' else None
+            places_found.append(place_data)
+            new_items += 1
+
+        if new_items == 0:
+            break
+
+        # Minimal delay - parallel processing naturally spaces requests
+        time.sleep(0.1)
+
+    return places_found, skipped, city
+
+
+def _run_scraper_worker_parallel(search_term, num_leads, match_type, region, filename,
+                                  min_rating=0, min_reviews=0, scrape_mode='smart', bundeslaender=None):
+    """
+    FAST parallel scraper using ThreadPoolExecutor.
+    Processes multiple cities concurrently for 3-5x speed improvement.
+    """
+    global job_status
+
+    final_query = search_term
+    if match_type == 'literal':
+        final_query = f'"{search_term}"'
+
+    # Log filters if any are active
+    filters_active = []
+    if min_rating > 0:
+        filters_active.append(f"min rating: {min_rating}")
+    if min_reviews > 0:
+        filters_active.append(f"min reviews: {min_reviews}")
+    filters_active.append(f"mode: {scrape_mode}")
+    filters_active.append(f"⚡ PARALLEL ({PARALLEL_WORKERS} workers)")
+
+    # Log Bundesland filter if active
+    if region == 'de' and bundeslaender and len(bundeslaender) > 0:
+        state_names = [BUNDESLAENDER[bl]['name'] for bl in bundeslaender if bl in BUNDESLAENDER]
+        filters_active.append(f"states: {', '.join(state_names)}")
+
+    log_msg = f"Config: {', '.join(filters_active)}"
+    job_status["new_logs"].append(log_msg)
+    job_status["all_logs"].append(log_msg)
+
+    # Correctly select the target file from the map
+    target_file = REGION_FILES.get(region, 'data/cities.txt')
+    full_path = os.path.join(DATA_DIR, filename)
+
+    # Determine minimum population based on mode
+    if scrape_mode == 'quick':
+        min_pop = 50000  # Only major cities
+    elif scrape_mode == 'thorough':
+        min_pop = MIN_POPULATION_THOROUGH  # Include smaller cities (5k+)
+    else:  # smart (default)
+        min_pop = MIN_POPULATION_DEFAULT  # 10k+ cities
+
+    # Load Cities with population-based filtering
+    cities = []
+    total_in_file = 0
+    filtered_by_state = 0
+    try:
+        with open(target_file, 'r', encoding='utf-8-sig') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.lower().startswith("name,latitude"):
+                    continue
+                total_in_file += 1
+                parts = line.split(',')
+                if len(parts) >= 3:
+                    lat = parts[1].strip()
+                    lon = parts[2].strip()
+
+                    # Try to get population (4th column if exists)
+                    population = 0
+                    if len(parts) >= 4:
+                        try:
+                            population = int(parts[3].strip())
+                        except ValueError:
+                            population = 50000  # Default if can't parse
+
+                    # Skip cities below minimum population (for Germany with pop data)
+                    if region == 'de' and population < min_pop:
+                        continue
+
+                    # Filter by Bundesland if specified (Germany only)
+                    if region == 'de' and bundeslaender and len(bundeslaender) > 0:
+                        city_bundesland = get_bundesland(lat, lon)
+                        if city_bundesland not in bundeslaender:
+                            filtered_by_state += 1
+                            continue
+
+                    cities.append({
+                        "name": parts[0].strip(),
+                        "lat": lat,
+                        "lon": lon,
+                        "population": population
+                    })
+
+        # Sort by population (largest first) to prioritize big cities
+        cities.sort(key=lambda x: x['population'], reverse=True)
+
+        log_msg = f"Selected {len(cities)} cities from {total_in_file} total (min pop: {min_pop:,})"
+        if filtered_by_state > 0:
+            log_msg += f", filtered {filtered_by_state} by state"
+        job_status["new_logs"].append(log_msg)
+        job_status["all_logs"].append(log_msg)
+
+        # Set total locations for progress tracking
+        job_status["total_locations"] = len(cities)
+
+    except FileNotFoundError:
+        error_msg = f"Error: City list {target_file} not found."
+        print(error_msg)
+        job_status["status_message"] = error_msg
+        job_status["is_running"] = False
+        return
+
+    # Initialize CSV with comprehensive headers
+    with open(full_path, mode='w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(CSV_HEADERS)
+
+    # Global set to track all seen business IDs across ALL cities (prevents duplicates)
+    seen_ids = set()
+
+    # Load existing place_ids from database for cross-session deduplication
+    db_existing_ids = get_existing_place_ids(country=region)
+    if db_existing_ids:
+        seen_ids.update(db_existing_ids)
+        log_msg = f"Loaded {len(db_existing_ids):,} existing leads from database"
+        job_status["new_logs"].append(log_msg)
+        job_status["all_logs"].append(log_msg)
+
+    # Track new leads for batch saving to DB
+    new_leads_for_db = []
+    db_new_count = 0
+    processed_count = 0
+
+    # Process cities in parallel batches
+    batch_size = PARALLEL_WORKERS
+    total_cities = len(cities)
+
+    for batch_start in range(0, total_cities, batch_size):
+        if job_status["total_leads"] >= int(num_leads):
+            break
+        if not job_status["is_running"]:
+            break
+
+        # Get batch of cities to process
+        batch_end = min(batch_start + batch_size, total_cities)
+        batch_cities = cities[batch_start:batch_end]
+
+        # Update progress
+        progress_pct = int((batch_start / total_cities) * 100) if total_cities else 0
+        city_names = ", ".join([c['name'] for c in batch_cities[:3]])
+        if len(batch_cities) > 3:
+            city_names += f" +{len(batch_cities)-3} more"
+        job_status["current_city"] = f"Batch {batch_start//batch_size + 1}: {city_names} ({progress_pct}%)"
+        job_status["processed_locations"] = batch_start
+
+        # Calculate ETA
+        elapsed = time.time() - job_status["start_time"]
+        if elapsed > 0 and job_status["total_leads"] > 0:
+            job_status["leads_per_minute"] = round(job_status["total_leads"] / (elapsed / 60), 1)
+            remaining_cities = total_cities - batch_start
+            if job_status["leads_per_minute"] > 0:
+                avg_leads_per_city = job_status["total_leads"] / max(batch_start, 1)
+                estimated_remaining = remaining_cities * avg_leads_per_city
+                job_status["eta_minutes"] = round(estimated_remaining / job_status["leads_per_minute"], 1)
+
+        # Process batch in parallel
+        batch_results = []
+        with ThreadPoolExecutor(max_workers=PARALLEL_WORKERS) as executor:
+            futures = {
+                executor.submit(
+                    _process_single_city, city, final_query, region, min_rating, min_reviews, seen_ids
+                ): city for city in batch_cities
+            }
+
+            for future in as_completed(futures):
+                try:
+                    places_found, skipped, city = future.result()
+                    batch_results.append((places_found, skipped, city))
+                except Exception as e:
+                    print(f"Error processing city: {e}")
+
+        # Process batch results sequentially (thread-safe CSV writes and DB saves)
+        for places_found, skipped, city in batch_results:
+            if job_status["total_leads"] >= int(num_leads):
+                break
+
+            # Update skipped count
+            with _stats_lock:
+                job_status["total_skipped"] += skipped
+
+            # Write found places to CSV and prepare for DB
+            if places_found:
+                with _csv_lock:
+                    with open(full_path, mode='a', newline='', encoding='utf-8') as f:
+                        writer = csv.writer(f)
+                        for place_data in places_found:
+                            if job_status["total_leads"] >= int(num_leads):
+                                break
+
+                            with _stats_lock:
+                                job_status["total_leads"] += 1
+                                db_new_count += 1
+
+                            # Log visible to user
+                            rating_str = f" ({place_data['rating']})" if place_data.get('rating') else ""
+                            log_entry = f"{place_data['name']}{rating_str} ({city['name']})"
+                            with _logs_lock:
+                                job_status["new_logs"].append(log_entry)
+                                job_status["all_logs"].append(log_entry)
+
+                            # Write to CSV
+                            write_place_to_csv(writer, place_data)
+
+                            # Queue for database save
+                            new_leads_for_db.append(place_data)
+
+                            # Batch save every 50 leads
+                            if len(new_leads_for_db) >= 50:
+                                save_leads_batch(new_leads_for_db, search_term, region)
+                                new_leads_for_db = []
+
+            processed_count += 1
+
+        # Brief delay between batches to respect API rate limits
+        time.sleep(PARALLEL_DELAY)
+
+    # Save remaining leads to database
+    if new_leads_for_db:
+        save_leads_batch(new_leads_for_db, search_term, region)
+
+    # Job Finished
+    if job_status["total_leads"] >= int(num_leads):
+        job_status["status_message"] = "Limit reached."
+    else:
+        job_status["status_message"] = "Job finished."
+
+    if job_status["total_skipped"] > 0:
+        log_msg = f"Filtered out {job_status['total_skipped']} businesses"
+        job_status["new_logs"].append(log_msg)
+        job_status["all_logs"].append(log_msg)
+
+    # Log database stats
+    if supabase and db_new_count > 0:
+        log_msg = f"Saved {db_new_count} NEW leads to database"
+        job_status["new_logs"].append(log_msg)
+        job_status["all_logs"].append(log_msg)
+
+    # Log performance stats
+    elapsed = time.time() - job_status["start_time"]
+    if elapsed > 0 and job_status["total_leads"] > 0:
+        final_rate = round(job_status["total_leads"] / (elapsed / 60), 1)
+        log_msg = f"Completed: {job_status['total_leads']} leads in {round(elapsed/60, 1)}min ({final_rate}/min)"
+        job_status["new_logs"].append(log_msg)
+        job_status["all_logs"].append(log_msg)
+
+    # Save the completed run to history
+    save_to_history(search_term, region, job_status["total_leads"], filename)
+
+
 def scraper_worker(search_term, num_leads, match_type, region, filename,
                    min_rating=0, min_reviews=0, scrape_mode='smart', bundeslaender=None):
     """
@@ -728,7 +1041,7 @@ def scraper_worker(search_term, num_leads, match_type, region, filename,
     job_status["new_logs"] = []
     job_status["all_logs"] = []  # Clear full log history for new job
     job_status["current_filename"] = filename
-    job_status["status_message"] = f"Starting scrape for '{search_term}' in {region.upper()}..."
+    job_status["status_message"] = f"Starting FAST scrape for '{search_term}' in {region.upper()}..."
     job_status["start_time"] = time.time()
     job_status["estimated_total"] = 0
     job_status["processed_locations"] = 0
@@ -737,8 +1050,8 @@ def scraper_worker(search_term, num_leads, match_type, region, filename,
     job_status["eta_minutes"] = 0
 
     try:
-        _run_scraper_worker(search_term, num_leads, match_type, region, filename,
-                           min_rating, min_reviews, scrape_mode, bundeslaender)
+        _run_scraper_worker_parallel(search_term, num_leads, match_type, region, filename,
+                                     min_rating, min_reviews, scrape_mode, bundeslaender)
     except Exception as e:
         job_status["new_logs"].append(f"ERROR: {str(e)}")
         job_status["status_message"] = f"Error: {str(e)}"
