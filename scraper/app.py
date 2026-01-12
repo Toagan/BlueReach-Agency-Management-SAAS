@@ -680,9 +680,37 @@ def get_places_by_gps(query, lat, lon, country_code, start_index=0, zoom=14):
 
     try:
         response = requests.request("POST", url, headers=headers, data=payload)
-        return response.json()
+
+        # Check for HTTP errors (rate limit, quota exceeded, etc.)
+        if response.status_code != 200:
+            error_msg = f"Serper API error {response.status_code}: {response.text[:200]}"
+            print(f"⚠️ {error_msg}")
+            # Store error in job_status for visibility in UI
+            if 'job_status' in globals() and job_status.get("is_running"):
+                job_status["new_logs"].append(f"API Error: {response.status_code}")
+                if response.status_code == 429:
+                    job_status["new_logs"].append("Rate limited! Pausing 10 seconds...")
+                    time.sleep(10)  # Wait before next request
+                elif response.status_code == 402:
+                    job_status["new_logs"].append("API quota exceeded! Stopping...")
+                    job_status["is_running"] = False  # Stop the scraper
+            return None
+
+        data = response.json()
+
+        # Check for error in response body
+        if 'error' in data:
+            error_msg = data.get('error', 'Unknown error')
+            print(f"⚠️ Serper API returned error: {error_msg}")
+            if 'job_status' in globals() and job_status.get("is_running"):
+                job_status["new_logs"].append(f"API Error: {error_msg}")
+            return None
+
+        return data
     except Exception as e:
-        print(f"⚠️ API Error: {e}")
+        print(f"⚠️ API Exception: {e}")
+        if 'job_status' in globals() and job_status.get("is_running"):
+            job_status["new_logs"].append(f"API Exception: {str(e)[:50]}")
         return None
 
 def scraper_worker(search_term, num_leads, match_type, region, filename,
@@ -1028,6 +1056,8 @@ def _run_plz_scraper_worker(search_term, num_leads, match_type, filename,
 
     # Progress tracking
     total_plz = len(plz_list)
+    consecutive_api_failures = 0
+    plzs_with_results = 0
 
     # Scrape each PLZ with dynamic pagination
     for plz_idx, plz_data in enumerate(plz_list):
@@ -1073,6 +1103,19 @@ def _run_plz_scraper_worker(search_term, num_leads, match_type, filename,
             data = get_places_by_gps(final_query, lat, lon, 'de', page * 20, zoom=15)
 
             if not data or 'places' not in data or not data['places']:
+                # Track consecutive API failures on first page only
+                if page == 0:
+                    if not data:
+                        consecutive_api_failures += 1
+                        job_status["new_logs"].append(f"No data for PLZ {plz} (API issue?)")
+                        # Stop if too many consecutive failures
+                        if consecutive_api_failures >= 20:
+                            job_status["new_logs"].append("ERROR: 20 consecutive API failures - stopping")
+                            job_status["status_message"] = "Stopped: API issues (rate limit or quota?)"
+                            job_status["is_running"] = False
+                    else:
+                        # Got response but no places - reset counter
+                        consecutive_api_failures = 0
                 break
 
             new_items_count = 0
@@ -1124,12 +1167,18 @@ def _run_plz_scraper_worker(search_term, num_leads, match_type, filename,
                     break
             else:
                 consecutive_empty = 0
+                consecutive_api_failures = 0  # Reset API failure counter on success
 
             page += 1
             time.sleep(0.3)  # Respectful API delay
 
+        # Small delay between PLZs to avoid rate limiting
+        time.sleep(0.1)
+
         # Log PLZ summary if we got results
         plz_leads = job_status["total_leads"] - plz_leads_before
+        if plz_leads > 0:
+            plzs_with_results += 1
         if plz_leads >= 10:  # Only log PLZs with significant results
             job_status["new_logs"].append(f"  → PLZ {plz}: {plz_leads} leads")
 
@@ -1146,6 +1195,7 @@ def _run_plz_scraper_worker(search_term, num_leads, match_type, filename,
     if job_status["total_skipped"] > 0:
         job_status["new_logs"].append(f"Filtered out {job_status['total_skipped']} businesses")
 
+    job_status["new_logs"].append(f"PLZs with results: {plzs_with_results}/{job_status['processed_locations']}")
     job_status["new_logs"].append(f"Total unique businesses found: {job_status['total_leads']}")
 
     # Log database stats
