@@ -706,6 +706,23 @@ def scraper_worker(search_term, num_leads, match_type, region, filename,
     job_status["leads_per_minute"] = 0
     job_status["eta_minutes"] = 0
 
+    try:
+        _run_scraper_worker(search_term, num_leads, match_type, region, filename,
+                           min_rating, min_reviews, scrape_mode, bundeslaender)
+    except Exception as e:
+        job_status["new_logs"].append(f"ERROR: {str(e)}")
+        job_status["status_message"] = f"Error: {str(e)}"
+        print(f"Scraper worker error: {e}")
+    finally:
+        job_status["is_running"] = False
+        job_status["current_city"] = "Done"
+
+
+def _run_scraper_worker(search_term, num_leads, match_type, region, filename,
+                        min_rating=0, min_reviews=0, scrape_mode='smart', bundeslaender=None):
+    """Internal scraper worker logic."""
+    global job_status
+
     final_query = search_term
     if match_type == 'literal':
         final_query = f'"{search_term}"'
@@ -904,7 +921,6 @@ def scraper_worker(search_term, num_leads, match_type, region, filename,
         save_leads_batch(new_leads_for_db, search_term, region)
 
     # Job Finished
-    job_status["is_running"] = False
     if job_status["total_leads"] >= int(num_leads):
         job_status["status_message"] = "Limit reached."
     else:
@@ -916,8 +932,6 @@ def scraper_worker(search_term, num_leads, match_type, region, filename,
     # Log database stats
     if supabase and db_new_count > 0:
         job_status["new_logs"].append(f"💾 Saved {db_new_count} NEW leads to database")
-
-    job_status["current_city"] = "Done"
 
     # Save the completed run to history
     save_to_history(search_term, region, job_status["total_leads"], filename)
@@ -943,6 +957,23 @@ def plz_scraper_worker(search_term, num_leads, match_type, filename,
     job_status["total_locations"] = 0
     job_status["leads_per_minute"] = 0
     job_status["eta_minutes"] = 0
+
+    try:
+        _run_plz_scraper_worker(search_term, num_leads, match_type, filename,
+                                min_rating, min_reviews, bundeslaender)
+    except Exception as e:
+        job_status["new_logs"].append(f"ERROR: {str(e)}")
+        job_status["status_message"] = f"Error: {str(e)}"
+        print(f"PLZ scraper worker error: {e}")
+    finally:
+        job_status["is_running"] = False
+        job_status["current_city"] = "Done"
+
+
+def _run_plz_scraper_worker(search_term, num_leads, match_type, filename,
+                            min_rating=0, min_reviews=0, bundeslaender=None):
+    """Internal PLZ scraper worker logic."""
+    global job_status
 
     final_query = search_term
     if match_type == 'literal':
@@ -1107,7 +1138,6 @@ def plz_scraper_worker(search_term, num_leads, match_type, filename,
         save_leads_batch(new_leads_for_db, search_term, 'de')
 
     # Job Finished
-    job_status["is_running"] = False
     if job_status["total_leads"] >= int(num_leads):
         job_status["status_message"] = "Limit reached."
     else:
@@ -1121,8 +1151,6 @@ def plz_scraper_worker(search_term, num_leads, match_type, filename,
     # Log database stats
     if supabase and db_new_count > 0:
         job_status["new_logs"].append(f"💾 Saved {db_new_count} NEW leads to database")
-
-    job_status["current_city"] = "Done"
 
     # Save the completed run to history
     save_to_history(search_term, 'de', job_status["total_leads"], filename)
@@ -1160,6 +1188,24 @@ def multi_query_scraper_worker(queries, num_leads, region, filename,
     job_status["total_locations"] = 0
     job_status["leads_per_minute"] = 0
     job_status["eta_minutes"] = 0
+
+    try:
+        _run_multi_query_worker(queries, num_leads, region, filename,
+                                min_rating, min_reviews, scrape_mode, bundeslaender)
+    except Exception as e:
+        job_status["new_logs"].append(f"ERROR: {str(e)}")
+        job_status["status_message"] = f"Error: {str(e)}"
+        print(f"Multi-query scraper worker error: {e}")
+    finally:
+        job_status["is_running"] = False
+        job_status["current_city"] = "Done"
+
+
+def _run_multi_query_worker(queries, num_leads, region, filename,
+                            min_rating=0, min_reviews=0, scrape_mode='smart',
+                            bundeslaender=None):
+    """Internal multi-query scraper worker logic."""
+    global job_status
 
     job_status["new_logs"].append(f"Running {len(queries)} query variations:")
     for i, q in enumerate(queries[:5], 1):  # Show first 5
@@ -1329,15 +1375,12 @@ def multi_query_scraper_worker(queries, num_leads, region, filename,
         save_leads_batch(new_leads_for_db, queries[0] if queries else "multi-query", region)
 
     # Job Finished
-    job_status["is_running"] = False
     job_status["status_message"] = "Job finished." if job_status["total_leads"] < int(num_leads) else "Limit reached."
     job_status["new_logs"].append(f"Total unique businesses: {job_status['total_leads']}")
 
     # Log database stats
     if supabase and db_new_count > 0:
         job_status["new_logs"].append(f"💾 Saved {db_new_count} NEW leads to database")
-
-    job_status["current_city"] = "Done"
 
     save_to_history(queries[0] if queries else "multi-query", region, job_status["total_leads"], filename)
 
@@ -1601,6 +1644,23 @@ def batch_scraper_worker(selected_countries, num_leads_per_term, match_type,
     job_status["new_logs"] = []
     job_status["status_message"] = "Starting batch scrape..."
 
+    try:
+        _run_batch_scraper_worker(selected_countries, num_leads_per_term, match_type,
+                                  min_rating, min_reviews, scrape_mode)
+    except Exception as e:
+        job_status["new_logs"].append(f"ERROR: {str(e)}")
+        job_status["status_message"] = f"Error: {str(e)}"
+        print(f"Batch scraper worker error: {e}")
+    finally:
+        job_status["is_running"] = False
+        job_status["current_city"] = "Done"
+
+
+def _run_batch_scraper_worker(selected_countries, num_leads_per_term, match_type,
+                              min_rating=0, min_reviews=0, scrape_mode='smart'):
+    """Internal batch scraper worker logic."""
+    global job_status
+
     # Log filters if any are active
     filters_active = []
     if min_rating > 0:
@@ -1765,9 +1825,7 @@ def batch_scraper_worker(selected_countries, num_leads_per_term, match_type,
             skipped_msg = f" (filtered: {country_skipped})" if country_skipped > 0 else ""
             job_status["new_logs"].append(f"[{COUNTRY_NAMES.get(region, region)}] Completed: {country_lead_count} leads{skipped_msg}")
 
-    job_status["is_running"] = False
     job_status["status_message"] = "Batch job finished."
-    job_status["current_city"] = "Done"
 
     if job_status["total_skipped"] > 0:
         job_status["new_logs"].append(f"Total filtered out: {job_status['total_skipped']} businesses")
