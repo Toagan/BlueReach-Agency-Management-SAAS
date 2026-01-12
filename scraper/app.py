@@ -827,6 +827,9 @@ def _run_scraper_worker(search_term, num_leads, match_type, region, filename,
         # Sort by population (largest first) to prioritize big cities
         cities.sort(key=lambda x: x['population'], reverse=True)
 
+        # Tracking for API failures
+        consecutive_api_failures = 0
+
         log_msg = f"Selected {len(cities)} cities from {total_in_file} total (min pop: {min_pop:,})"
         if filtered_by_state > 0:
             log_msg += f", filtered {filtered_by_state} by state"
@@ -895,7 +898,17 @@ def _run_scraper_worker(search_term, num_leads, match_type, region, filename,
             data = get_places_by_gps(city_specific_query, city['lat'], city['lon'], region, page * 20, zoom_level)
 
             if not data or 'places' not in data or not data['places']:
+                # Track consecutive API failures on first page only
+                if page == 0 and not data:
+                    consecutive_api_failures += 1
+                    if consecutive_api_failures >= 20:
+                        job_status["new_logs"].append("ERROR: 20 consecutive API failures - stopping")
+                        job_status["status_message"] = "Stopped: API issues (rate limit or quota?)"
+                        job_status["is_running"] = False
                 break
+
+            # Reset failure counter on successful API response
+            consecutive_api_failures = 0
 
             new_items_count = 0
             with open(full_path, mode='a', newline='', encoding='utf-8') as f:
@@ -1291,6 +1304,9 @@ def _run_multi_query_worker(queries, num_leads, region, filename,
     else:
         min_pop = MIN_POPULATION_DEFAULT
 
+    # Tracking for API failures
+    consecutive_api_failures = 0
+
     # Load cities once
     target_file = REGION_FILES.get(region, 'data/cities.txt')
     cities = []
@@ -1378,7 +1394,17 @@ def _run_multi_query_worker(queries, num_leads, region, filename,
                 data = get_places_by_gps(city_specific_query, city['lat'], city['lon'], region, page * 20, zoom_level)
 
                 if not data or 'places' not in data or not data['places']:
+                    # Track consecutive API failures on first page only
+                    if page == 0 and not data:
+                        consecutive_api_failures += 1
+                        if consecutive_api_failures >= 20:
+                            job_status["new_logs"].append("ERROR: 20 consecutive API failures - stopping")
+                            job_status["status_message"] = "Stopped: API issues (rate limit or quota?)"
+                            job_status["is_running"] = False
                     break
+
+                # Reset failure counter on successful API response
+                consecutive_api_failures = 0
 
                 new_items_count = 0
                 with open(full_path, mode='a', newline='', encoding='utf-8') as f:
