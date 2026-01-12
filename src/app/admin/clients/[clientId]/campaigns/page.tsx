@@ -100,7 +100,7 @@ export default async function CampaignsPage({ params }: PageProps) {
                   <SyncButton
                     campaignId={campaign.id}
                     leadsCount={countByCampaign?.[campaign.id] || 0}
-                    providerLeadsCount={campaign.cached_emails_sent || 0}
+                    providerLeadsCount={campaign.cached_emails_sent ?? 0}
                   />
                 </div>
               </CardContent>
