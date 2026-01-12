@@ -46,28 +46,28 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     // Build analytics from cached values (ALWAYS read from cache first)
     // Note: leads_count and total_opportunities will be overwritten with local DB counts below
-    const hasCachedData = campaign.cached_emails_sent !== null;
-    let analytics = hasCachedData ? {
-      emails_sent: campaign.cached_emails_sent || 0,
-      emails_opened: campaign.cached_emails_opened || 0,
-      emails_replied: campaign.cached_reply_count || 0,
-      emails_bounced: campaign.cached_emails_bounced || 0,
+    const emailsSent = campaign.cached_emails_sent ?? 0;
+    let analytics = {
+      emails_sent: emailsSent,
+      emails_opened: campaign.cached_emails_opened ?? 0,
+      emails_replied: campaign.cached_reply_count ?? 0,
+      emails_bounced: campaign.cached_emails_bounced ?? 0,
       open_rate:
-        campaign.cached_emails_sent > 0
-          ? (campaign.cached_emails_opened || 0) / campaign.cached_emails_sent
+        emailsSent > 0
+          ? (campaign.cached_emails_opened || 0) / emailsSent
           : 0,
       reply_rate:
-        campaign.cached_emails_sent > 0
-          ? (campaign.cached_reply_count || 0) / campaign.cached_emails_sent
+        emailsSent > 0
+          ? (campaign.cached_reply_count || 0) / emailsSent
           : 0,
       bounce_rate:
-        campaign.cached_emails_sent > 0
-          ? (campaign.cached_emails_bounced || 0) / campaign.cached_emails_sent
+        emailsSent > 0
+          ? (campaign.cached_emails_bounced || 0) / emailsSent
           : 0,
       leads_count: 0, // Will be set from local DB below
-      contacted_count: campaign.cached_contacted_count || campaign.cached_emails_sent || 0,
+      contacted_count: campaign.cached_contacted_count ?? emailsSent,
       total_opportunities: 0, // Will be set from local DB below
-    } : null;
+    };
 
     // Get local leads_count and positive_count from database
     const [{ count: localLeadsCount }, { count: localPositiveCount }] = await Promise.all([
@@ -86,10 +86,8 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Provider analytics are used for email metrics (sent, opened, replied, bounced)
 
     // Update analytics with local DB counts (source of truth for leads)
-    if (analytics) {
-      analytics.leads_count = localLeadsCount || 0;
-      analytics.total_opportunities = localPositiveCount || 0;
-    }
+    analytics.leads_count = localLeadsCount || 0;
+    analytics.total_opportunities = localPositiveCount || 0;
 
     let updatedCampaign = campaign;
     const providerCampaignId = campaign.provider_campaign_id || campaign.instantly_campaign_id;
