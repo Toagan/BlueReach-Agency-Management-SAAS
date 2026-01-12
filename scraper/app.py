@@ -632,21 +632,47 @@ def save_to_history(term, region, leads_count, filename):
     with open(HISTORY_FILE, 'w') as f:
         json.dump(history, f, indent=4)
 
+# Language codes for each country (hl parameter)
+COUNTRY_LANGUAGES = {
+    'de': 'de',  # Germany - German
+    'us': 'en',  # USA - English
+    'uk': 'en',  # UK - English
+    'gb': 'en',  # UK (alternate) - English
+    'au': 'en',  # Australia - English
+    'ca': 'en',  # Canada - English
+    'fr': 'fr',  # France - French
+    'es': 'es',  # Spain - Spanish
+    'it': 'it',  # Italy - Italian
+    'br': 'pt',  # Brazil - Portuguese
+    'in': 'en',  # India - English
+    'jp': 'ja',  # Japan - Japanese
+    'ru': 'ru',  # Russia - Russian
+    'cn': 'zh',  # China - Chinese
+}
+
 def get_places_by_gps(query, lat, lon, country_code, start_index=0, zoom=14):
     url = "https://google.serper.dev/places"
     location_bias = f"@{lat},{lon},{zoom}z"
 
-    # Adjust for Serper's specific country codes if needed
-    if country_code == 'uk': country_code = 'gb'
+    # Check API key
+    if not API_KEY:
+        print("⚠️ SERPER_API_KEY not configured")
+        return None
+
+    # Adjust for Serper's specific country codes
+    gl_code = 'gb' if country_code == 'uk' else country_code
+
+    # Get proper language code
+    hl_code = COUNTRY_LANGUAGES.get(country_code, 'en')
 
     payload = json.dumps({
         "q": query,
-        "gl": country_code,
-        "hl": country_code,
+        "gl": gl_code,
+        "hl": hl_code,
         "ll": location_bias,
         "start": start_index
     })
-    
+
     headers = {
         'X-API-KEY': API_KEY,
         'Content-Type': 'application/json'
@@ -1318,6 +1344,10 @@ def multi_query_scraper_worker(queries, num_leads, region, filename,
 
 @app.route('/run-scrape', methods=['POST'])
 def run_scrape():
+    # Check API key is configured
+    if not API_KEY:
+        return jsonify({"status": "error", "message": "SERPER_API_KEY not configured on server."})
+
     if job_status["is_running"]:
         return jsonify({"status": "error", "message": "Job already running."})
 
@@ -1746,6 +1776,9 @@ def batch_scraper_worker(selected_countries, num_leads_per_term, match_type,
 @app.route('/run-bulk-keywords', methods=['POST'])
 def run_bulk_keywords():
     """Start a bulk search with multiple keywords."""
+    if not API_KEY:
+        return jsonify({"status": "error", "message": "SERPER_API_KEY not configured on server."})
+
     if job_status["is_running"]:
         return jsonify({"status": "error", "message": "Job already running."})
 
@@ -1789,6 +1822,9 @@ def run_bulk_keywords():
 @app.route('/run-batch-scrape', methods=['POST'])
 def run_batch_scrape():
     """Start a batch scrape across multiple countries with their configured search terms."""
+    if not API_KEY:
+        return jsonify({"status": "error", "message": "SERPER_API_KEY not configured on server."})
+
     if job_status["is_running"]:
         return jsonify({"status": "error", "message": "Job already running."})
 
