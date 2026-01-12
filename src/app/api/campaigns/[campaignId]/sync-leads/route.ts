@@ -6,6 +6,9 @@ import { createClient } from "@supabase/supabase-js";
 import { getProviderForCampaign } from "@/lib/providers";
 import type { ProviderLead } from "@/lib/providers/types";
 
+// Increase timeout for large syncs (up to 5 minutes on Vercel Pro)
+export const maxDuration = 300;
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ campaignId: string }> }
