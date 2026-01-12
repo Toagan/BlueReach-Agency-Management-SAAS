@@ -1382,10 +1382,34 @@ function CampaignCard({
   const handleSync = async () => {
     setSyncing(true);
     setSyncResult(null);
+
+    // Create timeout abort controller (5 min timeout to match API maxDuration)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+
     try {
       const res = await fetch(`/api/campaigns/${campaign.id}/sync-leads`, {
         method: "POST",
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
+
+      // Check if response is OK before parsing JSON
+      if (!res.ok) {
+        const errorText = await res.text();
+        let errorMessage = `Sync failed (${res.status})`;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // Response wasn't JSON, use status text
+          errorMessage = res.statusText || errorMessage;
+        }
+        setSyncResult({ success: false, message: errorMessage });
+        return;
+      }
+
       const data = await res.json();
       if (data.error) {
         setSyncResult({ success: false, message: data.error });
@@ -1399,10 +1423,20 @@ function CampaignCard({
         setTimeout(() => window.location.reload(), 1500);
       }
     } catch (error) {
-      setSyncResult({
-        success: false,
-        message: error instanceof Error ? error.message : "Sync failed",
-      });
+      clearTimeout(timeoutId);
+
+      // Handle abort error specifically
+      if (error instanceof Error && error.name === 'AbortError') {
+        setSyncResult({
+          success: false,
+          message: "Sync timed out after 5 minutes. Try again or sync fewer leads.",
+        });
+      } else {
+        setSyncResult({
+          success: false,
+          message: error instanceof Error ? error.message : "Sync failed - check console",
+        });
+      }
     } finally {
       setSyncing(false);
     }

@@ -402,11 +402,18 @@ export default function CampaignDetailPage() {
     setSyncLeadsResult(null);
     setError(null);
 
+    // Create timeout abort controller (5 min timeout to match API maxDuration)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+
     try {
       // Skip statistics fetch for faster sync (statistics can be fetched separately if needed)
       const res = await fetch(`/api/campaigns/${campaignId}/sync-leads?skipStats=true`, {
         method: "POST",
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       const data = await res.json();
 
@@ -419,8 +426,15 @@ export default function CampaignDetailPage() {
       // Refresh data to show new leads
       await fetchData();
     } catch (err) {
+      clearTimeout(timeoutId);
       console.error("Lead sync error:", err);
-      setError(err instanceof Error ? err.message : "Failed to sync leads");
+
+      // Handle abort error specifically
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError("Sync timed out after 5 minutes. The campaign may have too many leads.");
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to sync leads");
+      }
     } finally {
       setIsSyncingLeads(false);
     }
