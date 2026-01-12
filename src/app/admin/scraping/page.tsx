@@ -135,14 +135,6 @@ export default function ScrapingPage() {
   const logsEndRef = useRef<HTMLDivElement>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Check scraper connection on mount
-  useEffect(() => {
-    checkConnection();
-    fetchReferenceData();
-    fetchHistory();
-    fetchDbStats();
-  }, []);
-
   // Auto-scroll logs
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -238,6 +230,32 @@ export default function ScrapingPage() {
       pollingIntervalRef.current = null;
     }
   }, []);
+
+  // Check for running job on mount (reconnect after page reload)
+  useEffect(() => {
+    const checkRunningJob = async () => {
+      try {
+        const res = await fetch(`${SCRAPER_API_URL}/status`);
+        if (res.ok) {
+          const status: JobStatus = await res.json();
+          setJobStatus(status);
+          if (status.is_running) {
+            // Job is already running - reconnect to it
+            setLogs(["Reconnected to running job..."]);
+            startPolling();
+          }
+        }
+      } catch (err) {
+        console.error("Error checking job status:", err);
+      }
+    };
+
+    checkRunningJob();
+    checkConnection();
+    fetchReferenceData();
+    fetchHistory();
+    fetchDbStats();
+  }, [startPolling]);
 
   // Start Single Search
   const handleStartSingleSearch = async () => {
