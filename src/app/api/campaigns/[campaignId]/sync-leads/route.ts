@@ -254,16 +254,19 @@ export async function POST(
         console.log(`[SyncLeads] Backfilling instantly_lead_id for ${emailLower}`);
       }
 
+      // Add all leads to insert list - upsert will handle both new and existing
+      if (!existing) {
+        leadData.created_at = lead.createdAt || new Date().toISOString();
+      }
+      leadsToInsert.push(leadData);
+
       if (existing) {
         leadsToUpdate.push({ email: existing.email, data: leadData });
-      } else {
-        leadData.created_at = lead.createdAt || new Date().toISOString();
-        leadsToInsert.push(leadData);
       }
     }
 
     console.log(
-      `[SyncLeads] ${leadsToInsert.length} new leads, ${leadsToUpdate.length} to update`
+      `[SyncLeads] ${leadsToInsert.length - leadsToUpdate.length} new leads, ${leadsToUpdate.length} to update`
     );
 
     // Deduplicate leads by email (Instantly API can return duplicates)
@@ -273,22 +276,22 @@ export async function POST(
       // Keep the last occurrence (most recent data)
       deduplicatedLeads.set(emailKey, lead);
     }
-    const uniqueLeadsToInsert = Array.from(deduplicatedLeads.values());
+    const uniqueLeadsToUpsert = Array.from(deduplicatedLeads.values());
 
-    console.log(`[SyncLeads] Deduplicated ${leadsToInsert.length} -> ${uniqueLeadsToInsert.length} unique leads`);
+    console.log(`[SyncLeads] Deduplicated ${leadsToInsert.length} -> ${uniqueLeadsToUpsert.length} unique leads`);
 
-    // Insert/upsert new leads in batches
-    let insertedCount = 0;
-    const insertBatchSize = 100;
-    const totalBatches = Math.ceil(uniqueLeadsToInsert.length / insertBatchSize);
+    // Upsert ALL leads in batches (both new and existing - upsert handles both)
+    let upsertedCount = 0;
+    const upsertBatchSize = 100;
+    const totalBatches = Math.ceil(uniqueLeadsToUpsert.length / upsertBatchSize);
 
-    console.log(`[SyncLeads] Upserting ${uniqueLeadsToInsert.length} leads in ${totalBatches} batches...`);
+    console.log(`[SyncLeads] Upserting ${uniqueLeadsToUpsert.length} leads in ${totalBatches} batches...`);
 
-    for (let i = 0; i < uniqueLeadsToInsert.length; i += insertBatchSize) {
-      const batch = uniqueLeadsToInsert.slice(i, i + insertBatchSize);
-      const batchNum = Math.floor(i / insertBatchSize) + 1;
+    for (let i = 0; i < uniqueLeadsToUpsert.length; i += upsertBatchSize) {
+      const batch = uniqueLeadsToUpsert.slice(i, i + upsertBatchSize);
+      const batchNum = Math.floor(i / upsertBatchSize) + 1;
 
-      // Use upsert with onConflict to handle duplicates gracefully
+      // Use upsert with onConflict to handle both inserts and updates
       const { error: upsertError } = await supabase
         .from("leads")
         .upsert(batch, {
@@ -299,31 +302,18 @@ export async function POST(
       if (upsertError) {
         console.error(`[SyncLeads] Upsert batch ${batchNum}/${totalBatches} error:`, upsertError);
       } else {
-        insertedCount += batch.length;
+        upsertedCount += batch.length;
       }
 
-      // Log progress every 50 batches
-      if (batchNum % 50 === 0) {
-        console.log(`[SyncLeads] Upserted ${insertedCount}/${uniqueLeadsToInsert.length} leads...`);
-      }
-    }
-
-    console.log(`[SyncLeads] Finished upserting ${insertedCount} leads`);
-
-    // Update existing leads in batches
-    let updatedCount = 0;
-
-    for (const { email, data } of leadsToUpdate) {
-      const { error: updateError } = await supabase
-        .from("leads")
-        .update(data)
-        .eq("campaign_id", campaignId)
-        .ilike("email", email);
-
-      if (!updateError) {
-        updatedCount++;
+      // Log progress every 5 batches
+      if (batchNum % 5 === 0) {
+        console.log(`[SyncLeads] Upserted ${upsertedCount}/${uniqueLeadsToUpsert.length} leads...`);
       }
     }
+
+    const insertedCount = leadsToInsert.length - leadsToUpdate.length;
+    const updatedCount = leadsToUpdate.length;
+    console.log(`[SyncLeads] Finished upserting ${upsertedCount} leads (${insertedCount} new, ${updatedCount} updated)`);
 
     // Update last_lead_sync_at
     await supabase
