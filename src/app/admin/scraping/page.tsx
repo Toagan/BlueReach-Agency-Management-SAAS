@@ -113,6 +113,7 @@ export default function ScrapingPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("custom");
   const [expandQueries, setExpandQueries] = useState(false);
   const [selectedBundeslaender, setSelectedBundeslaender] = useState<string[]>([]);
+  const [dedupeDomains, setDedupeDomains] = useState(false);  // Skip duplicate website domains
 
   // Form state - Bulk Keywords
   const [bulkKeywords, setBulkKeywords] = useState("");
@@ -292,6 +293,7 @@ export default function ScrapingPage() {
           bundeslaender: selectedBundeslaender,
           category: selectedCategory !== "custom" ? selectedCategory : null,
           expand_queries: expandQueries,
+          dedupe_domains: dedupeDomains,
         }),
       });
 
@@ -645,6 +647,21 @@ export default function ScrapingPage() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+
+                  {/* Domain Deduplication Option */}
+                  <div className="flex items-center space-x-2 pt-2">
+                    <Checkbox
+                      id="dedupe-domains"
+                      checked={dedupeDomains}
+                      onCheckedChange={(checked) => setDedupeDomains(checked === true)}
+                    />
+                    <Label
+                      htmlFor="dedupe-domains"
+                      className="text-sm font-normal cursor-pointer"
+                    >
+                      Deduplicate by domain (skip chain stores like BAUHAUS with multiple locations)
+                    </Label>
                   </div>
 
                   {/* Germany-specific: Bundesland Filter */}

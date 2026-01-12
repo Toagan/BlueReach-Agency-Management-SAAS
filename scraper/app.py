@@ -6,6 +6,7 @@ import time
 import threading
 import requests
 from datetime import datetime
+from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
@@ -575,6 +576,47 @@ def passes_filters(place_data, min_rating=0, min_reviews=0, require_website=Fals
 
     return True
 
+
+def extract_root_domain(url):
+    """
+    Extract the root domain from a URL for deduplication.
+    Examples:
+        https://www.bauhaus.info/fachcentren/fachcentrum-berlin/fc/643 -> bauhaus.info
+        http://www.obi.de/markt/koeln -> obi.de
+        https://sub.example.co.uk/page -> example.co.uk
+    """
+    if not url:
+        return None
+
+    try:
+        # Add scheme if missing
+        if not url.startswith(('http://', 'https://')):
+            url = 'https://' + url
+
+        parsed = urlparse(url)
+        domain = parsed.netloc.lower()
+
+        # Remove www. prefix
+        if domain.startswith('www.'):
+            domain = domain[4:]
+
+        # Handle common multi-part TLDs
+        multi_tlds = ['.co.uk', '.co.de', '.com.au', '.co.nz', '.co.jp', '.com.br']
+        for tld in multi_tlds:
+            if domain.endswith(tld):
+                # Get the part before the multi-part TLD
+                parts = domain[:-len(tld)].split('.')
+                return parts[-1] + tld if parts else domain
+
+        # Standard case: get last two parts (domain.tld)
+        parts = domain.split('.')
+        if len(parts) >= 2:
+            return '.'.join(parts[-2:])
+        return domain
+    except Exception:
+        return None
+
+
 def write_place_to_csv(writer, place_data):
     """Write a place data dict to CSV."""
     writer.writerow([
@@ -721,22 +763,24 @@ def get_places_by_gps(query, lat, lon, country_code, start_index=0, zoom=14):
 
 # Thread-safe locks for parallel processing
 _seen_ids_lock = threading.Lock()
+_seen_domains_lock = threading.Lock()
 _csv_lock = threading.Lock()
 _stats_lock = threading.Lock()
 _logs_lock = threading.Lock()
 
 
-def _process_single_city(city, final_query, region, min_rating, min_reviews, seen_ids):
+def _process_single_city(city, final_query, region, min_rating, min_reviews, seen_ids, seen_domains=None, dedupe_domains=False):
     """
     Process a single city and return found places.
     Thread-safe - designed to be called in parallel.
-    Returns: (places_found, skipped_count)
+    Returns: (places_found, skipped_count, domain_skipped_count)
     """
     zoom_level, max_pages = get_city_scrape_config(city['population'])
     city_specific_query = f"{final_query} in {city['name']}"
 
     places_found = []
     skipped = 0
+    domain_skipped = 0
 
     for page in range(max_pages):
         data = get_places_by_gps(city_specific_query, city['lat'], city['lon'], region, page * 20, zoom_level)
@@ -758,6 +802,16 @@ def _process_single_city(city, final_query, region, min_rating, min_reviews, see
                     continue
                 seen_ids.add(pid)
 
+            # Domain deduplication - skip if we've seen this domain before
+            if dedupe_domains and seen_domains is not None:
+                domain = extract_root_domain(place_data.get('website', ''))
+                if domain:
+                    with _seen_domains_lock:
+                        if domain in seen_domains:
+                            domain_skipped += 1
+                            continue
+                        seen_domains.add(domain)
+
             # Apply filters
             if not passes_filters(place_data, min_rating, min_reviews, False, False):
                 skipped += 1
@@ -774,11 +828,12 @@ def _process_single_city(city, final_query, region, min_rating, min_reviews, see
         # Minimal delay - parallel processing naturally spaces requests
         time.sleep(0.1)
 
-    return places_found, skipped, city
+    return places_found, skipped, domain_skipped, city
 
 
 def _run_scraper_worker_parallel(search_term, num_leads, match_type, region, filename,
-                                  min_rating=0, min_reviews=0, scrape_mode='smart', bundeslaender=None):
+                                  min_rating=0, min_reviews=0, scrape_mode='smart', bundeslaender=None,
+                                  dedupe_domains=False):
     """
     FAST parallel scraper using ThreadPoolExecutor.
     Processes multiple cities concurrently for 3-5x speed improvement.
@@ -797,6 +852,8 @@ def _run_scraper_worker_parallel(search_term, num_leads, match_type, region, fil
         filters_active.append(f"min reviews: {min_reviews}")
     filters_active.append(f"mode: {scrape_mode}")
     filters_active.append(f"⚡ PARALLEL ({PARALLEL_WORKERS} workers)")
+    if dedupe_domains:
+        filters_active.append("domain dedup: ON")
 
     # Log Bundesland filter if active
     if region == 'de' and bundeslaender and len(bundeslaender) > 0:
@@ -888,6 +945,10 @@ def _run_scraper_worker_parallel(search_term, num_leads, match_type, region, fil
     # Global set to track all seen business IDs across ALL cities (prevents duplicates)
     seen_ids = set()
 
+    # Domain deduplication set - tracks root domains we've already seen
+    seen_domains = set() if dedupe_domains else None
+    domain_skipped_total = 0
+
     # Load existing place_ids from database for cross-session deduplication
     db_existing_ids = get_existing_place_ids(country=region)
     if db_existing_ids:
@@ -938,25 +999,27 @@ def _run_scraper_worker_parallel(search_term, num_leads, match_type, region, fil
         with ThreadPoolExecutor(max_workers=PARALLEL_WORKERS) as executor:
             futures = {
                 executor.submit(
-                    _process_single_city, city, final_query, region, min_rating, min_reviews, seen_ids
+                    _process_single_city, city, final_query, region, min_rating, min_reviews,
+                    seen_ids, seen_domains, dedupe_domains
                 ): city for city in batch_cities
             }
 
             for future in as_completed(futures):
                 try:
-                    places_found, skipped, city = future.result()
-                    batch_results.append((places_found, skipped, city))
+                    places_found, skipped, domain_skipped, city = future.result()
+                    batch_results.append((places_found, skipped, domain_skipped, city))
                 except Exception as e:
                     print(f"Error processing city: {e}")
 
         # Process batch results sequentially (thread-safe CSV writes and DB saves)
-        for places_found, skipped, city in batch_results:
+        for places_found, skipped, domain_skipped, city in batch_results:
             if job_status["total_leads"] >= int(num_leads):
                 break
 
             # Update skipped count
             with _stats_lock:
                 job_status["total_skipped"] += skipped
+                domain_skipped_total += domain_skipped
 
             # Write found places to CSV and prepare for DB
             if places_found:
@@ -1009,6 +1072,12 @@ def _run_scraper_worker_parallel(search_term, num_leads, match_type, region, fil
         job_status["new_logs"].append(log_msg)
         job_status["all_logs"].append(log_msg)
 
+    # Log domain deduplication stats
+    if dedupe_domains and domain_skipped_total > 0:
+        log_msg = f"Skipped {domain_skipped_total} duplicate domains (e.g. multiple BAUHAUS locations)"
+        job_status["new_logs"].append(log_msg)
+        job_status["all_logs"].append(log_msg)
+
     # Log database stats
     if supabase and db_new_count > 0:
         log_msg = f"Saved {db_new_count} NEW leads to database"
@@ -1028,11 +1097,13 @@ def _run_scraper_worker_parallel(search_term, num_leads, match_type, region, fil
 
 
 def scraper_worker(search_term, num_leads, match_type, region, filename,
-                   min_rating=0, min_reviews=0, scrape_mode='smart', bundeslaender=None):
+                   min_rating=0, min_reviews=0, scrape_mode='smart', bundeslaender=None,
+                   dedupe_domains=False):
     """
     Smart scraper that adapts to city size.
     scrape_mode: 'smart' (default), 'thorough', or 'quick'
     bundeslaender: list of Bundesland codes to filter by (Germany only)
+    dedupe_domains: if True, skip leads with duplicate root domains (e.g. multiple BAUHAUS stores)
     """
     global job_status
     job_status["is_running"] = True
@@ -1051,7 +1122,8 @@ def scraper_worker(search_term, num_leads, match_type, region, filename,
 
     try:
         _run_scraper_worker_parallel(search_term, num_leads, match_type, region, filename,
-                                     min_rating, min_reviews, scrape_mode, bundeslaender)
+                                     min_rating, min_reviews, scrape_mode, bundeslaender,
+                                     dedupe_domains)
     except Exception as e:
         job_status["new_logs"].append(f"ERROR: {str(e)}")
         job_status["status_message"] = f"Error: {str(e)}"
@@ -1798,6 +1870,7 @@ def run_scrape():
     min_reviews = int(data.get('min_reviews', 0))
     scrape_mode = data.get('scrape_mode', 'smart')
     bundeslaender = data.get('bundeslaender', [])
+    dedupe_domains = data.get('dedupe_domains', False)  # Skip duplicate website domains
 
     # NEW: Query expansion options
     expand_queries = data.get('expand_queries', False)  # Enable query variations
@@ -1870,7 +1943,8 @@ def run_scrape():
                 min_rating,
                 min_reviews,
                 scrape_mode,
-                bundeslaender
+                bundeslaender,
+                dedupe_domains
             )
         )
 
