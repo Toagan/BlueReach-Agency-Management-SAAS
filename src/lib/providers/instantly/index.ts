@@ -808,37 +808,46 @@ export class InstantlyProvider implements EmailCampaignProvider {
     hasWebhook: boolean;
   }> {
     try {
+      type WebhookItem = {
+        id: string;
+        webhook_url?: string;
+        url?: string;
+        event_type?: string;
+        eventType?: string;
+        campaign?: string;
+        is_active?: boolean;
+        active?: boolean;
+      };
+
       // First try to get webhooks filtered by campaign
       const response = await this.client.get<{
-        items?: Array<{
-          id: string;
-          webhook_url?: string;
-          url?: string;
-          event_type?: string;
-          eventType?: string;
-          campaign?: string;
-          is_active?: boolean;
-          active?: boolean;
-        }>;
-        data?: Array<{
-          id: string;
-          webhook_url?: string;
-          url?: string;
-          event_type?: string;
-          eventType?: string;
-          campaign?: string;
-          is_active?: boolean;
-          active?: boolean;
-        }>;
+        items?: WebhookItem[];
+        data?: WebhookItem[];
       }>("/webhooks", {
         campaign: campaignId,
         limit: 50,
       });
 
       // Handle both items and data response formats
-      const items = response.items || response.data || [];
+      let items = response.items || response.data || [];
 
       console.log(`[InstantlyProvider] Webhooks API returned ${items.length} webhooks for campaign ${campaignId}`);
+
+      // If no webhooks found for campaign, try getting all webhooks (account-level)
+      if (items.length === 0) {
+        const allWebhooksResponse = await this.client.get<{
+          items?: WebhookItem[];
+          data?: WebhookItem[];
+        }>("/webhooks", {
+          limit: 100,
+        });
+
+        const allItems = allWebhooksResponse.items || allWebhooksResponse.data || [];
+        console.log(`[InstantlyProvider] Found ${allItems.length} account-level webhooks`);
+
+        // Include webhooks that either have no campaign filter or match our campaign
+        items = allItems.filter((w) => !w.campaign || w.campaign === campaignId);
+      }
 
       const webhooks = items.map((w) => ({
         id: w.id || "",

@@ -65,18 +65,37 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       // Only Instantly provider supports webhook checking
       if (provider instanceof InstantlyProvider) {
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bluereach-agency-management-saas-production.up.railway.app";
-        const expectedUrl = `${baseUrl}/api/webhooks/instantly/${campaignId}`;
+        const expectedCampaignUrl = `${baseUrl}/api/webhooks/instantly/${campaignId}`;
+        const expectedGenericUrl = `${baseUrl}/api/webhooks/instantly`;
 
-        const status = await provider.checkWebhookStatus(
+        // First check for campaign-specific webhook URL
+        let status = await provider.checkWebhookStatus(
           providerCampaignId,
           campaignId // Check if webhook URL contains our campaign ID
         );
+
+        // If not found, also check for generic webhook URL (both are valid)
+        if (!status.configured) {
+          const genericStatus = await provider.checkWebhookStatus(
+            providerCampaignId,
+            "/api/webhooks/instantly" // Check for generic endpoint
+          );
+          // Only accept generic URL if it doesn't have a different campaign ID
+          if (genericStatus.configured && genericStatus.webhookUrl) {
+            // Make sure it's the generic endpoint, not another campaign's specific endpoint
+            const url = genericStatus.webhookUrl;
+            if (url.endsWith("/api/webhooks/instantly") || url.includes("/api/webhooks/instantly?")) {
+              status = genericStatus;
+            }
+          }
+        }
 
         return NextResponse.json({
           configured: status.configured,
           webhookUrl: status.webhookUrl,
           eventTypes: status.eventTypes,
-          expectedUrl,
+          expectedUrl: expectedCampaignUrl,
+          alternativeUrl: expectedGenericUrl,
           isCompleted,
           isActive: campaign.is_active,
         });
