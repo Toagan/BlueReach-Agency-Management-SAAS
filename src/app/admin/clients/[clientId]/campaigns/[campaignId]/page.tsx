@@ -113,6 +113,7 @@ export default function CampaignDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
 
   // Editing state
   const [isEditingName, setIsEditingName] = useState(false);
@@ -536,9 +537,39 @@ export default function CampaignDetailPage() {
     }
   };
 
+  // Auto-refresh analytics from provider every 30 seconds
+  const refreshAnalytics = useCallback(async () => {
+    if (isSyncingLeads || loading) return; // Don't refresh while syncing or initial loading
+
+    setIsAutoRefreshing(true);
+    try {
+      // Fetch campaign details with force refresh to get latest from Instantly
+      const campaignRes = await fetch(`/api/campaigns/${campaignId}/details?refresh=true`);
+      if (campaignRes.ok) {
+        const campaignData = await campaignRes.json();
+        setCampaign(campaignData.campaign);
+        setAnalytics(campaignData.analytics);
+        setLastUpdated(new Date());
+      }
+    } catch (err) {
+      console.error("Auto-refresh failed:", err);
+    } finally {
+      setIsAutoRefreshing(false);
+    }
+  }, [campaignId, isSyncingLeads, loading]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Auto-refresh interval (every 30 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshAnalytics();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [refreshAnalytics]);
 
   if (loading && !campaign) {
     return (
@@ -1137,8 +1168,11 @@ export default function CampaignDetailPage() {
 
       {/* Footer */}
       {lastUpdated && (
-        <p className="text-xs text-muted-foreground text-right">
-          Last updated: {lastUpdated.toLocaleTimeString()}
+        <p className="text-xs text-muted-foreground text-right flex items-center justify-end gap-2">
+          {isAutoRefreshing && (
+            <RefreshCw className="h-3 w-3 animate-spin" />
+          )}
+          <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
         </p>
       )}
     </div>
