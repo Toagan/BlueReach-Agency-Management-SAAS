@@ -100,6 +100,14 @@ async function handleSnapshot(request: NextRequest) {
           continue;
         }
 
+        // Skip Smartlead in daily cron - too slow for large campaigns (use weekly backfill instead)
+        // Smartlead API returns ALL records, can't filter by date server-side
+        if (provider.providerType === "smartlead") {
+          console.log(`[Analytics Snapshot] Skipping Smartlead campaign ${campaign.name} - use backfill endpoint instead`);
+          campaignsSkipped++;
+          continue;
+        }
+
         // Fetch daily analytics for the date range
         const dailyAnalytics = await provider.fetchDailyAnalytics(
           providerCampaignId!,
