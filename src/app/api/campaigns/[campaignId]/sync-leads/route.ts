@@ -336,19 +336,30 @@ export async function POST(
           contacted_count: analytics.contactedCount || 0,
         };
 
+        // Also count replies from local leads table as fallback
+        // (Instantly API sometimes returns 0 even when there are replies)
+        const { count: localReplyCount } = await supabase
+          .from("leads")
+          .select("*", { count: "exact", head: true })
+          .eq("campaign_id", campaignId)
+          .eq("has_replied", true);
+
+        // Use the higher of API reply count or local reply count
+        const replyCount = Math.max(analytics.replyCount || 0, localReplyCount || 0);
+
         await supabase
           .from("campaigns")
           .update({
             cached_emails_sent: analytics.emailsSentCount || 0,
             cached_emails_opened: analytics.openCountUnique || 0,
-            cached_reply_count: analytics.replyCount || 0,
+            cached_reply_count: replyCount,
             cached_emails_bounced: analytics.bouncedCount || 0,
             cached_positive_count: analytics.totalOpportunities || 0,
             cache_updated_at: new Date().toISOString(),
           })
           .eq("id", campaignId);
 
-        console.log(`[SyncLeads] Synced analytics: ${analytics.emailsSentCount} sent, ${analytics.replyCount} replies`);
+        console.log(`[SyncLeads] Synced analytics: ${analytics.emailsSentCount} sent, ${replyCount} replies (API: ${analytics.replyCount}, local: ${localReplyCount})`);
       }
     } catch (analyticsError) {
       console.warn(`[SyncLeads] Could not sync analytics:`, analyticsError);
