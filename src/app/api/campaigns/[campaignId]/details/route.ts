@@ -65,7 +65,7 @@ export async function GET(request: Request, { params }: RouteParams) {
           ? (campaign.cached_emails_bounced || 0) / emailsSent
           : 0,
       leads_count: 0, // Will be set from local DB below
-      contacted_count: campaign.cached_contacted_count ?? emailsSent,
+      contacted_count: campaign.cached_contacted_count || emailsSent,
       total_opportunities: 0, // Will be set from local DB below
     };
 
@@ -124,26 +124,32 @@ export async function GET(request: Request, { params }: RouteParams) {
         try {
           const providerAnalytics = await provider.fetchCampaignAnalytics(providerCampaignId);
 
+          // Use emails_sent as fallback for contacted_count (contacted = emails sent to unique leads)
+          const emailsSent = providerAnalytics.emailsSentCount || 0;
+          const contactedCount = providerAnalytics.contactedCount || emailsSent;
+          // Use local leads count as primary, provider as fallback
+          const leadsCount = localLeadsCount || providerAnalytics.leadsCount || 0;
+
           analytics = {
-            emails_sent: providerAnalytics.emailsSentCount || 0,
+            emails_sent: emailsSent,
             emails_opened: providerAnalytics.openCountUnique || 0,
             emails_replied: providerAnalytics.replyCount || 0,
             emails_bounced: providerAnalytics.bouncedCount || 0,
             open_rate:
-              providerAnalytics.emailsSentCount > 0
-                ? (providerAnalytics.openCountUnique || 0) / providerAnalytics.emailsSentCount
+              emailsSent > 0
+                ? (providerAnalytics.openCountUnique || 0) / emailsSent
                 : 0,
             reply_rate:
-              providerAnalytics.emailsSentCount > 0
-                ? (providerAnalytics.replyCount || 0) / providerAnalytics.emailsSentCount
+              emailsSent > 0
+                ? (providerAnalytics.replyCount || 0) / emailsSent
                 : 0,
             bounce_rate:
-              providerAnalytics.emailsSentCount > 0
-                ? (providerAnalytics.bouncedCount || 0) / providerAnalytics.emailsSentCount
+              emailsSent > 0
+                ? (providerAnalytics.bouncedCount || 0) / emailsSent
                 : 0,
             // Use local DB counts for leads and positive replies (source of truth after sync)
-            leads_count: localLeadsCount || providerAnalytics.leadsCount || 0,
-            contacted_count: providerAnalytics.contactedCount || 0,
+            leads_count: leadsCount,
+            contacted_count: contactedCount,
             total_opportunities: localPositiveCount || providerAnalytics.totalOpportunities || 0,
           };
 
@@ -151,13 +157,13 @@ export async function GET(request: Request, { params }: RouteParams) {
           await supabase
             .from("campaigns")
             .update({
-              cached_emails_sent: providerAnalytics.emailsSentCount || 0,
+              cached_emails_sent: emailsSent,
               cached_emails_opened: providerAnalytics.openCountUnique || 0,
               cached_reply_count: providerAnalytics.replyCount || 0,
               cached_emails_bounced: providerAnalytics.bouncedCount || 0,
               cached_positive_count: providerAnalytics.totalOpportunities || 0,
-              cached_leads_count: providerAnalytics.leadsCount || 0,
-              cached_contacted_count: providerAnalytics.contactedCount || 0,
+              cached_leads_count: leadsCount,
+              cached_contacted_count: contactedCount,
               cache_updated_at: new Date().toISOString(),
             })
             .eq("id", campaignId);
