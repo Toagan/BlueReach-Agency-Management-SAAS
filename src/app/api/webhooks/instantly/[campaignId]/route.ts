@@ -16,6 +16,63 @@ interface RouteParams {
   params: Promise<{ campaignId: string }>;
 }
 
+// Update daily analytics counters based on event type
+async function updateDailyAnalytics(
+  supabase: ReturnType<typeof getSupabase>,
+  campaignId: string,
+  eventType: string,
+  timestamp: string
+) {
+  // Extract date from timestamp (YYYY-MM-DD)
+  const eventDate = timestamp.split("T")[0];
+
+  // Map event types to column increments
+  const columnMap: Record<string, string> = {
+    email_sent: "emails_sent",
+    email_opened: "emails_opened",
+    link_clicked: "emails_clicked",
+    reply_received: "emails_replied",
+    lead_interested: "positive_replies",
+    lead_meeting_booked: "positive_replies",
+    email_bounced: "emails_bounced",
+  };
+
+  const column = columnMap[eventType];
+  if (!column) return; // Event type doesn't affect daily stats
+
+  try {
+    // Try to increment existing record, or create new one
+    const { data: existing } = await supabase
+      .from("campaign_analytics_daily")
+      .select("id, " + column)
+      .eq("campaign_id", campaignId)
+      .eq("snapshot_date", eventDate)
+      .single();
+
+    if (existing) {
+      // Increment existing counter
+      const currentValue = (existing as Record<string, number>)[column] || 0;
+      await supabase
+        .from("campaign_analytics_daily")
+        .update({
+          [column]: currentValue + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id);
+    } else {
+      // Create new daily record
+      await supabase.from("campaign_analytics_daily").insert({
+        campaign_id: campaignId,
+        snapshot_date: eventDate,
+        [column]: 1,
+        updated_at: new Date().toISOString(),
+      });
+    }
+  } catch (err) {
+    console.error("[Webhook] Error updating daily analytics:", err);
+  }
+}
+
 // Instantly webhook event types (from Instantly API V2 docs)
 interface InstantlyWebhookPayload {
   // Base Fields (Always Present)
@@ -172,6 +229,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isEmailOpened = eventType === "email_opened";
     const isLinkClicked = eventType === "link_clicked";
     const isBounced = eventType === "email_bounced";
+
+    // Update daily analytics (real-time stats from webhooks)
+    await updateDailyAnalytics(
+      supabase,
+      campaignId,
+      eventType,
+      payload.timestamp || new Date().toISOString()
+    );
 
     // Get client_id from campaign for creating new leads
     const { data: campaignWithClient } = await supabase
