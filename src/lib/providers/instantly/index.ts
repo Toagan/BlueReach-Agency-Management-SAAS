@@ -789,4 +789,86 @@ export class InstantlyProvider implements EmailCampaignProvider {
 
     return mapping[eventType.toLowerCase()] || "unknown";
   }
+
+  // ============================================
+  // WEBHOOK MANAGEMENT
+  // ============================================
+
+  /**
+   * List webhooks configured for a specific campaign
+   * Returns webhooks that match the campaign ID
+   */
+  async listWebhooksForCampaign(campaignId: string): Promise<{
+    webhooks: Array<{
+      id: string;
+      url: string;
+      eventType: string;
+      isActive: boolean;
+    }>;
+    hasWebhook: boolean;
+  }> {
+    try {
+      const response = await this.client.get<{
+        items?: Array<{
+          id: string;
+          webhook_url: string;
+          event_type: string;
+          campaign?: string;
+          is_active?: boolean;
+        }>;
+      }>("/webhooks", {
+        campaign: campaignId,
+        limit: 50,
+      });
+
+      const items = response.items || [];
+      const webhooks = items.map((w) => ({
+        id: w.id,
+        url: w.webhook_url,
+        eventType: w.event_type,
+        isActive: w.is_active !== false,
+      }));
+
+      return {
+        webhooks,
+        hasWebhook: webhooks.length > 0,
+      };
+    } catch (error) {
+      console.error("[InstantlyProvider] Failed to list webhooks:", error);
+      // Return empty array on error (might be permissions issue)
+      return { webhooks: [], hasWebhook: false };
+    }
+  }
+
+  /**
+   * Check if a webhook is configured for a specific campaign and URL
+   */
+  async checkWebhookStatus(
+    campaignId: string,
+    expectedUrlSubstring: string
+  ): Promise<{
+    configured: boolean;
+    webhookUrl?: string;
+    eventTypes: string[];
+  }> {
+    const { webhooks } = await this.listWebhooksForCampaign(campaignId);
+
+    // Find webhooks that match the expected URL pattern
+    const matchingWebhooks = webhooks.filter(
+      (w) => w.url.includes(expectedUrlSubstring) && w.isActive
+    );
+
+    if (matchingWebhooks.length > 0) {
+      return {
+        configured: true,
+        webhookUrl: matchingWebhooks[0].url,
+        eventTypes: matchingWebhooks.map((w) => w.eventType),
+      };
+    }
+
+    return {
+      configured: false,
+      eventTypes: [],
+    };
+  }
 }

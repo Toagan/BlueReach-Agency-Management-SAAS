@@ -1532,8 +1532,47 @@ function CampaignCard({
   const [deletingFromInstantly, setDeletingFromInstantly] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [webhookStatus, setWebhookStatus] = useState<{
+    configured: boolean;
+    isCompleted: boolean;
+    loading: boolean;
+  }>({ configured: false, isCompleted: false, loading: true });
   const analytics = campaign.analytics;
   const hasAnalytics = analytics && analytics.emails_sent > 0;
+
+  // Check if campaign is completed (progress >= 99%)
+  const progress = analytics && analytics.leads_count > 0
+    ? (Math.min(analytics.contacted_count, analytics.leads_count) / analytics.leads_count) * 100
+    : 0;
+  const isCompleted = progress >= 99;
+
+  // Fetch webhook status for active campaigns (admin only)
+  useEffect(() => {
+    if (!isAdmin || isCompleted) {
+      setWebhookStatus({ configured: true, isCompleted, loading: false });
+      return;
+    }
+
+    const checkWebhook = async () => {
+      try {
+        const res = await fetch(`/api/campaigns/${campaign.id}/webhook-status`);
+        if (res.ok) {
+          const data = await res.json();
+          setWebhookStatus({
+            configured: data.configured || false,
+            isCompleted: data.isCompleted || false,
+            loading: false,
+          });
+        } else {
+          setWebhookStatus({ configured: false, isCompleted: false, loading: false });
+        }
+      } catch {
+        setWebhookStatus({ configured: false, isCompleted: false, loading: false });
+      }
+    };
+
+    checkWebhook();
+  }, [campaign.id, isAdmin, isCompleted]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -1774,6 +1813,17 @@ function CampaignCard({
           >
             <Webhook className="h-4 w-4" />
             <span>Webhook for Instantly</span>
+            {/* Webhook Status Indicator - only show for active campaigns */}
+            {!isCompleted && !webhookStatus.loading && (
+              <span
+                className={`inline-block w-2 h-2 rounded-full ${
+                  webhookStatus.configured
+                    ? "bg-green-500"
+                    : "bg-red-500 animate-pulse"
+                }`}
+                title={webhookStatus.configured ? "Webhook configured" : "Webhook not configured"}
+              />
+            )}
             {showWebhook ? (
               <ChevronUp className="h-3 w-3" />
             ) : (
