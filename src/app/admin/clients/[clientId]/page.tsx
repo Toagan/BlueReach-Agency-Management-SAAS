@@ -43,8 +43,12 @@ import {
   Webhook,
   Copy,
   Check,
+  Edit2,
+  X,
+  Rocket,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 
 interface CampaignAnalytics {
   emails_sent: number;
@@ -207,6 +211,19 @@ export default function ClientDashboardPage() {
   const [leadEmails, setLeadEmails] = useState<Record<string, LeadEmail[]>>({});
   const [loadingEmailsForLead, setLoadingEmailsForLead] = useState<string | null>(null);
   const [syncingEmailsForLead, setSyncingEmailsForLead] = useState<string | null>(null);
+
+  // Admin tool links state
+  const [toolLinks, setToolLinks] = useState<{
+    goalText: string;
+    clayUrl: string;
+    outboundUrl: string;
+  }>({
+    goalText: "",
+    clayUrl: "",
+    outboundUrl: "",
+  });
+  const [editingToolLinks, setEditingToolLinks] = useState(false);
+  const [savingToolLinks, setSavingToolLinks] = useState(false);
   const [syncingPositiveLeads, setSyncingPositiveLeads] = useState(false);
   const [syncPositiveResult, setSyncPositiveResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -431,6 +448,37 @@ export default function ClientDashboardPage() {
     }
   }, [clientId]);
 
+  // Fetch tool links from settings (admin only)
+  const fetchToolLinks = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/clients/${clientId}/tool-links`);
+      if (res.ok) {
+        const data = await res.json();
+        setToolLinks(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch tool links:", err);
+    }
+  }, [clientId]);
+
+  // Save tool links to settings
+  const saveToolLinks = async () => {
+    setSavingToolLinks(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/tool-links`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(toolLinks),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      setEditingToolLinks(false);
+    } catch (err) {
+      console.error("Failed to save tool links:", err);
+    } finally {
+      setSavingToolLinks(false);
+    }
+  };
+
   // Check if user is admin
   useEffect(() => {
     const checkUserRole = async () => {
@@ -460,6 +508,13 @@ export default function ClientDashboardPage() {
 
     return () => clearInterval(interval);
   }, [fetchClientData, fetchPositiveLeads]);
+
+  // Fetch tool links when admin is confirmed
+  useEffect(() => {
+    if (isAdmin) {
+      fetchToolLinks();
+    }
+  }, [isAdmin, fetchToolLinks]);
 
   if (loading && !client) {
     return (
@@ -726,6 +781,107 @@ export default function ClientDashboardPage() {
                       <MessageSquareText className="h-4 w-4 text-muted-foreground mt-0.5" />
                       <p className="text-sm text-muted-foreground">{client.notes}</p>
                     </div>
+                  </div>
+                )}
+
+                {/* Admin Tool Links Section */}
+                {isAdmin && (
+                  <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                    {editingToolLinks ? (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Goal / Target</label>
+                          <Input
+                            value={toolLinks.goalText}
+                            onChange={(e) => setToolLinks({ ...toolLinks, goalText: e.target.value })}
+                            placeholder="e.g., 2 pos. replies per day (~600 emails / day)"
+                            className="text-sm"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs text-muted-foreground mb-1 block">Clay URL</label>
+                            <Input
+                              value={toolLinks.clayUrl}
+                              onChange={(e) => setToolLinks({ ...toolLinks, clayUrl: e.target.value })}
+                              placeholder="https://app.clay.com/..."
+                              className="text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground mb-1 block">Outbound Tool URL</label>
+                            <Input
+                              value={toolLinks.outboundUrl}
+                              onChange={(e) => setToolLinks({ ...toolLinks, outboundUrl: e.target.value })}
+                              placeholder="https://app.instantly.ai/..."
+                              className="text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={saveToolLinks} disabled={savingToolLinks}>
+                            {savingToolLinks ? <RefreshCw className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}
+                            Save
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingToolLinks(false)}>
+                            <X className="h-3 w-3 mr-1" />
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-4">
+                        {toolLinks.goalText && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <Rocket className="h-4 w-4 text-amber-500" />
+                            <span className="text-muted-foreground">{toolLinks.goalText}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 ml-auto">
+                          {/* Clay Icon */}
+                          {toolLinks.clayUrl ? (
+                            <a
+                              href={toolLinks.clayUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-center w-8 h-8 rounded-lg bg-orange-100 dark:bg-orange-900/30 hover:bg-orange-200 dark:hover:bg-orange-900/50 transition-colors"
+                              title="Open in Clay"
+                            >
+                              <span className="text-lg">🧱</span>
+                            </a>
+                          ) : (
+                            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 opacity-50" title="Clay URL not set">
+                              <span className="text-lg">🧱</span>
+                            </div>
+                          )}
+                          {/* Outbound Email Icon */}
+                          {toolLinks.outboundUrl ? (
+                            <a
+                              href={toolLinks.outboundUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                              title="Open Outbound Tool"
+                            >
+                              <Send className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                            </a>
+                          ) : (
+                            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 opacity-50" title="Outbound URL not set">
+                              <Send className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          )}
+                          {/* Edit Button */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditingToolLinks(true)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Edit2 className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
