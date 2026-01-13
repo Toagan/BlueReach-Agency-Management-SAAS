@@ -158,10 +158,18 @@ async function getClientStats(
   let emailsSent = 0;
   let replies = 0;
 
-  if (dailyStats) {
+  if (dailyStats && dailyStats.length > 0) {
     for (const day of dailyStats) {
       emailsSent += day.emails_sent || 0;
       replies += day.emails_replied || 0;
+    }
+  } else {
+    // FALLBACK: If campaign_analytics_daily is empty, use cached values from campaigns
+    // This ensures reports work even before the daily analytics cron has run
+    console.log(`[Stats Report] No daily analytics data, falling back to cached campaign stats`);
+    for (const campaign of campaigns) {
+      emailsSent += campaign.cached_emails_sent || 0;
+      replies += campaign.cached_reply_count || 0;
     }
   }
 
