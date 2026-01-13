@@ -14,12 +14,21 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // POST - Backfill historical daily analytics from Instantly/Smartlead
 // Supports per-campaign API keys and single-campaign mode for large datasets
+// Optional date range parameters for chunked processing of large campaigns
 export async function POST(request: NextRequest) {
   try {
     const supabase = getSupabase();
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get("clientId");
     const singleCampaignId = searchParams.get("campaignId"); // Process just one campaign
+
+    // Optional date range for chunked processing (defaults to all-time if not provided)
+    const startDateParam = searchParams.get("startDate"); // Format: YYYY-MM-DD
+    const endDateParam = searchParams.get("endDate");     // Format: YYYY-MM-DD
+
+    // Use provided dates or default to wide range (backward compatible)
+    const startDate = startDateParam || "2020-01-01";
+    const endDate = endDateParam || "2030-12-31";
 
     // Get campaigns with provider integration (optionally filtered by client or single campaign)
     let query = supabase
@@ -52,7 +61,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    console.log(`[Backfill] Processing ${campaigns.length} campaigns`);
+    console.log(`[Backfill] Processing ${campaigns.length} campaigns for date range ${startDate} to ${endDate}`);
 
     let totalRecordsInserted = 0;
     let campaignsProcessed = 0;
@@ -85,11 +94,11 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Fetch ALL historical daily analytics (wide date range)
+        // Fetch daily analytics for the specified date range
         const dailyAnalytics = await provider.fetchDailyAnalytics(
           providerCampaignId!,
-          "2020-01-01",
-          "2030-12-31"
+          startDate,
+          endDate
         );
 
         if (!dailyAnalytics || dailyAnalytics.length === 0) {
@@ -166,7 +175,11 @@ export async function POST(request: NextRequest) {
       campaignsFailed,
       totalCampaigns: campaigns.length,
       recordsInserted: totalRecordsInserted,
-      dateRange: {
+      requestedDateRange: {
+        startDate,
+        endDate,
+      },
+      actualDateRange: {
         earliest: earliestDate,
         latest: latestDate,
       },
