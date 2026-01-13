@@ -12,21 +12,25 @@ function getSupabase() {
 // Helper to delay between API calls (rate limiting)
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// POST - Backfill historical daily analytics from Instantly
-// Supports per-campaign API keys
+// POST - Backfill historical daily analytics from Instantly/Smartlead
+// Supports per-campaign API keys and single-campaign mode for large datasets
 export async function POST(request: NextRequest) {
   try {
     const supabase = getSupabase();
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get("clientId");
+    const singleCampaignId = searchParams.get("campaignId"); // Process just one campaign
 
-    // Get campaigns with provider integration (optionally filtered by client)
+    // Get campaigns with provider integration (optionally filtered by client or single campaign)
     let query = supabase
       .from("campaigns")
       .select("id, name, provider_campaign_id, instantly_campaign_id, api_key_encrypted, client_id")
       .or("provider_campaign_id.not.is.null,instantly_campaign_id.not.is.null");
 
-    if (clientId) {
+    if (singleCampaignId) {
+      // Process just one campaign (useful for large Smartlead campaigns)
+      query = query.eq("id", singleCampaignId);
+    } else if (clientId) {
       query = query.eq("client_id", clientId);
     }
 
