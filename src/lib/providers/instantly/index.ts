@@ -515,12 +515,23 @@ export class InstantlyProvider implements EmailCampaignProvider {
   async fetchCampaignAnalytics(
     campaignId: string
   ): Promise<ProviderCampaignAnalytics> {
-    const response = await this.client.get<InstantlyAnalytics[]>(
+    // Instantly API v2 expects campaign_id parameter and returns { data: [...] }
+    const response = await this.client.get<{ data: InstantlyAnalytics[] } | InstantlyAnalytics[]>(
       "/campaigns/analytics",
-      { id: campaignId }
+      { campaign_id: campaignId }
     );
 
-    const analytics = Array.isArray(response) ? response[0] : null;
+    // Handle both { data: [...] } wrapper and direct array response
+    let analyticsArray: InstantlyAnalytics[];
+    if (Array.isArray(response)) {
+      analyticsArray = response;
+    } else if (response && typeof response === 'object' && 'data' in response) {
+      analyticsArray = response.data || [];
+    } else {
+      analyticsArray = [];
+    }
+
+    const analytics = analyticsArray[0] || null;
 
     if (!analytics) {
       throw new ProviderError(

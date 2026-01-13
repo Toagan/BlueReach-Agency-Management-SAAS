@@ -650,7 +650,7 @@ export default function ScrapingPage() {
                   </div>
 
                   {/* Domain Deduplication Option */}
-                  <div className="flex items-center space-x-2 pt-2">
+                  <div className="flex items-center space-x-2 pt-2 pb-2 border border-blue-500 rounded p-2 bg-blue-50 dark:bg-blue-950">
                     <Checkbox
                       id="dedupe-domains"
                       checked={dedupeDomains}

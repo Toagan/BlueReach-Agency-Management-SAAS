@@ -3,6 +3,7 @@ import io
 import csv
 import json
 import time
+import re
 import threading
 import requests
 from datetime import datetime
@@ -195,6 +196,10 @@ def save_lead_to_db(lead_data, search_term, country, bundesland=None, city=None)
             'address': lead_data.get('address'),
             'phone': lead_data.get('phoneNumber') or lead_data.get('phone'),
             'website': lead_data.get('website'),
+            'email': lead_data.get('email'),
+            'facebook': lead_data.get('facebook'),
+            'instagram': lead_data.get('instagram'),
+            'linkedin': lead_data.get('linkedin'),
             'rating': lead_data.get('rating'),
             'review_count': lead_data.get('reviewsCount') or lead_data.get('review_count'),
             'category': lead_data.get('category'),
@@ -236,6 +241,10 @@ def save_leads_batch(leads, search_term, country, bundesland=None):
             'address': lead.get('address'),
             'phone': lead.get('phoneNumber') or lead.get('phone'),
             'website': lead.get('website'),
+            'email': lead.get('email'),
+            'facebook': lead.get('facebook'),
+            'instagram': lead.get('instagram'),
+            'linkedin': lead.get('linkedin'),
             'rating': lead.get('rating'),
             'review_count': lead.get('reviewsCount') or lead.get('review_count'),
             'category': lead.get('category'),
@@ -503,6 +512,7 @@ job_status = {
 # CSV Header for exports - comprehensive fields for email outbound
 CSV_HEADERS = [
     'Search Term', 'City', 'Name', 'Address', 'Phone', 'Website',
+    'Email', 'Facebook', 'Instagram', 'LinkedIn',
     'Rating', 'Review Count', 'Category', 'Categories',
     'Business Lat', 'Business Lon', 'Place ID',
     'Opening Hours', 'Price Range', 'Description'
@@ -529,13 +539,24 @@ def extract_place_data(place, search_term, city_name):
     elif isinstance(hours, list):
         hours = '; '.join(hours)
 
+    # Extract website
+    website = place.get('website', '')
+
+    # Generate email from domain (fast, no scraping)
+    # Social media scraping is optional and disabled by default for speed
+    social_data = extract_social_and_email(website, scrape_website=False)
+
     return {
         'search_term': search_term,
         'city': city_name,
         'name': place.get('title', 'Unknown'),
         'address': place.get('address', ''),
         'phone': place.get('phoneNumber', place.get('phone', '')),
-        'website': place.get('website', ''),
+        'website': website,
+        'email': social_data['email'],
+        'facebook': social_data['facebook'],
+        'instagram': social_data['instagram'],
+        'linkedin': social_data['linkedin'],
         'rating': place.get('rating', ''),
         'review_count': place.get('ratingCount', place.get('reviews', place.get('reviewCount', ''))),
         'category': category,
@@ -617,6 +638,92 @@ def extract_root_domain(url):
         return None
 
 
+def extract_social_and_email(website_url, scrape_website=False):
+    """
+    Extract social media links and generate email from website.
+
+    Returns dict with: email, facebook, instagram, linkedin
+
+    If scrape_website=True, will fetch the website to find social links.
+    Otherwise, just generates email patterns from domain.
+    """
+    result = {
+        'email': '',
+        'facebook': '',
+        'instagram': '',
+        'linkedin': ''
+    }
+
+    if not website_url:
+        return result
+
+    # Extract domain for email generation
+    domain = extract_root_domain(website_url)
+    if domain:
+        # Generate common email patterns (German businesses often use these)
+        # We'll use info@ as it's most common for businesses
+        result['email'] = f"info@{domain}"
+
+    # If scraping is enabled, fetch the website to find social links
+    if scrape_website and website_url:
+        try:
+            # Add scheme if missing
+            url = website_url
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+
+            # Quick fetch with timeout
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            response = requests.get(url, headers=headers, timeout=5, allow_redirects=True)
+
+            if response.status_code == 200:
+                html = response.text.lower()
+
+                # Find Facebook
+                fb_patterns = [
+                    r'facebook\.com/([a-zA-Z0-9._-]+)',
+                    r'fb\.com/([a-zA-Z0-9._-]+)'
+                ]
+                for pattern in fb_patterns:
+                    match = re.search(pattern, html)
+                    if match:
+                        fb_handle = match.group(1)
+                        if fb_handle not in ['sharer', 'share', 'dialog', 'plugins']:
+                            result['facebook'] = f"https://facebook.com/{fb_handle}"
+                            break
+
+                # Find Instagram
+                ig_match = re.search(r'instagram\.com/([a-zA-Z0-9._-]+)', html)
+                if ig_match:
+                    ig_handle = ig_match.group(1)
+                    if ig_handle not in ['p', 'explore', 'accounts', 'stories']:
+                        result['instagram'] = f"https://instagram.com/{ig_handle}"
+
+                # Find LinkedIn
+                li_patterns = [
+                    r'linkedin\.com/company/([a-zA-Z0-9._-]+)',
+                    r'linkedin\.com/in/([a-zA-Z0-9._-]+)'
+                ]
+                for pattern in li_patterns:
+                    li_match = re.search(pattern, html)
+                    if li_match:
+                        result['linkedin'] = f"https://linkedin.com/{li_match.group(0).split('linkedin.com/')[1]}"
+                        break
+
+                # Try to find email on page (more specific than guessing)
+                email_match = re.search(r'[a-zA-Z0-9._%+-]+@' + re.escape(domain), html)
+                if email_match:
+                    result['email'] = email_match.group(0)
+
+        except Exception:
+            # If scraping fails, we still have the guessed email
+            pass
+
+    return result
+
+
 def write_place_to_csv(writer, place_data):
     """Write a place data dict to CSV."""
     writer.writerow([
@@ -626,6 +733,10 @@ def write_place_to_csv(writer, place_data):
         place_data['address'],
         place_data['phone'],
         place_data['website'],
+        place_data.get('email', ''),
+        place_data.get('facebook', ''),
+        place_data.get('instagram', ''),
+        place_data.get('linkedin', ''),
         place_data['rating'],
         place_data['review_count'],
         place_data['category'],
@@ -2534,6 +2645,10 @@ def api_db_export():
                 lead.get('address', ''),
                 lead.get('phone', ''),
                 lead.get('website', ''),
+                lead.get('email', ''),
+                lead.get('facebook', ''),
+                lead.get('instagram', ''),
+                lead.get('linkedin', ''),
                 lead.get('rating', ''),
                 lead.get('review_count', ''),
                 lead.get('category', ''),
