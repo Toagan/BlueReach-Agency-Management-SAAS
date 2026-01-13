@@ -15,7 +15,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-import { Plus, X, Copy, Check, Mail } from "lucide-react";
+import { Plus, X, Copy, Check, Mail, FlaskConical } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Invite {
   name: string;
@@ -34,6 +35,7 @@ export function AddClientDialog() {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"form" | "results">("form");
   const [name, setName] = useState("");
+  const [isDemo, setIsDemo] = useState(false);
   const [invites, setInvites] = useState<Invite[]>([{ name: "", email: "" }]);
   const [, startTransition] = useTransition();
   const [isCreating, setIsCreating] = useState(false);
@@ -70,6 +72,7 @@ export function AddClientDialog() {
 
   const resetForm = () => {
     setName("");
+    setIsDemo(false);
     setInvites([{ name: "", email: "" }]);
     setInviteResults([]);
     setStep("form");
@@ -91,7 +94,7 @@ export function AddClientDialog() {
       // Create the client
       const { data: newClient, error } = await supabase
         .from("clients")
-        .insert({ name: name.trim() })
+        .insert({ name: name.trim(), is_demo: isDemo })
         .select("id")
         .single();
 
@@ -186,6 +189,24 @@ export function AddClientDialog() {
                   placeholder="Acme Corporation"
                   className="mt-1"
                 />
+              </div>
+
+              {/* Demo Client Toggle */}
+              <div className="flex items-center space-x-3 p-3 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20">
+                <Checkbox
+                  id="is_demo"
+                  checked={isDemo}
+                  onCheckedChange={(checked) => setIsDemo(checked === true)}
+                />
+                <div className="flex-1">
+                  <Label htmlFor="is_demo" className="flex items-center gap-2 cursor-pointer">
+                    <FlaskConical className="h-4 w-4 text-purple-500" />
+                    Demo Account
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Mark as demo for prospect presentations (appears in Demo tab)
+                  </p>
+                </div>
               </div>
 
               {/* Invitations */}

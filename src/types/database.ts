@@ -36,6 +36,7 @@ export interface Client {
   tam?: number | null;
   target_daily_emails?: number | null;
   is_active?: boolean;
+  is_demo?: boolean;
   created_at: string;
 }
 

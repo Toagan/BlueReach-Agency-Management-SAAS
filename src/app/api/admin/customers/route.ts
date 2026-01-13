@@ -49,7 +49,8 @@ export async function GET() {
         id: client.id,
         name: client.name,
         logo_url: client.logo_url || null,
-        is_active: true, // All clients are active by default
+        is_active: client.is_active !== false, // Default to true if not set
+        is_demo: client.is_demo === true, // Default to false if not set
         created_at: client.created_at,
         campaigns_count: campaigns.length,
         total_leads: 0, // Will be populated from Instantly data if available

@@ -49,6 +49,7 @@ interface Customer {
   email?: string;
   logo_url?: string;
   is_active: boolean;
+  is_demo?: boolean;
   created_at: string;
   campaigns_count: number;
   total_leads: number;
@@ -57,7 +58,7 @@ interface Customer {
 }
 
 type TabType = "customers" | "leads";
-type CustomerFilter = "active" | "archived";
+type CustomerFilter = "active" | "archived" | "demo";
 type TimeRange = "all_time" | "this_week" | "this_month" | "this_quarter";
 
 export default function AdminCommandCenter() {
@@ -130,8 +131,14 @@ export default function AdminCommandCenter() {
   }, [fetchData, timeRange]);
 
   const filteredCustomers = customers.filter((customer) => {
-    const matchesFilter =
-      customerFilter === "active" ? customer.is_active !== false : customer.is_active === false;
+    let matchesFilter = false;
+    if (customerFilter === "active") {
+      matchesFilter = customer.is_active !== false && !customer.is_demo;
+    } else if (customerFilter === "archived") {
+      matchesFilter = customer.is_active === false && !customer.is_demo;
+    } else if (customerFilter === "demo") {
+      matchesFilter = customer.is_demo === true;
+    }
     const matchesSearch = customer.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFilter && matchesSearch;
   });
@@ -303,7 +310,7 @@ export default function AdminCommandCenter() {
                     : "bg-muted text-muted-foreground hover:bg-accent"
                 }`}
               >
-                Active Customers ({customers.filter((c) => c.is_active !== false).length})
+                Active Customers ({customers.filter((c) => c.is_active !== false && !c.is_demo).length})
               </button>
               <button
                 onClick={() => setCustomerFilter("archived")}
@@ -313,7 +320,17 @@ export default function AdminCommandCenter() {
                     : "bg-muted text-muted-foreground hover:bg-accent"
                 }`}
               >
-                Archived ({customers.filter((c) => c.is_active === false).length})
+                Archived ({customers.filter((c) => c.is_active === false && !c.is_demo).length})
+              </button>
+              <button
+                onClick={() => setCustomerFilter("demo")}
+                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                  customerFilter === "demo"
+                    ? "bg-purple-600 text-white"
+                    : "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50"
+                }`}
+              >
+                Demo ({customers.filter((c) => c.is_demo === true).length})
               </button>
             </div>
 
