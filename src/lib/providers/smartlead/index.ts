@@ -1068,46 +1068,163 @@ export class SmartleadProvider implements EmailCampaignProvider {
     startDate: string,
     endDate: string
   ): Promise<ProviderDailyAnalytics[]> {
-    // Smartlead may have a different endpoint for daily analytics
-    // For now, return empty array as daily breakdown may need custom implementation
+    // Smartlead doesn't have a /analytics/daily endpoint, but we can aggregate
+    // from the /statistics endpoint which has per-email timestamps
     console.log(
-      `[SmartleadProvider] Daily analytics for ${campaignId} from ${startDate} to ${endDate}`
+      `[SmartleadProvider] Aggregating daily analytics for ${campaignId} from ${startDate} to ${endDate}`
     );
 
     try {
-      interface DailyStats {
-        date: string;
+      // Aggregate daily stats from the /statistics endpoint
+      const dailyMap = new Map<string, {
         sent: number;
         opened: number;
-        unique_opened: number;
+        openedLeads: Set<string>; // Track unique opens
         replied: number;
-        unique_replied: number;
+        repliedLeads: Set<string>; // Track unique replies
         clicked: number;
-        unique_clicked: number;
-        bounced?: number;
+        clickedLeads: Set<string>; // Track unique clicks
+        bounced: number;
+      }>();
+
+      const limit = 100;
+      let offset = 0;
+      let hasMore = true;
+      let totalFetched = 0;
+
+      while (hasMore) {
+        const response = await this.client.get<SmartleadStatisticsResponse>(
+          `/campaigns/${campaignId}/statistics`,
+          { limit, offset }
+        );
+
+        if (!response.data || response.data.length === 0) {
+          break;
+        }
+
+        for (const stat of response.data) {
+          // Process sent_time
+          if (stat.sent_time) {
+            const date = stat.sent_time.split("T")[0]; // Extract YYYY-MM-DD
+            if (date >= startDate && date <= endDate) {
+              if (!dailyMap.has(date)) {
+                dailyMap.set(date, {
+                  sent: 0,
+                  opened: 0,
+                  openedLeads: new Set(),
+                  replied: 0,
+                  repliedLeads: new Set(),
+                  clicked: 0,
+                  clickedLeads: new Set(),
+                  bounced: 0,
+                });
+              }
+              const day = dailyMap.get(date)!;
+              day.sent += 1; // Each row = one email sent
+              if (stat.is_bounced) {
+                day.bounced += 1;
+              }
+            }
+          }
+
+          // Process open_time (use open date, not sent date)
+          if (stat.open_time && stat.open_count > 0) {
+            const openDate = stat.open_time.split("T")[0];
+            if (openDate >= startDate && openDate <= endDate) {
+              if (!dailyMap.has(openDate)) {
+                dailyMap.set(openDate, {
+                  sent: 0,
+                  opened: 0,
+                  openedLeads: new Set(),
+                  replied: 0,
+                  repliedLeads: new Set(),
+                  clicked: 0,
+                  clickedLeads: new Set(),
+                  bounced: 0,
+                });
+              }
+              const day = dailyMap.get(openDate)!;
+              day.opened += stat.open_count;
+              day.openedLeads.add(stat.lead_email);
+            }
+          }
+
+          // Process click_time
+          if (stat.click_time && stat.click_count > 0) {
+            const clickDate = stat.click_time.split("T")[0];
+            if (clickDate >= startDate && clickDate <= endDate) {
+              if (!dailyMap.has(clickDate)) {
+                dailyMap.set(clickDate, {
+                  sent: 0,
+                  opened: 0,
+                  openedLeads: new Set(),
+                  replied: 0,
+                  repliedLeads: new Set(),
+                  clicked: 0,
+                  clickedLeads: new Set(),
+                  bounced: 0,
+                });
+              }
+              const day = dailyMap.get(clickDate)!;
+              day.clicked += stat.click_count;
+              day.clickedLeads.add(stat.lead_email);
+            }
+          }
+
+          // Process reply_time
+          if (stat.reply_time) {
+            const replyDate = stat.reply_time.split("T")[0];
+            if (replyDate >= startDate && replyDate <= endDate) {
+              if (!dailyMap.has(replyDate)) {
+                dailyMap.set(replyDate, {
+                  sent: 0,
+                  opened: 0,
+                  openedLeads: new Set(),
+                  replied: 0,
+                  repliedLeads: new Set(),
+                  clicked: 0,
+                  clickedLeads: new Set(),
+                  bounced: 0,
+                });
+              }
+              const day = dailyMap.get(replyDate)!;
+              day.replied += 1;
+              day.repliedLeads.add(stat.lead_email);
+            }
+          }
+        }
+
+        totalFetched += response.data.length;
+        offset += limit;
+        hasMore = response.data.length === limit;
+
+        // Progress logging
+        if (totalFetched % 500 === 0) {
+          console.log(`[SmartleadProvider] Processed ${totalFetched} statistics records for daily analytics...`);
+        }
       }
 
-      const response = await this.client.get<DailyStats[]>(
-        `/campaigns/${campaignId}/analytics/daily`,
-        {
-          start_date: startDate,
-          end_date: endDate,
-        }
-      );
+      console.log(`[SmartleadProvider] Aggregated ${dailyMap.size} days from ${totalFetched} statistics records`);
 
-      return response.map((day) => ({
-        date: day.date,
-        sent: day.sent,
-        opened: day.opened,
-        uniqueOpened: day.unique_opened,
-        replied: day.replied,
-        uniqueReplied: day.unique_replied,
-        clicked: day.clicked,
-        uniqueClicked: day.unique_clicked,
-        bounced: day.bounced,
-      }));
-    } catch {
-      // Daily analytics may not be available
+      // Convert map to array sorted by date
+      const result: ProviderDailyAnalytics[] = [];
+      for (const [date, day] of dailyMap.entries()) {
+        result.push({
+          date,
+          sent: day.sent,
+          opened: day.opened,
+          uniqueOpened: day.openedLeads.size,
+          replied: day.replied,
+          uniqueReplied: day.repliedLeads.size,
+          clicked: day.clicked,
+          uniqueClicked: day.clickedLeads.size,
+          bounced: day.bounced,
+        });
+      }
+
+      return result.sort((a, b) => a.date.localeCompare(b.date));
+    } catch (error) {
+      console.error(`[SmartleadProvider] Error fetching daily analytics:`, error);
       return [];
     }
   }

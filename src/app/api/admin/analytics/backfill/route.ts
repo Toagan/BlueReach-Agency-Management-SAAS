@@ -74,8 +74,8 @@ export async function POST(request: NextRequest) {
         // Get provider for this campaign (uses per-campaign API key)
         const provider = await getProviderForCampaign(campaign.id);
 
-        // Only process Instantly campaigns with daily analytics support
-        if (provider.providerType !== "instantly" || !provider.fetchDailyAnalytics) {
+        // Only process campaigns with daily analytics support (Instantly, Smartlead)
+        if (!provider.fetchDailyAnalytics) {
           console.log(`[Backfill] Skipping ${campaign.name} - provider doesn't support daily analytics`);
           campaignsSkipped++;
           continue;
