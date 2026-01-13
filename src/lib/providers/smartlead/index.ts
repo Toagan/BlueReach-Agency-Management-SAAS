@@ -77,7 +77,9 @@ interface SmartleadLead {
   updated_at?: string;
   // Campaign-specific mapping
   campaign_lead_map_id?: number;
-  // Custom fields are included as additional properties
+  // Custom fields from Smartlead (personalization variables)
+  custom_fields?: Record<string, unknown>;
+  // Custom fields are also included as additional properties
   [key: string]: unknown;
 }
 
@@ -919,14 +921,38 @@ export class SmartleadProvider implements EmailCampaignProvider {
       "created_at",
       "updated_at",
       "campaign_lead_map_id",
+      "custom_fields", // Smartlead stores custom fields in this nested object
+      "unsubscribed_client_id_map",
     ];
 
-    const customFields: Record<string, string> = {};
+    // Store ALL raw Smartlead data for export
+    const rawLeadData: Record<string, unknown> = {};
     Object.entries(lead).forEach(([key, value]) => {
-      if (!standardFields.includes(key) && typeof value === "string") {
-        customFields[key] = value;
+      // Skip internal/system fields, keep everything else
+      if (!["is_unsubscribed", "unsubscribed_client_id_map", "campaign_lead_map_id"].includes(key)) {
+        rawLeadData[key] = value;
       }
     });
+
+    // Also flatten custom_fields into rawLeadData for easy export
+    const smartleadCustomFields = lead.custom_fields as Record<string, unknown> | undefined;
+    if (smartleadCustomFields && typeof smartleadCustomFields === "object") {
+      Object.entries(smartleadCustomFields).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          rawLeadData[`custom_${key}`] = value;
+        }
+      });
+    }
+
+    // Legacy: also build customFields for backwards compatibility
+    const customFields: Record<string, string> = {};
+    if (smartleadCustomFields && typeof smartleadCustomFields === "object") {
+      Object.entries(smartleadCustomFields).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          customFields[key] = String(value);
+        }
+      });
+    }
 
     // Determine interest status from is_interested boolean OR category
     let interestStatus = this.mapLeadCategory(lead.category);
@@ -956,6 +982,8 @@ export class SmartleadProvider implements EmailCampaignProvider {
       updatedAt: lead.updated_at,
       customFields:
         Object.keys(customFields).length > 0 ? customFields : undefined,
+      // Store ALL raw Smartlead data for exact export
+      rawData: rawLeadData,
     };
   }
 

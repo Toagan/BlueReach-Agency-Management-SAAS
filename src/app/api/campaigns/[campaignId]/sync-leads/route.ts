@@ -244,9 +244,16 @@ export async function POST(
         }
       }
 
-      // Store custom fields in metadata
+      // Store raw provider data and custom fields in metadata
+      const metadataObj: Record<string, unknown> = {};
       if (lead.customFields && Object.keys(lead.customFields).length > 0) {
-        leadData.metadata = { customFields: lead.customFields };
+        metadataObj.customFields = lead.customFields;
+      }
+      if (lead.rawData && Object.keys(lead.rawData).length > 0) {
+        metadataObj.rawData = lead.rawData;
+      }
+      if (Object.keys(metadataObj).length > 0) {
+        leadData.metadata = metadataObj;
       }
 
       // ID Backfill: Log when we're healing data

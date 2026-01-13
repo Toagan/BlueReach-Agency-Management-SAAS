@@ -69,6 +69,8 @@ export interface ProviderLead {
   emailOpenCount?: number;
   emailClickCount?: number;
   emailReplyCount?: number;
+  // Raw provider data for export (stores all original fields)
+  rawData?: Record<string, unknown>;
 }
 
 export interface ProviderLeadCreatePayload {

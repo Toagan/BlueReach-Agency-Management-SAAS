@@ -110,72 +110,88 @@ export async function GET(
       .eq("id", campaignId)
       .single();
 
-    // Build CSV
+    // Build CSV - export raw provider data exactly as stored
     const csvRows: string[] = [];
 
-    // Define headers - all relevant lead fields
-    const headers = [
-      "Email",
-      "First Name",
-      "Last Name",
-      "Company",
-      "Company Domain",
-      "Phone",
-      "LinkedIn URL",
-      "Status",
-      "Is Positive Reply",
-      "Has Replied",
-      "Email Opens",
-      "Email Clicks",
-      "Email Replies",
-      "Responded At",
-      "Meeting At",
-      "Closed At",
-      "Deal Value",
-      "Notes",
-      "Created At",
-      "Updated At",
-      "Custom Fields",
-    ];
+    // Collect ALL unique keys from rawData across all leads
+    const allRawDataKeys = new Set<string>();
+    for (const lead of leads) {
+      const rawData = lead.metadata?.rawData || {};
+      Object.keys(rawData).forEach((key) => {
+        // Skip nested objects like custom_fields (we flatten those separately)
+        if (typeof rawData[key] !== "object" || rawData[key] === null) {
+          allRawDataKeys.add(key);
+        }
+      });
+      // Also add flattened custom fields
+      const customFields = lead.metadata?.customFields || {};
+      Object.keys(customFields).forEach((key) => allRawDataKeys.add(`custom_${key}`));
+    }
+
+    // If no rawData exists, fall back to standard fields
+    const hasRawData = allRawDataKeys.size > 0;
+
+    let headers: string[];
+    if (hasRawData) {
+      // Use raw Smartlead field names exactly as they are
+      headers = Array.from(allRawDataKeys).sort();
+    } else {
+      // Fallback to standard export if no rawData
+      headers = [
+        "email",
+        "first_name",
+        "last_name",
+        "company_name",
+        "phone",
+        "linkedin_url",
+        "status",
+        "is_positive_reply",
+        "has_replied",
+      ];
+    }
 
     csvRows.push(headers.join(","));
 
     // Add data rows
     for (const lead of leads) {
-      // Extract custom fields from metadata
-      const customFields = lead.metadata?.customFields || lead.metadata?.lead_data || {};
-      const customFieldsStr = Object.entries(customFields)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join("; ");
+      if (hasRawData) {
+        // Export raw provider data exactly
+        const rawData = lead.metadata?.rawData || {};
+        const customFields = lead.metadata?.customFields || {};
 
-      const row = [
-        escapeCSV(lead.email),
-        escapeCSV(lead.first_name),
-        escapeCSV(lead.last_name),
-        escapeCSV(lead.company_name),
-        escapeCSV(lead.company_domain),
-        escapeCSV(lead.phone),
-        escapeCSV(lead.linkedin_url),
-        escapeCSV(lead.status),
-        lead.is_positive_reply ? "Yes" : "No",
-        lead.has_replied ? "Yes" : "No",
-        lead.email_open_count || 0,
-        lead.email_click_count || 0,
-        lead.email_reply_count || 0,
-        escapeCSV(formatDate(lead.responded_at)),
-        escapeCSV(formatDate(lead.meeting_at)),
-        escapeCSV(formatDate(lead.closed_at)),
-        lead.deal_value || "",
-        escapeCSV(lead.notes),
-        escapeCSV(formatDate(lead.created_at)),
-        escapeCSV(formatDate(lead.updated_at)),
-        escapeCSV(customFieldsStr),
-      ];
+        // Merge custom fields with custom_ prefix
+        const mergedData: Record<string, unknown> = { ...rawData };
+        Object.entries(customFields).forEach(([key, value]) => {
+          mergedData[`custom_${key}`] = value;
+        });
 
-      csvRows.push(row.join(","));
+        const row = headers.map((key) => {
+          const value = mergedData[key];
+          if (value === null || value === undefined) return "";
+          if (typeof value === "object") return escapeCSV(JSON.stringify(value));
+          return escapeCSV(String(value));
+        });
+        csvRows.push(row.join(","));
+      } else {
+        // Fallback row
+        const row = [
+          escapeCSV(lead.email),
+          escapeCSV(lead.first_name),
+          escapeCSV(lead.last_name),
+          escapeCSV(lead.company_name),
+          escapeCSV(lead.phone),
+          escapeCSV(lead.linkedin_url),
+          escapeCSV(lead.status),
+          lead.is_positive_reply ? "Yes" : "No",
+          lead.has_replied ? "Yes" : "No",
+        ];
+        csvRows.push(row.join(","));
+      }
     }
 
-    const csvContent = csvRows.join("\n");
+    // Add UTF-8 BOM for better compatibility with Excel and other tools
+    const BOM = "\uFEFF";
+    const csvContent = BOM + csvRows.join("\n");
 
     // Generate filename
     const campaignName = campaign?.name || "campaign";
