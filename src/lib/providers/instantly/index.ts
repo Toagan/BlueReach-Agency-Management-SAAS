@@ -808,25 +808,46 @@ export class InstantlyProvider implements EmailCampaignProvider {
     hasWebhook: boolean;
   }> {
     try {
+      // First try to get webhooks filtered by campaign
       const response = await this.client.get<{
         items?: Array<{
           id: string;
-          webhook_url: string;
-          event_type: string;
+          webhook_url?: string;
+          url?: string;
+          event_type?: string;
+          eventType?: string;
           campaign?: string;
           is_active?: boolean;
+          active?: boolean;
+        }>;
+        data?: Array<{
+          id: string;
+          webhook_url?: string;
+          url?: string;
+          event_type?: string;
+          eventType?: string;
+          campaign?: string;
+          is_active?: boolean;
+          active?: boolean;
         }>;
       }>("/webhooks", {
         campaign: campaignId,
         limit: 50,
       });
 
-      const items = response.items || [];
+      // Handle both items and data response formats
+      const items = response.items || response.data || [];
+
+      console.log(`[InstantlyProvider] Webhooks API returned ${items.length} webhooks for campaign ${campaignId}`);
+
       const webhooks = items.map((w) => ({
-        id: w.id,
-        url: w.webhook_url,
-        eventType: w.event_type,
-        isActive: w.is_active !== false,
+        id: w.id || "",
+        // Handle different URL field names
+        url: w.webhook_url || w.url || "",
+        // Handle different event_type field names
+        eventType: w.event_type || w.eventType || "unknown",
+        // Handle different active field names
+        isActive: (w.is_active !== false) && (w.active !== false),
       }));
 
       return {
@@ -855,7 +876,7 @@ export class InstantlyProvider implements EmailCampaignProvider {
 
     // Find webhooks that match the expected URL pattern
     const matchingWebhooks = webhooks.filter(
-      (w) => w.url.includes(expectedUrlSubstring) && w.isActive
+      (w) => w.url && w.url.includes(expectedUrlSubstring) && w.isActive
     );
 
     if (matchingWebhooks.length > 0) {
