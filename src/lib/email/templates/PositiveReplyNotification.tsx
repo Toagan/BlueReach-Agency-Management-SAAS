@@ -16,6 +16,7 @@ export interface PositiveReplyNotificationProps {
   recipientName: string;
   leadEmail: string;
   leadName?: string;
+  leadPhone?: string;
   companyName?: string;
   campaignName: string;
   clientName: string;
@@ -27,6 +28,7 @@ export const PositiveReplyNotification = ({
   recipientName = "there",
   leadEmail = "lead@example.com",
   leadName,
+  leadPhone,
   companyName,
   campaignName = "Campaign",
   clientName = "Client",
@@ -77,6 +79,12 @@ export const PositiveReplyNotification = ({
                     <strong>{leadName || "—"}</strong>
                     <br />
                     <span style={leadEmailStyle}>{leadEmail}</span>
+                    {leadPhone && (
+                      <>
+                        <br />
+                        <span style={leadPhoneStyle}>📞 {leadPhone}</span>
+                      </>
+                    )}
                   </td>
                 </tr>
                 {companyName && (
@@ -150,6 +158,7 @@ A lead from ${props.clientName} just expressed interest.
 LEAD DETAILS:
 • Name: ${props.leadName || "—"}
 • Email: ${props.leadEmail}
+${props.leadPhone ? `• Phone: ${props.leadPhone}` : ""}
 ${props.companyName ? `• Company: ${props.companyName}` : ""}
 • Campaign: ${props.campaignName}
 • Client: ${props.clientName}
@@ -291,6 +300,12 @@ const leadValueCell = {
 const leadEmailStyle = {
   fontSize: "13px",
   color: colors.gray500,
+};
+
+const leadPhoneStyle = {
+  fontSize: "13px",
+  color: colors.green,
+  fontWeight: "500" as const,
 };
 
 const replyBox = {

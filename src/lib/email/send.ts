@@ -165,6 +165,7 @@ export async function sendInvitationEmail(
 export interface SendPositiveReplyNotificationParams {
   leadEmail: string;
   leadName?: string;
+  leadPhone?: string;
   companyName?: string;
   campaignName: string;
   clientId: string;
@@ -252,6 +253,7 @@ export async function sendPositiveReplyNotification(
       recipientName: recipient.name,
       leadEmail: params.leadEmail,
       leadName: params.leadName,
+      leadPhone: params.leadPhone,
       companyName: params.companyName,
       campaignName: params.campaignName,
       clientName: params.clientName,

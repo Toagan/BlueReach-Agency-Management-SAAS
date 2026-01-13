@@ -486,6 +486,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         const notificationResult = await sendPositiveReplyNotification({
           leadEmail,
           leadName,
+          leadPhone: leadDetails?.phone || undefined,
           companyName: leadDetails?.company_name || undefined,
           campaignName: campaign.name,
           clientId,

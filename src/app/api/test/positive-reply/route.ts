@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     recipientName: "Tilman",
     leadEmail: "max.mustermann@autohaus-example.de",
     leadName: "Max Mustermann",
+    leadPhone: "+49 911 123 4567",
     companyName: "Autohaus Mustermann GmbH",
     campaignName: "Autohaus, Nürnberg (200km Radius)",
     clientName: "Digital Bude",
