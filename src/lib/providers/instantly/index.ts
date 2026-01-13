@@ -531,7 +531,21 @@ export class InstantlyProvider implements EmailCampaignProvider {
       analyticsArray = [];
     }
 
-    const analytics = analyticsArray[0] || null;
+    // IMPORTANT: Find the specific campaign by ID, don't just take the first one!
+    // The API might return multiple campaigns even when filtering by campaign_id
+    let analytics = analyticsArray.find(a => a.campaign_id === campaignId) || null;
+
+    // If not found by exact match, try the first one only if there's exactly one result
+    if (!analytics && analyticsArray.length === 1) {
+      analytics = analyticsArray[0];
+      console.log(`[InstantlyProvider] Using single result for campaign ${campaignId}`);
+    }
+
+    // Log for debugging
+    if (analyticsArray.length > 1) {
+      console.log(`[InstantlyProvider] WARNING: Got ${analyticsArray.length} campaigns in analytics response for ${campaignId}`);
+      console.log(`[InstantlyProvider] Campaign IDs in response: ${analyticsArray.map(a => a.campaign_id).join(', ')}`);
+    }
 
     if (!analytics) {
       throw new ProviderError(
