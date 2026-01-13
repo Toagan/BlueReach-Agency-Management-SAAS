@@ -55,6 +55,7 @@ export interface Campaign {
   api_key_encrypted: string | null;
   api_key_label: string | null;
   webhook_secret: string | null;
+  webhook_configured: boolean | null;
   last_lead_sync_at: string | null;
 }
 

@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Get campaign details
     const { data: campaign, error } = await supabase
       .from("campaigns")
-      .select("id, name, instantly_campaign_id, provider_campaign_id, provider_type, is_active, cached_contacted_count, cached_leads_count")
+      .select("id, name, instantly_campaign_id, provider_campaign_id, provider_type, is_active, cached_contacted_count, cached_leads_count, webhook_configured")
       .eq("id", campaignId)
       .single();
 
@@ -55,6 +55,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         configured: true, // Show as OK for completed campaigns
         isCompleted: true,
         reason: "Campaign completed",
+      });
+    }
+
+    // If webhook_configured is manually set to true, trust that
+    if (campaign.webhook_configured === true) {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bluereach-agency-management-saas-production.up.railway.app";
+      return NextResponse.json({
+        configured: true,
+        reason: "Manually confirmed",
+        expectedUrl: `${baseUrl}/api/webhooks/instantly/${campaignId}`,
+        alternativeUrl: `${baseUrl}/api/webhooks/instantly`,
+        isCompleted,
+        isActive: campaign.is_active,
       });
     }
 

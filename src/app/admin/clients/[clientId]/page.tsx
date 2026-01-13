@@ -1879,6 +1879,49 @@ function CampaignCard({
               </p>
             </div>
 
+            {/* Mark webhook as configured button */}
+            {isAdmin && !webhookStatus.loading && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={webhookStatus.configured ? "outline" : "default"}
+                  size="sm"
+                  onClick={async () => {
+                    const newStatus = !webhookStatus.configured;
+                    try {
+                      const res = await fetch(`/api/campaigns/${campaign.id}/webhook-configured`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ configured: newStatus }),
+                      });
+                      if (res.ok) {
+                        setWebhookStatus(prev => ({ ...prev, configured: newStatus }));
+                      }
+                    } catch (e) {
+                      console.error("Failed to update webhook status:", e);
+                    }
+                  }}
+                  className={webhookStatus.configured ? "text-green-600 border-green-200" : ""}
+                >
+                  {webhookStatus.configured ? (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Webhook Configured
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4 mr-2" />
+                      Mark as Configured
+                    </>
+                  )}
+                </Button>
+                {!webhookStatus.configured && (
+                  <span className="text-xs text-muted-foreground">
+                    Click after setting up in Instantly
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Delete from Instantly - Admin Only */}
             {isAdmin && campaign.instantly_campaign_id && (
               <div className="mt-4 pt-4 border-t border-border">
