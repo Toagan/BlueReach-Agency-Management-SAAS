@@ -147,13 +147,16 @@ export async function GET(request: NextRequest) {
         dataSource = "leads_fallback";
       }
     } else {
-      // ALL-TIME: Use campaigns.cached_* for accurate totals
-      const [repliesResult, positiveResult, campaignsResult] = await Promise.all([
+      // ALL-TIME: Use campaigns.cached_* for email stats, leads table for lead counts
+      const [leadsCountResult, repliesResult, positiveResult, campaignsResult] = await Promise.all([
+        // Count actual leads in the database (source of truth for leads contacted)
+        supabase.from("leads").select("*", { count: "exact", head: true }),
         supabase.from("leads").select("*", { count: "exact", head: true }).eq("has_replied", true),
         supabase.from("leads").select("*", { count: "exact", head: true }).eq("is_positive_reply", true),
-        supabase.from("campaigns").select("cached_emails_sent, cached_emails_opened, cached_emails_bounced, cached_contacted_count, cached_leads_count"),
+        supabase.from("campaigns").select("cached_emails_sent, cached_emails_opened, cached_emails_bounced"),
       ]);
 
+      leadsContacted = leadsCountResult.count || 0;
       replies = repliesResult.count || 0;
       opportunities = positiveResult.count || 0;
 
@@ -168,19 +171,6 @@ export async function GET(request: NextRequest) {
         );
         bounced = campaignsResult.data.reduce(
           (sum: number, c: { cached_emails_bounced: number | null }) => sum + (c.cached_emails_bounced || 0),
-          0
-        );
-        // Use cached_leads_count (total leads imported) not cached_contacted_count (emails sent)
-        // Leads Contacted should represent unique leads that received at least one email
-        // For now, use the minimum of cached_leads_count and cached_emails_sent to be conservative
-        leadsContacted = campaignsResult.data.reduce(
-          (sum: number, c: { cached_leads_count: number | null; cached_emails_sent: number | null }) => {
-            const leads = c.cached_leads_count || 0;
-            const sent = c.cached_emails_sent || 0;
-            // A lead is "contacted" if they received at least one email
-            // Since we don't track unique contacted leads, use leads count but cap at emails sent
-            return sum + Math.min(leads, sent);
-          },
           0
         );
       }
