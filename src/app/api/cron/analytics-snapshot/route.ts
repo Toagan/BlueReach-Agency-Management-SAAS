@@ -94,8 +94,8 @@ async function handleSnapshot(request: NextRequest) {
         // Get provider for this campaign (uses per-campaign API key)
         const provider = await getProviderForCampaign(campaign.id);
 
-        // Only process Instantly campaigns with daily analytics support
-        if (provider.providerType !== "instantly" || !provider.fetchDailyAnalytics) {
+        // Only process campaigns with daily analytics support (Instantly, Smartlead)
+        if (!provider.fetchDailyAnalytics) {
           campaignsSkipped++;
           continue;
         }
