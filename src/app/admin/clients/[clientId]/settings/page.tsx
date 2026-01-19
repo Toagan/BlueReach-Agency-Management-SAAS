@@ -125,6 +125,14 @@ export default function ClientSettingsPage() {
   const [sendingDemoStatsReport, setSendingDemoStatsReport] = useState(false);
   const [demoEmailRecipient, setDemoEmailRecipient] = useState("");
 
+  // HubSpot backfill state
+  const [runningBackfill, setRunningBackfill] = useState(false);
+  const [backfillPreview, setBackfillPreview] = useState<{
+    positiveReplies: number;
+    leads: Array<{ email: string; campaign: string; vertical: string | null }>;
+  } | null>(null);
+  const [loadingBackfillPreview, setLoadingBackfillPreview] = useState(false);
+
   const fetchNotificationPreferences = async () => {
     setLoadingNotifications(true);
     try {
@@ -326,6 +334,54 @@ export default function ClientSettingsPage() {
       setError("Failed to test HubSpot sync");
     } finally {
       setTestingHubspot(false);
+    }
+  };
+
+  const fetchBackfillPreview = async () => {
+    setLoadingBackfillPreview(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/hubspot-backfill`);
+      const data = await res.json();
+      if (res.ok) {
+        setBackfillPreview({
+          positiveReplies: data.positiveReplies || 0,
+          leads: data.leads || [],
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching backfill preview:", error);
+    } finally {
+      setLoadingBackfillPreview(false);
+    }
+  };
+
+  const runHubspotBackfill = async () => {
+    if (!confirm(`This will sync ${backfillPreview?.positiveReplies || 0} positive replies to HubSpot. Continue?`)) {
+      return;
+    }
+
+    setRunningBackfill(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/hubspot-backfill`, {
+        method: "POST",
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setSuccess(`Backfill complete: ${data.synced} synced, ${data.skipped} skipped, ${data.failed} failed`);
+        fetchHubspotSettings(); // Refresh sync count
+        setBackfillPreview(null); // Clear preview
+        setTimeout(() => setSuccess(null), 10000);
+      } else {
+        setError(data.error || "Failed to run backfill");
+      }
+    } catch (error) {
+      console.error("Error running HubSpot backfill:", error);
+      setError("Failed to run HubSpot backfill");
+    } finally {
+      setRunningBackfill(false);
     }
   };
 
@@ -1396,6 +1452,84 @@ export default function ClientSettingsPage() {
                       )}
                       Test Now
                     </Button>
+                  </div>
+
+                  {/* Backfill Section */}
+                  <div className="pt-4 border-t space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Backfill Historical Data</p>
+                        <p className="text-xs text-muted-foreground">
+                          Sync all existing positive replies to HubSpot
+                        </p>
+                      </div>
+                      {!backfillPreview ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={fetchBackfillPreview}
+                          disabled={loadingBackfillPreview || !hubspotEnabled}
+                        >
+                          {loadingBackfillPreview ? (
+                            <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <BarChart3 className="h-4 w-4 mr-2" />
+                          )}
+                          Preview
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={runHubspotBackfill}
+                          disabled={runningBackfill || !hubspotEnabled || backfillPreview.positiveReplies === 0}
+                        >
+                          {runningBackfill ? (
+                            <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Zap className="h-4 w-4 mr-2" />
+                          )}
+                          Sync {backfillPreview.positiveReplies} Leads
+                        </Button>
+                      )}
+                    </div>
+
+                    {backfillPreview && backfillPreview.positiveReplies > 0 && (
+                      <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Found {backfillPreview.positiveReplies} positive replies to sync:
+                        </p>
+                        <div className="max-h-32 overflow-y-auto space-y-1">
+                          {backfillPreview.leads.slice(0, 10).map((lead, idx) => (
+                            <div key={idx} className="text-xs flex justify-between">
+                              <span className="truncate max-w-[200px]">{lead.email}</span>
+                              <span className="text-muted-foreground">{lead.campaign}</span>
+                            </div>
+                          ))}
+                          {backfillPreview.leads.length > 10 && (
+                            <p className="text-xs text-muted-foreground">
+                              ...and {backfillPreview.leads.length - 10} more
+                            </p>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setBackfillPreview(null)}
+                          className="w-full text-xs"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    )}
+
+                    {backfillPreview && backfillPreview.positiveReplies === 0 && (
+                      <div className="bg-muted/50 rounded-lg p-3">
+                        <p className="text-xs text-muted-foreground text-center">
+                          No positive replies found for this client.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
