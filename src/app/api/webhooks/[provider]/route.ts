@@ -10,6 +10,7 @@ import {
   type ProviderWebhookPayload,
   type WebhookEventType,
 } from "@/lib/providers";
+import { syncLeadToHubSpot, getEmailThreadForLead } from "@/lib/hubspot";
 
 function getSupabase() {
   return createClient(
@@ -41,7 +42,7 @@ async function findCampaign(
   // Try provider_campaign_id first
   let query = supabase
     .from("campaigns")
-    .select("id, client_id, webhook_secret, provider_type")
+    .select("id, client_id, webhook_secret, provider_type, name, hubspot_vertical, clients(id, name)")
     .eq("provider_type", providerType)
     .eq("provider_campaign_id", providerCampaignId)
     .single();
@@ -52,7 +53,7 @@ async function findCampaign(
   if (!campaign && providerType === "instantly") {
     const fallback = await supabase
       .from("campaigns")
-      .select("id, client_id, webhook_secret, provider_type")
+      .select("id, client_id, webhook_secret, provider_type, name, hubspot_vertical, clients(id, name)")
       .eq("instantly_campaign_id", providerCampaignId)
       .single();
     campaign = fallback.data;
@@ -70,7 +71,7 @@ async function findLead(
 ) {
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, email_open_count, email_click_count, email_reply_count")
+    .select("id, email_open_count, email_click_count, email_reply_count, first_name, last_name, phone, company_name")
     .eq("campaign_id", campaignId)
     .eq("email", email)
     .single();
@@ -137,7 +138,19 @@ async function processWebhookEvent(
   payload: ProviderWebhookPayload,
   campaignId: string,
   leadId: string,
-  leadEmail: string
+  leadEmail: string,
+  campaignData?: {
+    name: string;
+    hubspot_vertical?: string;
+    client_id: string;
+    client_name?: string;
+  },
+  leadData?: {
+    first_name?: string;
+    last_name?: string;
+    phone?: string;
+    company_name?: string;
+  }
 ) {
   const now = new Date().toISOString();
 
@@ -279,6 +292,39 @@ async function processWebhookEvent(
           has_replied: true,
         })
         .eq("id", leadId);
+
+      // Sync positive reply to HubSpot if campaign data is available
+      if (campaignData) {
+        try {
+          // Get email thread for this lead
+          const emailThread = await getEmailThreadForLead(leadId);
+
+          // Sync to HubSpot
+          const hubspotResult = await syncLeadToHubSpot({
+            leadEmail,
+            leadFirstName: leadData?.first_name || undefined,
+            leadLastName: leadData?.last_name || undefined,
+            leadPhone: leadData?.phone || undefined,
+            companyName: leadData?.company_name || undefined,
+            campaignName: campaignData.name,
+            clientId: campaignData.client_id,
+            clientName: campaignData.client_name || "Unknown Client",
+            vertical: campaignData.hubspot_vertical || undefined,
+            emailThread,
+          });
+
+          if (hubspotResult.success && !hubspotResult.skipped) {
+            console.log(`[Webhook] HubSpot sync successful for ${leadEmail}: contactId=${hubspotResult.contactId}`);
+          } else if (hubspotResult.skipped) {
+            console.log(`[Webhook] HubSpot sync skipped for ${leadEmail} (not enabled or no token)`);
+          } else {
+            console.error(`[Webhook] HubSpot sync failed for ${leadEmail}: ${hubspotResult.error}`);
+          }
+        } catch (hubspotError) {
+          // Don't fail the webhook if HubSpot sync fails
+          console.error(`[Webhook] HubSpot sync error for ${leadEmail}:`, hubspotError);
+        }
+      }
       break;
 
     case "lead_not_interested":
@@ -484,13 +530,30 @@ export async function POST(
     }
 
     // Process the event
+    // Extract client name from joined clients table
+    const clientData = campaign.clients as { id: string; name: string } | null;
+
     await processWebhookEvent(
       supabase,
       providerType,
       webhookPayload,
       campaign.id,
       lead.id,
-      normalizedLeadEmail
+      normalizedLeadEmail,
+      // Pass campaign data for HubSpot sync
+      {
+        name: campaign.name,
+        hubspot_vertical: campaign.hubspot_vertical,
+        client_id: campaign.client_id,
+        client_name: clientData?.name,
+      },
+      // Pass lead data for HubSpot sync
+      {
+        first_name: lead.first_name,
+        last_name: lead.last_name,
+        phone: lead.phone,
+        company_name: lead.company_name,
+      }
     );
 
     return NextResponse.json({
