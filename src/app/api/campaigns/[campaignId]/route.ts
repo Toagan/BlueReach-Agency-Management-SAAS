@@ -44,13 +44,13 @@ export async function GET(request: Request, { params }: RouteParams) {
   }
 }
 
-// PATCH - Update campaign (name, api_key, etc.) - Safe update preserving associations
+// PATCH - Update campaign (name, api_key, hubspot_vertical, etc.) - Safe update preserving associations
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const { campaignId } = await params;
     const supabase = getSupabase();
     const body = await request.json();
-    const { name, is_active, api_key } = body;
+    const { name, is_active, api_key, hubspot_vertical } = body;
 
     // Build update object with only allowed fields
     // CRITICAL: Never allow updating instantly_campaign_id
@@ -68,6 +68,11 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     // Allow updating the API key (stored as api_key_encrypted)
     if (api_key !== undefined) {
       updateData.api_key_encrypted = api_key;
+    }
+
+    // Allow updating the HubSpot vertical for CRM sync
+    if (hubspot_vertical !== undefined) {
+      updateData.hubspot_vertical = hubspot_vertical;
     }
 
     if (Object.keys(updateData).length === 0) {

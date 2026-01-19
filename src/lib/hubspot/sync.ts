@@ -21,6 +21,7 @@ interface SyncLeadToHubSpotParams {
   campaignName: string;
   clientId: string;
   clientName: string;
+  vertical?: string; // Industry/vertical for HubSpot (e.g., "Fintechs", "Universities")
   emailThread?: Array<{
     direction: "inbound" | "outbound";
     from_email: string;
@@ -55,6 +56,7 @@ export async function syncLeadToHubSpot(
     campaignName,
     clientId,
     clientName,
+    vertical,
     emailThread,
   } = params;
 
@@ -128,6 +130,12 @@ export async function syncLeadToHubSpot(
         lastname: leadLastName || undefined,
         phone: leadPhone || undefined,
         company: companyName || undefined,
+        // Lead Source Channel - always "Email Outbound" for BlueReach synced contacts
+        hs_lead_status: "Email Outbound (pos. reply)",
+        // Vertical/Industry - set per campaign
+        industry: vertical || undefined,
+        // Campaign name for tracking
+        campaign_name: campaignName || undefined,
         // Store email thread in HubSpot's built-in notes/description field
         hs_content_membership_notes: emailThreadContent,
         // Also try message field as backup

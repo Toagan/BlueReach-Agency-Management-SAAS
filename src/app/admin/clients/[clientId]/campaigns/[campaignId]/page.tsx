@@ -66,6 +66,7 @@ interface CampaignData {
   is_active: boolean;
   created_at: string;
   client_id: string;
+  hubspot_vertical: string | null;
 }
 
 interface CampaignSequence {
@@ -119,6 +120,19 @@ export default function CampaignDetailPage() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
+
+  // API Key editing state
+  const [isEditingApiKey, setIsEditingApiKey] = useState(false);
+  const [editedApiKey, setEditedApiKey] = useState("");
+  const [isSavingApiKey, setIsSavingApiKey] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [apiKeySuccess, setApiKeySuccess] = useState(false);
+
+  // HubSpot vertical editing state
+  const [isEditingVertical, setIsEditingVertical] = useState(false);
+  const [editedVertical, setEditedVertical] = useState("");
+  const [isSavingVertical, setIsSavingVertical] = useState(false);
+  const [verticalSuccess, setVerticalSuccess] = useState(false);
 
   // Sequences sync state
   const [isSyncingSequences, setIsSyncingSequences] = useState(false);
@@ -394,6 +408,88 @@ export default function CampaignDetailPage() {
       setError(err instanceof Error ? err.message : "Failed to save name");
     } finally {
       setIsSavingName(false);
+    }
+  };
+
+  // Save API key
+  const handleSaveApiKey = async () => {
+    if (!editedApiKey.trim()) {
+      setIsEditingApiKey(false);
+      return;
+    }
+
+    setIsSavingApiKey(true);
+    setApiKeyError(null);
+    setApiKeySuccess(false);
+
+    try {
+      // First validate the API key
+      const providerType = campaign?.provider_type || "smartlead";
+      const validateEndpoint = providerType === "instantly"
+        ? "/api/instantly/validate-key"
+        : "/api/smartlead/validate-key";
+
+      const validateRes = await fetch(validateEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: editedApiKey.trim() }),
+      });
+
+      const validateData = await validateRes.json();
+
+      if (!validateData.valid) {
+        setApiKeyError(validateData.error || "Invalid API key");
+        setIsSavingApiKey(false);
+        return;
+      }
+
+      // API key is valid, save it
+      const res = await fetch(`/api/campaigns/${campaignId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: editedApiKey.trim() }),
+      });
+
+      if (!res.ok) throw new Error("Failed to update API key");
+
+      setApiKeySuccess(true);
+      setIsEditingApiKey(false);
+      setEditedApiKey("");
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setApiKeySuccess(false), 3000);
+    } catch (err) {
+      setApiKeyError(err instanceof Error ? err.message : "Failed to save API key");
+    } finally {
+      setIsSavingApiKey(false);
+    }
+  };
+
+  // Save HubSpot vertical
+  const handleSaveVertical = async () => {
+    setIsSavingVertical(true);
+    setVerticalSuccess(false);
+
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hubspot_vertical: editedVertical.trim() || null }),
+      });
+
+      if (!res.ok) throw new Error("Failed to update HubSpot vertical");
+
+      const data = await res.json();
+      setCampaign(data.campaign);
+      setVerticalSuccess(true);
+      setIsEditingVertical(false);
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setVerticalSuccess(false), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save vertical");
+    } finally {
+      setIsSavingVertical(false);
     }
   };
 
@@ -700,6 +796,151 @@ export default function CampaignDetailPage() {
               <span className="ml-2 text-xs">(Originally: {campaign.original_name})</span>
             )}
           </p>
+          {/* API Key Management - Admin Only */}
+          {isAdmin && campaign?.provider_type && (
+            <div className="mt-2">
+              {isEditingApiKey ? (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="password"
+                      value={editedApiKey}
+                      onChange={(e) => setEditedApiKey(e.target.value)}
+                      placeholder={`Enter ${campaign.provider_type === "smartlead" ? "Smartlead" : "Instantly"} API key`}
+                      className="h-8 w-80 text-sm"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveApiKey();
+                        if (e.key === "Escape") {
+                          setIsEditingApiKey(false);
+                          setEditedApiKey("");
+                          setApiKeyError(null);
+                        }
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleSaveApiKey}
+                      disabled={isSavingApiKey}
+                    >
+                      {isSavingApiKey ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4 text-green-600" />
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setIsEditingApiKey(false);
+                        setEditedApiKey("");
+                        setApiKeyError(null);
+                      }}
+                    >
+                      <X className="h-4 w-4 text-red-500" />
+                    </Button>
+                  </div>
+                  {apiKeyError && (
+                    <p className="text-xs text-red-500 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      {apiKeyError}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    Provider: {campaign.provider_type === "smartlead" ? "Smartlead" : "Instantly"}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setIsEditingApiKey(true)}
+                    className="h-6 text-xs"
+                  >
+                    <Edit2 className="h-3 w-3 mr-1" />
+                    Update API Key
+                  </Button>
+                  {apiKeySuccess && (
+                    <span className="text-xs text-green-600 flex items-center gap-1">
+                      <Check className="h-3 w-3" />
+                      API key updated
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          {/* HubSpot Vertical - Admin Only */}
+          {isAdmin && (
+            <div className="mt-2">
+              {isEditingVertical ? (
+                <div className="flex items-center gap-2">
+                  <select
+                    value={editedVertical}
+                    onChange={(e) => setEditedVertical(e.target.value)}
+                    className="h-8 w-48 text-sm border rounded px-2 bg-background"
+                    autoFocus
+                  >
+                    <option value="">Select Vertical</option>
+                    <option value="Fintechs">Fintechs</option>
+                    <option value="Universities">Universities</option>
+                    <option value="Asset Managers">Asset Managers</option>
+                    <option value="Hedge Funds">Hedge Funds</option>
+                    <option value="Other">Other</option>
+                  </select>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleSaveVertical}
+                    disabled={isSavingVertical}
+                  >
+                    {isSavingVertical ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4 text-green-600" />
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setIsEditingVertical(false);
+                      setEditedVertical(campaign?.hubspot_vertical || "");
+                    }}
+                  >
+                    <X className="h-4 w-4 text-red-500" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    HubSpot Vertical: {campaign?.hubspot_vertical || "Not set"}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditedVertical(campaign?.hubspot_vertical || "");
+                      setIsEditingVertical(true);
+                    }}
+                    className="h-6 text-xs"
+                  >
+                    <Edit2 className="h-3 w-3 mr-1" />
+                    Set Vertical
+                  </Button>
+                  {verticalSuccess && (
+                    <span className="text-xs text-green-600 flex items-center gap-1">
+                      <Check className="h-3 w-3" />
+                      Vertical updated
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {/* Sync Progress (only shows when syncing) */}

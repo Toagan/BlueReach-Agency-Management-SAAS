@@ -150,10 +150,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
-    // Get the campaign to verify it exists
+    // Get the campaign to verify it exists (include hubspot_vertical for CRM sync)
     const { data: campaign, error: campaignError } = await supabase
       .from("campaigns")
-      .select("id, name, instantly_campaign_id")
+      .select("id, name, instantly_campaign_id, hubspot_vertical")
       .eq("id", campaignId)
       .single();
 
@@ -593,6 +593,7 @@ export async function POST(request: Request, { params }: RouteParams) {
             campaignName: campaign.name,
             clientId,
             clientName,
+            vertical: campaign.hubspot_vertical || undefined,
             emailThread,
           });
 

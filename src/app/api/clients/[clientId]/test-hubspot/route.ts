@@ -65,6 +65,7 @@ export async function POST(
       campaignName: "BlueReach Test Campaign",
       clientId: clientId,
       clientName: client.name,
+      vertical: "Fintechs", // Test with sample vertical
       emailThread: [
         {
           direction: "outbound",
