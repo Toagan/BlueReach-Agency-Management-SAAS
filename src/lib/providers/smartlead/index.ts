@@ -430,6 +430,7 @@ export class SmartleadProvider implements EmailCampaignProvider {
     const POSITIVE_CATEGORIES = ["Interested", "Meeting Request"];
 
     const allPositiveLeads: ProviderLead[] = [];
+    const leadsWithReplies: Array<{ email: string; replyCount: number; category?: string; isInterested?: boolean }> = [];
     const limit = 100;
     let offset = 0;
     let hasMore = true;
@@ -444,6 +445,19 @@ export class SmartleadProvider implements EmailCampaignProvider {
       const wrappers = response.data || [];
       totalScanned += wrappers.length;
 
+      // Debug: Log first batch to see what fields are available
+      if (offset === 0 && wrappers.length > 0) {
+        const sample = wrappers[0]?.lead;
+        console.log(`[SmartleadProvider] Sample lead fields:`, {
+          email: sample?.email,
+          category: sample?.category,
+          is_interested: sample?.is_interested,
+          reply_count: sample?.reply_count,
+          status: sample?.status,
+          lead_status: sample?.lead_status,
+        });
+      }
+
       // Filter for positive leads based on is_interested OR category
       // Handle nested structure: { data: [{ lead: {...} }] }
       for (const wrapper of wrappers) {
@@ -457,6 +471,16 @@ export class SmartleadProvider implements EmailCampaignProvider {
         const isPositiveByCategory = lead.category && POSITIVE_CATEGORIES.includes(lead.category);
         const hasReplied = (lead.reply_count || 0) > 0;
 
+        // Track all leads with replies for debugging
+        if (hasReplied) {
+          leadsWithReplies.push({
+            email: lead.email,
+            replyCount: lead.reply_count || 0,
+            category: lead.category,
+            isInterested: lead.is_interested,
+          });
+        }
+
         if (isPositiveByFlag || isPositiveByCategory) {
           const mappedLead = this.mapLead(lead);
           // Ensure interest status is set for positive leads
@@ -464,12 +488,7 @@ export class SmartleadProvider implements EmailCampaignProvider {
             mappedLead.interestStatus = "interested";
           }
           allPositiveLeads.push(mappedLead);
-        } else if (hasReplied && !lead.category) {
-          // Lead has replied but no category set - treat as potential positive
-          // Log for debugging but don't auto-mark as positive
-          console.log(
-            `[SmartleadProvider] Lead ${lead.email} has ${lead.reply_count} replies but no category set`
-          );
+          console.log(`[SmartleadProvider] Found positive lead: ${lead.email} (category=${lead.category}, is_interested=${lead.is_interested})`);
         }
       }
 
@@ -484,9 +503,15 @@ export class SmartleadProvider implements EmailCampaignProvider {
       }
     }
 
+    // Log all leads with replies for debugging
+    if (leadsWithReplies.length > 0) {
+      console.log(`[SmartleadProvider] Leads with replies:`, leadsWithReplies);
+    }
+
     console.log(
       `[SmartleadProvider] Scanned ${totalScanned} total leads. ` +
-      `Found ${allPositiveLeads.length} positive (is_interested=true OR category in [${POSITIVE_CATEGORIES.join(", ")}]).`
+      `Found ${allPositiveLeads.length} positive (is_interested=true OR category in [${POSITIVE_CATEGORIES.join(", ")}]). ` +
+      `${leadsWithReplies.length} leads have replied.`
     );
 
     return allPositiveLeads;
@@ -511,6 +536,10 @@ export class SmartleadProvider implements EmailCampaignProvider {
       replyTime: string | null;
     }>();
 
+    const positiveCategories = ["Interested", "Meeting Request"];
+    let positiveCount = 0;
+    let repliedCount = 0;
+
     const limit = 100;
     let offset = 0;
     let hasMore = true;
@@ -527,10 +556,34 @@ export class SmartleadProvider implements EmailCampaignProvider {
           break;
         }
 
+        // Debug: Log first batch to see lead_category field
+        if (offset === 0 && response.data.length > 0) {
+          const sampleWithCategory = response.data.find(s => s.lead_category);
+          const sampleWithReply = response.data.find(s => s.reply_time);
+          console.log(`[SmartleadProvider] Statistics sample with category:`, sampleWithCategory ? {
+            email: sampleWithCategory.lead_email,
+            category: sampleWithCategory.lead_category,
+            reply_time: sampleWithCategory.reply_time,
+          } : "None found");
+          console.log(`[SmartleadProvider] Statistics sample with reply:`, sampleWithReply ? {
+            email: sampleWithReply.lead_email,
+            category: sampleWithReply.lead_category,
+            reply_time: sampleWithReply.reply_time,
+          } : "None found");
+        }
+
         // Aggregate stats per lead email (may have multiple entries per sequence)
         for (const stat of response.data) {
           const email = stat.lead_email?.toLowerCase();
           if (!email) continue;
+
+          // Track positive and replied for logging
+          if (stat.lead_category && positiveCategories.includes(stat.lead_category)) {
+            positiveCount++;
+          }
+          if (stat.reply_time) {
+            repliedCount++;
+          }
 
           const existing = statsMap.get(email);
           if (existing) {
@@ -569,7 +622,8 @@ export class SmartleadProvider implements EmailCampaignProvider {
       }
     }
 
-    console.log(`[SmartleadProvider] Fetched statistics for ${statsMap.size} unique leads`);
+    console.log(`[SmartleadProvider] Fetched statistics for ${statsMap.size} unique leads. ` +
+      `Found ${positiveCount} positive (Interested/Meeting Request), ${repliedCount} with reply_time.`);
     return statsMap;
   }
 
