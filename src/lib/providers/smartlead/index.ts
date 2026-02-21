@@ -544,6 +544,8 @@ export class SmartleadProvider implements EmailCampaignProvider {
     let offset = 0;
     let hasMore = true;
     let totalFetched = 0;
+    let consecutiveErrors = 0;
+    const MAX_CONSECUTIVE_ERRORS = 3;
 
     while (hasMore) {
       try {
@@ -551,6 +553,8 @@ export class SmartleadProvider implements EmailCampaignProvider {
           `/campaigns/${campaignId}/statistics`,
           { limit, offset }
         );
+
+        consecutiveErrors = 0; // Reset on success
 
         if (!response.data || response.data.length === 0) {
           break;
@@ -617,12 +621,21 @@ export class SmartleadProvider implements EmailCampaignProvider {
           console.log(`[SmartleadProvider] Fetched ${totalFetched} statistics records...`);
         }
       } catch (error) {
-        console.error(`[SmartleadProvider] Error fetching statistics at offset ${offset}:`, error);
-        break;
+        consecutiveErrors++;
+        console.error(`[SmartleadProvider] Error fetching statistics at offset ${offset} (attempt ${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, error);
+
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+          console.error(`[SmartleadProvider] Aborting statistics fetch after ${MAX_CONSECUTIVE_ERRORS} consecutive errors. Got ${totalFetched} records so far.`);
+          break;
+        }
+
+        // Skip this page and try the next one
+        offset += limit;
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
 
-    console.log(`[SmartleadProvider] Fetched statistics for ${statsMap.size} unique leads. ` +
+    console.log(`[SmartleadProvider] Fetched statistics for ${statsMap.size} unique leads (${totalFetched} records). ` +
       `Found ${positiveCount} positive (Interested/Meeting Request), ${repliedCount} with reply_time.`);
     return statsMap;
   }
@@ -709,6 +722,8 @@ export class SmartleadProvider implements EmailCampaignProvider {
     let offset = 0;
     let hasMore = true;
     let totalFetched = 0;
+    let consecutiveErrors = 0;
+    const MAX_CONSECUTIVE_ERRORS = 3;
 
     while (hasMore) {
       try {
@@ -716,6 +731,8 @@ export class SmartleadProvider implements EmailCampaignProvider {
           `/campaigns/${campaignId}/statistics`,
           { limit, offset }
         );
+
+        consecutiveErrors = 0; // Reset on success
 
         if (!response.data || response.data.length === 0) {
           break;
@@ -775,12 +792,22 @@ export class SmartleadProvider implements EmailCampaignProvider {
           console.log(`[SmartleadProvider] Fetched ${totalFetched} statistics with variants...`);
         }
       } catch (error) {
-        console.error(`[SmartleadProvider] Error fetching statistics at offset ${offset}:`, error);
-        break;
+        consecutiveErrors++;
+        console.error(`[SmartleadProvider] Error fetching statistics at offset ${offset} (attempt ${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, error);
+
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+          console.error(`[SmartleadProvider] Aborting statistics fetch after ${MAX_CONSECUTIVE_ERRORS} consecutive errors. Got ${totalFetched} records so far.`);
+          break;
+        }
+
+        // Skip this page and try the next one
+        offset += limit;
+        // Small delay before retry to let rate limits reset
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
 
-    console.log(`[SmartleadProvider] Fetched statistics with variants for ${statsMap.size} unique leads`);
+    console.log(`[SmartleadProvider] Fetched statistics with variants for ${statsMap.size} unique leads (${totalFetched} total records)`);
     return statsMap;
   }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getProviderForCampaign } from "@/lib/providers";
+import { ProviderError } from "@/lib/providers/types";
 
 function getSupabase() {
   return createClient(
@@ -117,7 +118,26 @@ export async function GET(request: Request, { params }: RouteParams) {
             }
           }
         } catch (e) {
-          console.error("Failed to fetch campaign status:", e);
+          // If provider returns 404/410, the campaign was deleted - mark as inactive
+          const isDeletedInProvider =
+            (e instanceof ProviderError && (e.statusCode === 404 || e.statusCode === 410)) ||
+            (e instanceof Error && (e.message.includes("not found") || e.message.includes("deleted")));
+
+          if (isDeletedInProvider && campaign.is_active) {
+            console.log(`[Campaign Details] Campaign ${campaignId} appears deleted in provider, marking inactive`);
+            const { data: updated } = await supabase
+              .from("campaigns")
+              .update({ is_active: false })
+              .eq("id", campaignId)
+              .select()
+              .single();
+
+            if (updated) {
+              updatedCampaign = updated;
+            }
+          } else {
+            console.error("Failed to fetch campaign status:", e);
+          }
         }
 
         // Fetch analytics from provider and update cache
@@ -161,7 +181,7 @@ export async function GET(request: Request, { params }: RouteParams) {
               cached_emails_opened: providerAnalytics.openCountUnique || 0,
               cached_reply_count: providerAnalytics.replyCount || 0,
               cached_emails_bounced: providerAnalytics.bouncedCount || 0,
-              cached_positive_count: providerAnalytics.totalOpportunities || 0,
+              cached_positive_count: localPositiveCount || providerAnalytics.totalOpportunities || 0,
               cached_leads_count: leadsCount,
               cached_contacted_count: contactedCount,
               cache_updated_at: new Date().toISOString(),
@@ -170,12 +190,69 @@ export async function GET(request: Request, { params }: RouteParams) {
 
           console.log(`[Campaign Details] Refreshed analytics cache for ${campaignId}`);
         } catch (e) {
-          console.error("Failed to fetch analytics from provider:", e);
-          // Keep using cached analytics if provider fetch fails
+          console.error("Failed to fetch analytics from provider, recalculating from local DB:", e);
+
+          // Provider unavailable (deleted campaign, API down, etc.)
+          // Recalculate analytics from local leads table so data stays accurate
+          const { count: localRepliedCount } = await supabase
+            .from("leads")
+            .select("*", { count: "exact", head: true })
+            .eq("campaign_id", campaignId)
+            .eq("has_replied", true);
+
+          const leadsCount = localLeadsCount || 0;
+          const repliedCount = localRepliedCount || 0;
+          const positiveCount = localPositiveCount || 0;
+          // Preserve cached_emails_sent (from last successful provider sync) as contacted count
+          const contactedCount = leadsCount;
+          const sentCount = campaign.cached_emails_sent || leadsCount;
+
+          analytics = {
+            emails_sent: sentCount,
+            emails_opened: campaign.cached_emails_opened ?? 0,
+            emails_replied: repliedCount,
+            emails_bounced: campaign.cached_emails_bounced ?? 0,
+            open_rate: sentCount > 0 ? (campaign.cached_emails_opened || 0) / sentCount : 0,
+            reply_rate: sentCount > 0 ? repliedCount / sentCount : 0,
+            bounce_rate: sentCount > 0 ? (campaign.cached_emails_bounced || 0) / sentCount : 0,
+            leads_count: leadsCount,
+            contacted_count: contactedCount,
+            total_opportunities: positiveCount,
+          };
+
+          // Update cache with corrected local counts
+          await supabase
+            .from("campaigns")
+            .update({
+              cached_reply_count: repliedCount,
+              cached_positive_count: positiveCount,
+              cached_leads_count: leadsCount,
+              cached_contacted_count: contactedCount,
+              cache_updated_at: new Date().toISOString(),
+            })
+            .eq("id", campaignId);
+
+          console.log(`[Campaign Details] Recalculated from local DB for ${campaignId}: ${leadsCount} leads, ${repliedCount} replied, ${positiveCount} positive`);
         }
       } catch (e) {
         console.error("Failed to get provider for campaign:", e);
-        // Keep using cached analytics if provider is unavailable
+        // Provider not configured - recalculate from local DB
+        const { count: localRepliedCount } = await supabase
+          .from("leads")
+          .select("*", { count: "exact", head: true })
+          .eq("campaign_id", campaignId)
+          .eq("has_replied", true);
+
+        const repliedCount = localRepliedCount || 0;
+        const positiveCount = localPositiveCount || 0;
+        analytics.emails_replied = repliedCount;
+        analytics.total_opportunities = positiveCount;
+        analytics.leads_count = localLeadsCount || 0;
+        analytics.contacted_count = localLeadsCount || 0;
+
+        if (analytics.emails_sent > 0) {
+          analytics.reply_rate = repliedCount / analytics.emails_sent;
+        }
       }
     }
 

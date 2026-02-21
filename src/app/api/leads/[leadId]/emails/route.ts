@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getProviderForCampaign } from "@/lib/providers";
+import type { ProviderEmail } from "@/lib/providers/types";
 
 function getSupabase() {
   return createClient(
@@ -55,7 +56,7 @@ export async function POST(
     // Get lead info with campaign's provider_campaign_id
     const { data: lead, error: leadError } = await supabase
       .from("leads")
-      .select("id, email, campaign_id, campaigns(id, provider_campaign_id, instantly_campaign_id, api_key_encrypted)")
+      .select("id, email, campaign_id, provider_lead_id, instantly_lead_id, campaigns(id, provider_campaign_id, instantly_campaign_id, api_key_encrypted)")
       .eq("id", leadId)
       .single();
 
@@ -92,7 +93,12 @@ export async function POST(
     const provider = await getProviderForCampaign(campaignData.id);
 
     // Fetch emails from provider
-    const providerEmails = await provider.fetchEmailsForLead(providerCampaignId, lead.email);
+    // SmartLead requires the provider lead ID to fetch message history
+    const providerLeadId = lead.provider_lead_id || lead.instantly_lead_id;
+    const fetchFn = provider.fetchEmailsForLead.bind(provider) as (
+      campaignId: string, email: string, leadId?: string
+    ) => Promise<ProviderEmail[]>;
+    const providerEmails = await fetchFn(providerCampaignId, lead.email, providerLeadId || undefined);
 
     let imported = 0;
     let skipped = 0;

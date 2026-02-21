@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getProviderForCampaign } from "@/lib/providers";
+import { ProviderError } from "@/lib/providers/types";
 import type { ProviderLead } from "@/lib/providers/types";
 
 // Increase timeout for large syncs (up to 5 minutes on Vercel Pro)
@@ -70,13 +71,13 @@ export async function POST(
     console.log(`[SyncLeads] Provider campaign ID: ${providerCampaignId}`);
 
     // Fetch ALL leads from provider
-    // For Smartlead, always fetch leads first, then sync positive leads from statistics
+    // For Smartlead, use fetchAllLeadsWithStats to get category/engagement data
+    // The basic leads endpoint doesn't return category, so positive reply detection fails without stats
     let providerLeads;
 
-    if (provider.providerType === "smartlead") {
-      // Always use basic lead fetch for speed - we'll sync positive leads separately
-      console.log(`[SyncLeads] Fetching leads from Smartlead (statistics synced separately)`);
-      providerLeads = await provider.fetchAllLeads(providerCampaignId);
+    if (provider.providerType === "smartlead" && 'fetchAllLeadsWithStats' in provider) {
+      console.log(`[SyncLeads] Fetching leads from Smartlead (with statistics for category/engagement data)`);
+      providerLeads = await (provider as { fetchAllLeadsWithStats: (id: string) => Promise<ProviderLead[]> }).fetchAllLeadsWithStats(providerCampaignId);
     } else {
       providerLeads = await provider.fetchAllLeads(providerCampaignId);
     }
@@ -840,6 +841,45 @@ export async function POST(
       }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 6: Update cached_positive_count from actual DB state
+    // SmartLead's analytics API doesn't return totalOpportunities, so the cache
+    // would be 0 unless we count from the local DB after syncing
+    // ═══════════════════════════════════════════════════════════════════════════
+    try {
+      const [
+        { count: positiveCount },
+        { count: repliedCount },
+      ] = await Promise.all([
+        supabase
+          .from("leads")
+          .select("*", { count: "exact", head: true })
+          .eq("campaign_id", campaignId)
+          .eq("is_positive_reply", true),
+        supabase
+          .from("leads")
+          .select("*", { count: "exact", head: true })
+          .eq("campaign_id", campaignId)
+          .eq("has_replied", true),
+      ]);
+
+      await supabase
+        .from("campaigns")
+        .update({
+          cached_positive_count: positiveCount || 0,
+          cached_reply_count: Math.max(
+            repliedCount || 0,
+            // Preserve existing cached_reply_count if higher (from provider analytics)
+            analyticsData?.emails_replied || 0
+          ),
+        })
+        .eq("id", campaignId);
+
+      console.log(`[SyncLeads] Updated cache: ${positiveCount || 0} positive, ${repliedCount || 0} replied (local DB count)`);
+    } catch (err) {
+      console.error(`[SyncLeads] Error updating cached counts from DB:`, err);
+    }
+
     console.log(
       `[SyncLeads] Completed: ${insertedCount} inserted, ${updatedCount} updated, ${positiveLeadsFromStats} positive, ${emailsSynced} emails synced`
     );
@@ -859,6 +899,30 @@ export async function POST(
       },
     });
   } catch (error) {
+    // If provider returns 404/410, the campaign was deleted in the provider
+    const isDeletedInProvider =
+      (error instanceof ProviderError && (error.statusCode === 404 || error.statusCode === 410)) ||
+      (error instanceof Error && (error.message.includes("not found") || error.message.includes("deleted")));
+
+    if (isDeletedInProvider) {
+      console.log(`[SyncLeads] Campaign ${campaignId} appears deleted in provider, marking inactive`);
+
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (supabaseUrl && supabaseServiceKey) {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        await supabase
+          .from("campaigns")
+          .update({ is_active: false })
+          .eq("id", campaignId);
+      }
+
+      return NextResponse.json(
+        { error: "Campaign no longer exists in provider. Marked as inactive.", campaignDeleted: true },
+        { status: 410 }
+      );
+    }
+
     console.error("[SyncLeads] Error:", error);
     return NextResponse.json(
       {
