@@ -573,11 +573,24 @@ export async function POST(request: Request, { params }: RouteParams) {
           ? [leadDetails.first_name, leadDetails.last_name].filter(Boolean).join(" ") || undefined
           : undefined;
 
-        // Get reply snippet from payload
+        // Get reply snippet as fallback
         const replySnippet = payload.reply_text_snippet ||
           (payload.reply_text ? payload.reply_text.substring(0, 150) + (payload.reply_text.length > 150 ? "..." : "") : undefined);
 
-        console.log(`[Webhook] Sending positive reply notification for ${leadEmail}`);
+        // Fetch the full email thread from lead_emails (already saved above)
+        let emailThread;
+        if (leadDbId) {
+          const { data: threadEmails } = await supabase
+            .from("lead_emails")
+            .select("direction, from_email, to_email, subject, body_text, body_html, sent_at")
+            .eq("lead_id", leadDbId)
+            .order("sent_at", { ascending: true });
+          if (threadEmails && threadEmails.length > 0) {
+            emailThread = threadEmails as { direction: "outbound" | "inbound"; from_email: string; to_email: string; subject: string | null; body_text: string | null; body_html: string | null; sent_at: string }[];
+          }
+        }
+
+        console.log(`[Webhook] Sending positive reply notification for ${leadEmail} (thread: ${emailThread?.length || 0} emails)`);
 
         const notificationResult = await sendPositiveReplyNotification({
           leadEmail,
@@ -588,6 +601,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           clientId,
           clientName,
           replySnippet,
+          emailThread,
         });
 
         if (notificationResult.success) {

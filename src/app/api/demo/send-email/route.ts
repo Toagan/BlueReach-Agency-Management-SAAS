@@ -20,6 +20,26 @@ const SAMPLE_LEADS = [
     company: "Autohaus Mustermann GmbH",
     campaign: "Autohaus, Nürnberg (200km Radius)",
     replySnippet: "Vielen Dank für Ihre Nachricht! Wir haben Interesse an Ihrem Angebot und würden gerne mehr erfahren. Können wir einen Termin für ein Gespräch vereinbaren?",
+    emailThread: [
+      {
+        direction: "outbound" as const,
+        from_email: "tilman@blue-reach.com",
+        to_email: "max.mustermann@autohaus-example.de",
+        subject: "Mehr Neukunden für Autohaus Mustermann?",
+        body_text: "Hallo Herr Mustermann,\n\nich bin Tilman von Blue Reach. Wir helfen Autohäusern dabei, gezielt neue Kunden in Ihrer Region zu gewinnen — ohne Streuverlust.\n\nAktuell arbeiten wir mit mehreren Autohäusern im Raum Nürnberg zusammen und generieren dort durchschnittlich 15-20 qualifizierte Anfragen pro Monat.\n\nHätten Sie Interesse an einem kurzen Austausch dazu?\n\nBeste Grüße,\nTilman Schepke\nBlue Reach",
+        body_html: null,
+        sent_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        direction: "inbound" as const,
+        from_email: "max.mustermann@autohaus-example.de",
+        to_email: "tilman@blue-reach.com",
+        subject: "Re: Mehr Neukunden für Autohaus Mustermann?",
+        body_text: "Hallo Herr Schepke,\n\nvielen Dank für Ihre Nachricht! Das klingt sehr interessant. Wir haben tatsächlich gerade Bedarf an neuen Kunden, besonders im Bereich Gebrauchtwagen.\n\nKönnten wir diese Woche einen kurzen Termin vereinbaren? Ich bin Dienstag und Donnerstag nachmittags verfügbar.\n\nMit freundlichen Grüßen,\nMax Mustermann\nAutohaus Mustermann GmbH\n+49 911 123 4567",
+        body_html: null,
+        sent_at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+      },
+    ],
   },
   {
     email: "sarah.schmidt@logistik-partner.de",
@@ -28,22 +48,26 @@ const SAMPLE_LEADS = [
     company: "Logistik Partner AG",
     campaign: "Logistics Companies, Bavaria",
     replySnippet: "Interessantes Angebot! Wir suchen gerade nach Lösungen in diesem Bereich. Könnten Sie mir mehr Details schicken?",
-  },
-  {
-    email: "thomas.weber@tech-solutions.de",
-    name: "Thomas Weber",
-    phone: "+49 30 555 1234",
-    company: "Tech Solutions GmbH",
-    campaign: "IT Companies, Berlin",
-    replySnippet: "Hi, thanks for reaching out. This looks like it could be exactly what we need. Let's schedule a call this week?",
-  },
-  {
-    email: "julia.meyer@finance-corp.de",
-    name: "Julia Meyer",
-    phone: "+49 69 444 7890",
-    company: "Finance Corp",
-    campaign: "Financial Services, Frankfurt",
-    replySnippet: "We've been looking for a solution like this. When would be a good time for a quick demo?",
+    emailThread: [
+      {
+        direction: "outbound" as const,
+        from_email: "tilman@blue-reach.com",
+        to_email: "sarah.schmidt@logistik-partner.de",
+        subject: "Logistik Partner AG - Effizienzsteigerung durch gezielte Leadgenerierung",
+        body_text: "Hallo Frau Schmidt,\n\nich bin Tilman von Blue Reach. Wir unterstützen Logistikunternehmen bei der Neukundengewinnung im B2B-Bereich.\n\nMit unserem datengetriebenen Ansatz erreichen wir für unsere Kunden eine Antwortrate von 8-12%, deutlich über dem Branchendurchschnitt.\n\nWäre ein kurzer Austausch für Sie interessant?\n\nBeste Grüße,\nTilman",
+        body_html: null,
+        sent_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        direction: "inbound" as const,
+        from_email: "sarah.schmidt@logistik-partner.de",
+        to_email: "tilman@blue-reach.com",
+        subject: "Re: Logistik Partner AG - Effizienzsteigerung durch gezielte Leadgenerierung",
+        body_text: "Hallo Tilman,\n\ninteressantes Angebot! Wir suchen gerade nach Lösungen in diesem Bereich und haben intern bereits über das Thema Outbound gesprochen.\n\nKönnten Sie mir mehr Details schicken? Insbesondere interessiert mich:\n- Wie genau sieht der Prozess aus?\n- Welche Ergebnisse erzielen Sie in der Logistikbranche?\n- Was sind die Kosten?\n\nViele Grüße,\nSarah Schmidt\nLogistik Partner AG",
+        body_html: null,
+        sent_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      },
+    ],
   },
 ];
 
@@ -119,6 +143,7 @@ export async function POST(request: NextRequest) {
         clientId: client.id,
         clientName: client.name,
         replySnippet: sampleLead.replySnippet,
+        emailThread: sampleLead.emailThread,
       };
 
       // If recipient email is provided, use custom sending logic
@@ -158,6 +183,7 @@ export async function POST(request: NextRequest) {
           campaignName: params.campaignName,
           clientName: params.clientName,
           replySnippet: params.replySnippet,
+          emailThread: params.emailThread,
           dashboardUrl,
         };
 

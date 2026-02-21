@@ -162,6 +162,16 @@ export async function sendInvitationEmail(
   }
 }
 
+export interface EmailThreadMessage {
+  direction: "outbound" | "inbound";
+  from_email: string;
+  to_email?: string;
+  subject?: string | null;
+  body_text?: string | null;
+  body_html?: string | null;
+  sent_at: string;
+}
+
 export interface SendPositiveReplyNotificationParams {
   leadEmail: string;
   leadName?: string;
@@ -171,6 +181,7 @@ export interface SendPositiveReplyNotificationParams {
   clientId: string;
   clientName: string;
   replySnippet?: string;
+  emailThread?: EmailThreadMessage[];
 }
 
 export async function sendPositiveReplyNotification(
@@ -258,6 +269,7 @@ export async function sendPositiveReplyNotification(
       campaignName: params.campaignName,
       clientName: params.clientName,
       replySnippet: params.replySnippet,
+      emailThread: params.emailThread,
       dashboardUrl,
     };
 

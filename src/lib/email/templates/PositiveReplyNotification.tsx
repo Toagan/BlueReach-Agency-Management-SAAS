@@ -12,6 +12,16 @@ import {
 } from "@react-email/components";
 import * as React from "react";
 
+export interface EmailThreadMessage {
+  direction: "outbound" | "inbound";
+  from_email: string;
+  to_email?: string;
+  subject?: string | null;
+  body_text?: string | null;
+  body_html?: string | null;
+  sent_at: string;
+}
+
 export interface PositiveReplyNotificationProps {
   recipientName: string;
   leadEmail: string;
@@ -21,7 +31,39 @@ export interface PositiveReplyNotificationProps {
   campaignName: string;
   clientName: string;
   replySnippet?: string;
+  emailThread?: EmailThreadMessage[];
   dashboardUrl: string;
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function formatDate(dateStr: string): string {
+  try {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return dateStr;
+  }
 }
 
 export const PositiveReplyNotification = ({
@@ -33,9 +75,11 @@ export const PositiveReplyNotification = ({
   campaignName = "Campaign",
   clientName = "Client",
   replySnippet,
+  emailThread,
   dashboardUrl = "https://app.blue-reach.com",
 }: PositiveReplyNotificationProps) => {
   const firstName = recipientName.split(" ")[0] || "there";
+  const hasThread = emailThread && emailThread.length > 0;
 
   return (
     <Html>
@@ -104,13 +148,41 @@ export const PositiveReplyNotification = ({
               </table>
             </div>
 
-            {/* Reply Snippet */}
-            {replySnippet && (
+            {/* Full Email Thread */}
+            {hasThread ? (
+              <div style={threadContainer}>
+                <Text style={threadTitle}>Email Conversation</Text>
+                {emailThread.map((email, index) => {
+                  const isInbound = email.direction === "inbound";
+                  const emailBody = email.body_text || (email.body_html ? stripHtml(email.body_html) : "(No content)");
+
+                  return (
+                    <div key={index} style={isInbound ? threadMessageInbound : threadMessageOutbound}>
+                      <div style={threadMessageHeader}>
+                        <span style={isInbound ? threadSenderInbound : threadSenderOutbound}>
+                          {isInbound ? "↩️ " : "📤 "}
+                          {email.from_email}
+                        </span>
+                        <span style={threadDate}>{formatDate(email.sent_at)}</span>
+                      </div>
+                      {email.subject && (
+                        <div style={threadSubject}>
+                          {email.subject}
+                        </div>
+                      )}
+                      <div style={threadBody}>
+                        {emailBody}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : replySnippet ? (
               <div style={replyBox}>
                 <Text style={replyLabel}>Reply Preview</Text>
                 <Text style={replyContent}>"{replySnippet}"</Text>
               </div>
-            )}
+            ) : null}
 
             {/* CTA */}
             <Section style={ctaSection}>
@@ -146,6 +218,19 @@ export const PositiveReplyNotification = ({
 
 export function generatePlainText(props: PositiveReplyNotificationProps): string {
   const firstName = props.recipientName.split(" ")[0] || "there";
+  const hasThread = props.emailThread && props.emailThread.length > 0;
+
+  let threadText = "";
+  if (hasThread && props.emailThread) {
+    threadText = "EMAIL CONVERSATION:\n\n" + props.emailThread.map((email) => {
+      const isInbound = email.direction === "inbound";
+      const body = email.body_text || (email.body_html ? stripHtml(email.body_html) : "(No content)");
+      return `${isInbound ? "↩️ REPLY" : "📤 SENT"} - ${email.from_email} (${formatDate(email.sent_at)})${email.subject ? `\nSubject: ${email.subject}` : ""}\n${body}`;
+    }).join("\n\n---\n\n");
+  } else if (props.replySnippet) {
+    threadText = `REPLY PREVIEW:\n"${props.replySnippet}"`;
+  }
+
   return `
 🌊 BLUEREACH - NEW POSITIVE REPLY
 
@@ -163,7 +248,7 @@ ${props.companyName ? `• Company: ${props.companyName}` : ""}
 • Campaign: ${props.campaignName}
 • Client: ${props.clientName}
 
-${props.replySnippet ? `REPLY PREVIEW:\n"${props.replySnippet}"` : ""}
+${threadText}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -191,6 +276,8 @@ const colors = {
   greenLight: "#D1FAE5",
   greenDark: "#065F46",
   blue: "#3B82F6",
+  blueLight: "#DBEAFE",
+  blueDark: "#1E40AF",
   white: "#FFFFFF",
   gray100: "#F1F5F9",
   gray200: "#E2E8F0",
@@ -209,7 +296,7 @@ const body = {
 
 const container = {
   margin: "0 auto",
-  maxWidth: "540px",
+  maxWidth: "600px",
   padding: "20px",
 };
 
@@ -308,6 +395,79 @@ const leadPhoneStyle = {
   fontWeight: "500" as const,
 };
 
+// Thread styles
+const threadContainer = {
+  marginBottom: "24px",
+};
+
+const threadTitle = {
+  fontSize: "12px",
+  fontWeight: "700",
+  color: colors.gray500,
+  textTransform: "uppercase" as const,
+  letterSpacing: "0.05em",
+  margin: "0 0 12px 0",
+};
+
+const threadMessageBase = {
+  borderRadius: "8px",
+  padding: "14px 16px",
+  marginBottom: "8px",
+};
+
+const threadMessageInbound = {
+  ...threadMessageBase,
+  backgroundColor: colors.greenLight,
+  borderLeft: `3px solid ${colors.green}`,
+};
+
+const threadMessageOutbound = {
+  ...threadMessageBase,
+  backgroundColor: colors.gray100,
+  borderLeft: `3px solid ${colors.gray400}`,
+};
+
+const threadMessageHeader = {
+  display: "flex",
+  marginBottom: "6px",
+};
+
+const threadSenderBase = {
+  fontSize: "12px",
+  fontWeight: "600",
+};
+
+const threadSenderInbound = {
+  ...threadSenderBase,
+  color: colors.greenDark,
+};
+
+const threadSenderOutbound = {
+  ...threadSenderBase,
+  color: colors.gray600,
+};
+
+const threadDate = {
+  fontSize: "11px",
+  color: colors.gray400,
+  marginLeft: "8px",
+};
+
+const threadSubject = {
+  fontSize: "12px",
+  fontWeight: "600",
+  color: colors.gray600,
+  marginBottom: "4px",
+};
+
+const threadBody = {
+  fontSize: "13px",
+  color: colors.gray800,
+  lineHeight: "1.5",
+  whiteSpace: "pre-wrap" as const,
+};
+
+// Fallback reply snippet styles (used when no thread available)
 const replyBox = {
   backgroundColor: colors.gray100,
   borderLeft: `3px solid ${colors.green}`,
