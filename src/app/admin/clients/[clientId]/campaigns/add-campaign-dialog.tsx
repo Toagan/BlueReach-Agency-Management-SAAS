@@ -54,8 +54,8 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"select" | "success">("select");
 
-  // Provider selection
-  const [selectedProvider, setSelectedProvider] = useState<ProviderType>("instantly");
+  // Provider selection (default to SmartLead as primary provider going forward)
+  const [selectedProvider, setSelectedProvider] = useState<ProviderType>("smartlead");
 
   // API key
   const [apiKey, setApiKey] = useState("");
@@ -72,15 +72,16 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
   // Submission
   const [isPending, startTransition] = useTransition();
   const [linkedCampaignName, setLinkedCampaignName] = useState("");
+  const [linkedCampaignDbId, setLinkedCampaignDbId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const router = useRouter();
   const supabase = createClient();
 
-  // Generate webhook URL
+  // Generate webhook URL with the local campaign UUID
   const webhookUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/api/webhooks/${selectedProvider}`
+    typeof window !== "undefined" && linkedCampaignDbId
+      ? `${window.location.origin}/api/webhooks/${selectedProvider}/${linkedCampaignDbId}`
       : "";
 
   // Load campaigns (validates API key and fetches campaigns in one step)
@@ -194,6 +195,7 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
     }
 
     setLinkedCampaignName(campaignName);
+    setLinkedCampaignDbId(newCampaign.id);
     setStep("success");
 
     startTransition(() => {
@@ -232,7 +234,7 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
     setOpen(false);
     setTimeout(() => {
       setStep("select");
-      setSelectedProvider("instantly");
+      setSelectedProvider("smartlead");
       setApiKey("");
       setApiKeyValid(null);
       setCampaigns([]);
@@ -241,6 +243,7 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
       setCopied(false);
       setLoadError(null);
       setSyncStatus(null);
+      setLinkedCampaignDbId(null);
     }, 200);
   };
 

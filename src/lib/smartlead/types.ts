@@ -79,6 +79,52 @@ export interface SmartleadListResponse<T> {
   total?: number;
 }
 
+// Campaign analytics from /campaigns/{id}/analytics
+export interface SmartleadCampaignAnalytics {
+  sent_count: number;
+  unique_sent_count: number;
+  open_count: number;
+  unique_open_count: number;
+  click_count: number;
+  unique_click_count: number;
+  reply_count: number;
+  unique_reply_count: number;
+  bounce_count: number;
+  unsubscribe_count: number;
+  total_leads: number;
+}
+
+// Webhook payload from SmartLead
+export interface SmartleadWebhookPayload {
+  event_type:
+    | "EMAIL_SENT"
+    | "EMAIL_OPEN"
+    | "EMAIL_OPENED"
+    | "EMAIL_LINK_CLICK"
+    | "LINK_CLICKED"
+    | "EMAIL_REPLY"
+    | "REPLY"
+    | "EMAIL_BOUNCED"
+    | "LEAD_UNSUBSCRIBED"
+    | "LEAD_CATEGORY_CHANGE"
+    | "LEAD_CATEGORY_UPDATED";
+  campaign_id?: number;
+  campaign_name?: string;
+  lead_id?: number;
+  email?: string;
+  timestamp?: string;
+  // Event-specific fields
+  subject?: string;
+  body?: string;
+  from_email?: string;
+  to_email?: string;
+  link_url?: string;
+  category?: string;
+  previous_category?: string;
+  // Additional fields
+  [key: string]: unknown;
+}
+
 // Sync result type
 export interface SmartleadSyncResult {
   success: boolean;

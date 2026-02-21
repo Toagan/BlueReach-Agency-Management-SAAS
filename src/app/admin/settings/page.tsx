@@ -36,6 +36,8 @@ export default function SettingsPage() {
   const [showValue, setShowValue] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"success" | "error" | null>(null);
+  const [testingSmartlead, setTestingSmartlead] = useState(false);
+  const [smartleadStatus, setSmartleadStatus] = useState<"success" | "error" | null>(null);
 
   // Logo state
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -250,6 +252,20 @@ export default function SettingsPage() {
     }
   };
 
+  const testSmartleadConnection = async () => {
+    setTestingSmartlead(true);
+    setSmartleadStatus(null);
+    try {
+      const res = await fetch("/api/smartlead/status");
+      const data = await res.json();
+      setSmartleadStatus(data.connected ? "success" : "error");
+    } catch {
+      setSmartleadStatus("error");
+    } finally {
+      setTestingSmartlead(false);
+    }
+  };
+
   const settingLabels: Record<string, { label: string; description: string; icon: typeof Key }> = {
     instantly_api_key: {
       label: "Instantly API Key",
@@ -263,8 +279,13 @@ export default function SettingsPage() {
     },
     smartlead_api_key: {
       label: "Smartlead API Key",
-      description: "Your Smartlead API key for syncing email accounts and warmup data",
+      description: "Your Smartlead API key for syncing campaigns, email accounts, and warmup data",
       icon: Key,
+    },
+    smartlead_webhook_secret: {
+      label: "Smartlead Webhook Secret",
+      description: "Secret for validating incoming webhooks from Smartlead",
+      icon: Shield,
     },
   };
 
@@ -754,20 +775,38 @@ export default function SettingsPage() {
             <div>
               <CardTitle>Smartlead Integration</CardTitle>
               <CardDescription>
-                Connect your Smartlead account to sync email accounts and warmup data
+                Connect your Smartlead account to sync campaigns, email accounts, and warmup data
               </CardDescription>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={testSmartleadConnection}
+              disabled={testingSmartlead}
+            >
+              {testingSmartlead ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : smartleadStatus === "success" ? (
+                <Check className="h-4 w-4 mr-2 text-green-500" />
+              ) : smartleadStatus === "error" ? (
+                <X className="h-4 w-4 mr-2 text-red-500" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Test Connection
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          {(() => {
-            const smartleadSetting = settings.find(s => s.key === "smartlead_api_key");
-            const config = settingLabels["smartlead_api_key"];
+          {["smartlead_api_key", "smartlead_webhook_secret"].map((settingKey) => {
+            const smartleadSetting = settings.find(s => s.key === settingKey);
+            const config = settingLabels[settingKey];
+            if (!config) return null;
             const Icon = config.icon;
-            const isEditing = editingKey === "smartlead_api_key";
+            const isEditing = editingKey === settingKey;
 
             return (
-              <div className="space-y-2">
+              <div key={settingKey} className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label className="flex items-center gap-2">
                     <Icon className="h-4 w-4 text-gray-500" />
@@ -788,7 +827,7 @@ export default function SettingsPage() {
                         type={showValue ? "text" : "password"}
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
-                        placeholder="Enter Smartlead API key..."
+                        placeholder={`Enter ${config.label}...`}
                         className="pr-10"
                       />
                       <button
@@ -800,10 +839,10 @@ export default function SettingsPage() {
                       </button>
                     </div>
                     <Button
-                      onClick={() => handleSave("smartlead_api_key")}
-                      disabled={saving === "smartlead_api_key"}
+                      onClick={() => handleSave(settingKey)}
+                      disabled={saving === settingKey}
                     >
-                      {saving === "smartlead_api_key" ? (
+                      {saving === settingKey ? (
                         <RefreshCw className="h-4 w-4 animate-spin" />
                       ) : (
                         "Save"
@@ -832,7 +871,7 @@ export default function SettingsPage() {
                     <Button
                       variant="outline"
                       onClick={() => {
-                        setEditingKey("smartlead_api_key");
+                        setEditingKey(settingKey);
                         setEditValue("");
                       }}
                     >
@@ -841,8 +880,8 @@ export default function SettingsPage() {
                     {smartleadSetting?.is_set && (
                       <Button
                         variant="outline"
-                        onClick={() => handleClear("smartlead_api_key")}
-                        disabled={saving === "smartlead_api_key"}
+                        onClick={() => handleClear(settingKey)}
+                        disabled={saving === settingKey}
                         className="text-red-600 hover:text-red-700"
                       >
                         Clear
@@ -858,7 +897,7 @@ export default function SettingsPage() {
                 )}
               </div>
             );
-          })()}
+          })}
         </CardContent>
       </Card>
 
