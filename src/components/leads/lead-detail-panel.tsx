@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import DOMPurify from "dompurify";
 import {
   Sheet,
   SheetContent,
@@ -499,9 +500,12 @@ export function LeadDetailPanel({
                             <div
                               className="prose prose-sm max-w-none dark:prose-invert [&_*]:text-sm [&_a]:text-primary"
                               dangerouslySetInnerHTML={{
-                                __html: email.body_html.length > 300
-                                  ? email.body_html.slice(0, 300) + "..."
-                                  : email.body_html
+                                __html: DOMPurify.sanitize(
+                                  email.body_html.length > 300
+                                    ? email.body_html.slice(0, 300) + "..."
+                                    : email.body_html,
+                                  { ALLOWED_TAGS: ["p", "br", "strong", "em", "b", "i", "u", "a", "ul", "ol", "li", "blockquote", "div", "span"], ALLOWED_ATTR: ["href", "target", "rel", "style"], ALLOW_DATA_ATTR: false }
+                                )
                               }}
                             />
                           ) : (

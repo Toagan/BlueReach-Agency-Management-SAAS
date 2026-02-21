@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { getServerUrl } from "@/utils/get-url";
+import { requireAdmin } from "@/lib/auth";
 
 // Create a Supabase client with service role for admin operations
 function getServiceSupabase() {
@@ -13,6 +14,9 @@ function getServiceSupabase() {
 
 // POST - Send an invitation to a client
 export async function POST(request: Request) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const supabase = await createClient();
     const serviceSupabase = getServiceSupabase();
@@ -241,6 +245,9 @@ export async function POST(request: Request) {
 
 // GET - List invitations for a client
 export async function GET(request: Request) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const supabase = await createClient();
 

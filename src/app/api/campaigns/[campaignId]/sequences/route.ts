@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getProviderForCampaign } from "@/lib/providers";
+import { requireCampaignAccess } from "@/lib/auth";
 
 // Use service role key for admin operations
 function getSupabase() {
@@ -68,6 +69,8 @@ export async function GET(
   { params }: { params: Promise<{ campaignId: string }> }
 ) {
   const { campaignId } = await params;
+  const authResult = await requireCampaignAccess(campaignId);
+  if (authResult.error) return authResult.error;
   const supabase = getSupabase();
 
   try {
@@ -161,6 +164,8 @@ export async function POST(
   { params }: { params: Promise<{ campaignId: string }> }
 ) {
   const { campaignId } = await params;
+  const authResult = await requireCampaignAccess(campaignId);
+  if (authResult.error) return authResult.error;
   const supabase = getSupabase();
 
   try {

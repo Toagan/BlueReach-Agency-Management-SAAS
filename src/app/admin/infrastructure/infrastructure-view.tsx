@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -230,15 +231,11 @@ export function InfrastructureView({
     }
   };
 
-  // Auto-refresh every 30 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      hasFetched.current = false;
-      fetchData(true);
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [fetchData]);
+  // Auto-refresh every 30 seconds (pauses when tab is hidden)
+  useVisibilityPolling(() => {
+    hasFetched.current = false;
+    fetchData(true);
+  }, 30000);
 
   // Initial fetch
   useEffect(() => {

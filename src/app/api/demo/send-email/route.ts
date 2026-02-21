@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendPositiveReplyNotification, sendStatsReport } from "@/lib/email/send";
+import { requireAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -60,6 +61,9 @@ const SAMPLE_PREVIOUS_STATS = {
 };
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const body = await request.json();
     const {

@@ -7,6 +7,7 @@ import {
   createInstantlyCampaignWithDefaults,
 } from "@/lib/instantly";
 import type { InstantlyCampaignCreatePayload } from "@/lib/instantly";
+import { requireAuth } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -18,6 +19,8 @@ function getSupabase() {
 // GET - List all campaigns from Instantly
 export async function GET(request: Request) {
   try {
+    const auth = await requireAuth();
+    if (auth.error) return auth.error;
     const { searchParams } = new URL(request.url);
     const includeAnalytics = searchParams.get("analytics") === "true";
 
@@ -55,6 +58,8 @@ export async function GET(request: Request) {
 // POST - Sync campaigns from Instantly to local DB
 export async function POST(request: Request) {
   try {
+    const auth = await requireAuth();
+    if (auth.error) return auth.error;
     const body = await request.json();
     const { client_id, campaign_ids } = body as {
       client_id: string;
@@ -128,6 +133,8 @@ export async function POST(request: Request) {
 // PUT - Create a new campaign in Instantly and optionally link to local client
 export async function PUT(request: Request) {
   try {
+    const auth = await requireAuth();
+    if (auth.error) return auth.error;
     const body = await request.json();
     const {
       name,

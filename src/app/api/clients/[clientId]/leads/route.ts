@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireClientAccess } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -15,6 +16,8 @@ export async function GET(
 ) {
   try {
     const { clientId } = await params;
+    const auth = await requireClientAccess(clientId);
+    if (auth.error) return auth.error;
     const { searchParams } = new URL(request.url);
 
     const positiveOnly = searchParams.get("positive") === "true";

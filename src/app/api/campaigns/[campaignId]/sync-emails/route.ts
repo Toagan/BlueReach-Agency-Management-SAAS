@@ -5,12 +5,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getProviderForCampaign } from "@/lib/providers";
+import { requireCampaignAccess } from "@/lib/auth";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ campaignId: string }> }
 ) {
   const { campaignId } = await params;
+  const auth = await requireCampaignAccess(campaignId);
+  if (auth.error) return auth.error;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -195,6 +198,8 @@ export async function GET(
   { params }: { params: Promise<{ campaignId: string }> }
 ) {
   const { campaignId } = await params;
+  const auth = await requireCampaignAccess(campaignId);
+  if (auth.error) return auth.error;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

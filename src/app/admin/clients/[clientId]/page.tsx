@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -262,37 +263,37 @@ export default function ClientDashboardPage() {
       setExpandedEmailLeadId(null);
     } else {
       setExpandedEmailLeadId(leadId);
-      // Always fetch fresh emails when opening - first from DB, then sync from provider if needed
       setLoadingEmailsForLead(leadId);
       try {
-        // First, fetch from local database
+        // Show cached emails immediately from local database
         const res = await fetch(`/api/leads/${leadId}/emails`);
         if (res.ok) {
           const data = await res.json();
-          const emails = data.emails || [];
-          setLeadEmails((prev) => ({ ...prev, [leadId]: emails }));
+          const cachedEmails = data.emails || [];
+          setLeadEmails((prev) => ({ ...prev, [leadId]: cachedEmails }));
+          setLoadingEmailsForLead(null);
 
-          // If no emails in DB, automatically sync from provider
-          if (emails.length === 0) {
-            setSyncingEmailsForLead(leadId);
-            try {
-              const syncRes = await fetch(`/api/leads/${leadId}/emails`, { method: "POST" });
+          // Sync from provider in the background (don't block the UI)
+          setSyncingEmailsForLead(leadId);
+          fetch(`/api/leads/${leadId}/emails`, { method: "POST" })
+            .then(async (syncRes) => {
               if (syncRes.ok) {
-                // Refresh from DB after sync
-                const refreshRes = await fetch(`/api/leads/${leadId}/emails`);
-                if (refreshRes.ok) {
-                  const refreshData = await refreshRes.json();
-                  setLeadEmails((prev) => ({ ...prev, [leadId]: refreshData.emails || [] }));
+                const syncData = await syncRes.json();
+                // Only re-fetch from DB if new emails were imported
+                if (syncData.imported > 0) {
+                  const refreshRes = await fetch(`/api/leads/${leadId}/emails`);
+                  if (refreshRes.ok) {
+                    const refreshData = await refreshRes.json();
+                    setLeadEmails((prev) => ({ ...prev, [leadId]: refreshData.emails || [] }));
+                  }
                 }
               }
-            } finally {
-              setSyncingEmailsForLead(null);
-            }
-          }
+            })
+            .catch((err) => console.error("Background email sync failed:", err))
+            .finally(() => setSyncingEmailsForLead(null));
         }
       } catch (err) {
-        console.error("Failed to fetch/sync emails:", err);
-      } finally {
+        console.error("Failed to fetch emails:", err);
         setLoadingEmailsForLead(null);
       }
     }
@@ -499,15 +500,13 @@ export default function ClientDashboardPage() {
   useEffect(() => {
     fetchClientData();
     fetchPositiveLeads();
-
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => {
-      fetchClientData(true);
-      fetchPositiveLeads();
-    }, 30000);
-
-    return () => clearInterval(interval);
   }, [fetchClientData, fetchPositiveLeads]);
+
+  // Auto-refresh every 30 seconds (pauses when tab is hidden)
+  useVisibilityPolling(() => {
+    fetchClientData(true);
+    fetchPositiveLeads();
+  }, 30000);
 
   // Fetch tool links when admin is confirmed
   useEffect(() => {

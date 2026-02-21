@@ -20,11 +20,10 @@ interface RouteParams {
 function verifyWebhookSignature(
   payload: string,
   signature: string | null,
-  secret: string | null
+  secret: string
 ): boolean {
-  if (!secret || !signature) {
-    // If no secret configured, allow all webhooks (for development)
-    return true;
+  if (!signature) {
+    return false;
   }
 
   const expectedSignature = crypto
@@ -177,7 +176,9 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const webhookSecret = secretSetting?.value || null;
 
-    if (webhookSecret && !verifyWebhookSignature(rawBody, signature, webhookSecret)) {
+    if (!webhookSecret) {
+      console.warn("[SmartLead Webhook] smartlead_webhook_secret not configured - signature verification disabled. Set this in production!");
+    } else if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
       console.error("[SmartLead Webhook] Invalid signature for campaign:", campaignId);
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
@@ -205,21 +206,52 @@ export async function POST(request: Request, { params }: RouteParams) {
       category: payload.category,
     });
 
-    // Store webhook payload in webhook_logs table
+    // Normalize lead email
     const rawLeadEmail = payload.email;
     const leadEmail = rawLeadEmail?.toLowerCase().trim() || null;
 
-    await supabase
+    // Idempotency check: build a unique key for this event
+    const idempotencyKey = `${eventType}:${leadEmail || "unknown"}:${payload.timestamp || Date.now()}`;
+
+    // Check if we've already processed this exact event
+    const { data: existingLog } = await supabase
+      .from("webhook_logs")
+      .select("id")
+      .eq("campaign_id", campaignId)
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+
+    if (existingLog) {
+      console.log(`[SmartLead Webhook] Duplicate event skipped: ${idempotencyKey}`);
+      return NextResponse.json({
+        success: true,
+        message: "Duplicate event, already processed",
+        deduplicated: true,
+      });
+    }
+
+    // Store webhook payload in webhook_logs table with idempotency key
+    const { error: logError } = await supabase
       .from("webhook_logs")
       .insert({
         campaign_id: campaignId,
         event_type: eventType,
         lead_email: leadEmail,
+        idempotency_key: idempotencyKey,
         payload: payload,
-      })
-      .then(({ error }) => {
-        if (error) console.warn("[SmartLead Webhook] Failed to log:", error.message);
       });
+
+    if (logError) {
+      if (logError.code === "23505") {
+        console.log(`[SmartLead Webhook] Concurrent duplicate event skipped: ${idempotencyKey}`);
+        return NextResponse.json({
+          success: true,
+          message: "Duplicate event, already processed",
+          deduplicated: true,
+        });
+      }
+      console.warn("[SmartLead Webhook] Failed to log:", logError.message);
+    }
 
     if (!leadEmail) {
       console.warn("[SmartLead Webhook] No email in payload:", payload);
@@ -290,16 +322,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       updateData.has_replied = true;
       updateData.status = "replied";
 
-      // Increment campaign's cached_reply_count
-      const { data: campaignData } = await supabase
-        .from("campaigns")
-        .select("cached_reply_count")
-        .eq("id", campaignId)
-        .single();
-      await supabase
-        .from("campaigns")
-        .update({ cached_reply_count: (campaignData?.cached_reply_count || 0) + 1 })
-        .eq("id", campaignId);
+      // Atomically increment campaign's cached_reply_count
+      const { error: rpcErr1 } = await supabase.rpc("increment_campaign_counter", {
+        campaign_uuid: campaignId,
+        counter_name: "cached_reply_count",
+      });
+      if (rpcErr1) console.error("[SmartLead Webhook] Failed to increment cached_reply_count:", rpcErr1);
     }
 
     // Handle email sent
@@ -307,34 +335,22 @@ export async function POST(request: Request, { params }: RouteParams) {
       if (!existingLead || existingLead.status === "new") {
         updateData.status = "contacted";
       }
-      // Increment campaign's cached_emails_sent
-      try {
-        await supabase.rpc("increment_campaign_emails_sent", { campaign_uuid: campaignId });
-      } catch {
-        const { data: cd } = await supabase
-          .from("campaigns")
-          .select("cached_emails_sent")
-          .eq("id", campaignId)
-          .single();
-        await supabase
-          .from("campaigns")
-          .update({ cached_emails_sent: (cd?.cached_emails_sent || 0) + 1 })
-          .eq("id", campaignId);
-      }
+      // Atomically increment campaign's cached_emails_sent
+      const { error: rpcErr2 } = await supabase.rpc("increment_campaign_counter", {
+        campaign_uuid: campaignId,
+        counter_name: "cached_emails_sent",
+      });
+      if (rpcErr2) console.error("[SmartLead Webhook] Failed to increment cached_emails_sent:", rpcErr2);
     }
 
     // Handle bounces
     if (isBounced) {
       updateData.status = "bounced";
-      const { data: cd } = await supabase
-        .from("campaigns")
-        .select("cached_emails_bounced")
-        .eq("id", campaignId)
-        .single();
-      await supabase
-        .from("campaigns")
-        .update({ cached_emails_bounced: (cd?.cached_emails_bounced || 0) + 1 })
-        .eq("id", campaignId);
+      const { error: rpcErr3 } = await supabase.rpc("increment_campaign_counter", {
+        campaign_uuid: campaignId,
+        counter_name: "cached_emails_bounced",
+      });
+      if (rpcErr3) console.error("[SmartLead Webhook] Failed to increment cached_emails_bounced:", rpcErr3);
     }
 
     // Handle email opens
@@ -344,16 +360,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       if (existingLead.status === "contacted" || existingLead.status === "new") {
         updateData.status = "opened";
       }
-      // Increment campaign's cached_emails_opened
-      const { data: cd } = await supabase
-        .from("campaigns")
-        .select("cached_emails_opened")
-        .eq("id", campaignId)
-        .single();
-      await supabase
-        .from("campaigns")
-        .update({ cached_emails_opened: (cd?.cached_emails_opened || 0) + 1 })
-        .eq("id", campaignId);
+      // Atomically increment campaign's cached_emails_opened
+      const { error: rpcErr4 } = await supabase.rpc("increment_campaign_counter", {
+        campaign_uuid: campaignId,
+        counter_name: "cached_emails_opened",
+      });
+      if (rpcErr4) console.error("[SmartLead Webhook] Failed to increment cached_emails_opened:", rpcErr4);
     }
 
     // Handle link clicks

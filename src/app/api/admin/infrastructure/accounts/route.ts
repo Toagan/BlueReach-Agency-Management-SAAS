@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -10,6 +11,9 @@ function getSupabase() {
 
 // GET - List all email accounts with optional filtering
 export async function GET(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get("client");

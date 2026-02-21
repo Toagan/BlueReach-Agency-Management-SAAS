@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Subscription, BillingCycle } from "@/types/database";
+import { requireAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -14,6 +15,9 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const { id } = await params;
     const supabase = getSupabase();
@@ -47,6 +51,9 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const { id } = await params;
     const body = await request.json();
@@ -112,6 +119,9 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const { id } = await params;
     const supabase = getSupabase();

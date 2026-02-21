@@ -3,6 +3,7 @@
 
 import { NextResponse } from "next/server";
 import { createProvider, type ProviderType } from "@/lib/providers";
+import { requireAuth } from "@/lib/auth";
 
 const SUPPORTED_PROVIDERS: ProviderType[] = ["instantly", "smartlead"];
 
@@ -11,6 +12,8 @@ export async function POST(
   { params }: { params: Promise<{ provider: string }> }
 ) {
   try {
+    const auth = await requireAuth();
+    if (auth.error) return auth.error;
     const { provider } = await params;
 
     // Validate provider

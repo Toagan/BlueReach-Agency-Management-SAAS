@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSmartleadClient, fetchAllSmartleadCampaigns } from "@/lib/smartlead";
+import { requireAuth } from "@/lib/auth";
 
 // GET - List all campaigns from SmartLead
 export async function GET() {
   try {
+    const auth = await requireAuth();
+    if (auth.error) return auth.error;
     const client = getSmartleadClient();
 
     const isConfigured = await client.isConfiguredAsync();

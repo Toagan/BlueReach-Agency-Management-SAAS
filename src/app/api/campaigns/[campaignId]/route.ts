@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireCampaignAccess } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -16,6 +17,8 @@ interface RouteParams {
 export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { campaignId } = await params;
+    const auth = await requireCampaignAccess(campaignId);
+    if (auth.error) return auth.error;
     const supabase = getSupabase();
 
     const { data: campaign, error } = await supabase
@@ -48,6 +51,8 @@ export async function GET(request: Request, { params }: RouteParams) {
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const { campaignId } = await params;
+    const auth = await requireCampaignAccess(campaignId);
+    if (auth.error) return auth.error;
     const supabase = getSupabase();
     const body = await request.json();
     const { name, is_active, api_key, hubspot_vertical } = body;
@@ -123,6 +128,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const { campaignId } = await params;
+    const auth = await requireCampaignAccess(campaignId);
+    if (auth.error) return auth.error;
     const supabase = getSupabase();
 
     // First, update leads to preserve campaign name before deletion

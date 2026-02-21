@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { getSmartleadClient } from "@/lib/smartlead";
 import type { SmartleadCampaign } from "@/lib/smartlead";
+import { requireAuth } from "@/lib/auth";
 
 // GET - Test SmartLead API connection
 export async function GET() {
   try {
+    const auth = await requireAuth();
+    if (auth.error) return auth.error;
     const client = getSmartleadClient();
 
     const isConfigured = await client.isConfiguredAsync();

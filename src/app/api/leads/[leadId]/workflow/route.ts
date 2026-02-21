@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAuth } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -20,6 +21,8 @@ export async function POST(
   { params }: { params: Promise<{ leadId: string }> }
 ) {
   try {
+    const auth = await requireAuth();
+    if (auth.error) return auth.error;
     const { leadId } = await params;
     const body: WorkflowUpdate = await request.json();
     const supabase = getSupabase();

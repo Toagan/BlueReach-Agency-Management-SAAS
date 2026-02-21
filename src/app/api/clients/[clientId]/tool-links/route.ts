@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireClientAccess } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -16,6 +17,8 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { clientId } = await params;
+    const auth = await requireClientAccess(clientId);
+    if (auth.error) return auth.error;
     const supabase = getSupabase();
 
     // Fetch tool links from settings
@@ -50,6 +53,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { clientId } = await params;
+    const auth = await requireClientAccess(clientId);
+    if (auth.error) return auth.error;
     const body = await request.json();
     const { goalText, clayUrl, outboundUrl } = body;
 

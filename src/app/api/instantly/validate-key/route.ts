@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth";
 
 // POST - Validate an Instantly API key
 export async function POST(request: Request) {
   try {
+    const auth = await requireAuth();
+    if (auth.error) return auth.error;
     const { apiKey } = await request.json();
 
     if (!apiKey || typeof apiKey !== "string") {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -14,6 +15,9 @@ interface RouteParams {
 
 // GET - Get single account details
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const { accountId } = await params;
     const supabase = getSupabase();
@@ -43,6 +47,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 // PATCH - Update account (assign client, etc.)
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const { accountId } = await params;
     const body = await request.json();
@@ -88,6 +95,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 // DELETE - Remove account from tracking
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const { accountId } = await params;
     const supabase = getSupabase();

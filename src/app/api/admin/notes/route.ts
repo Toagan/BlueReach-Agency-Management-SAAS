@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/auth";
 
 const NOTES_KEY = "admin_notes_content";
 
@@ -12,6 +13,9 @@ function getSupabase() {
 
 // GET - Get notes content
 export async function GET() {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const supabase = getSupabase();
 
@@ -41,6 +45,9 @@ export async function GET() {
 
 // POST - Save notes content
 export async function POST(request: Request) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const supabase = getSupabase();
     const body = await request.json();

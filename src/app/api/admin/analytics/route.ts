@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -54,6 +55,9 @@ function getDateRange(period: string): { startDate: Date; endDate: Date } | null
 // For date-filtered periods, uses campaign_analytics_daily table (accurate daily snapshots)
 // For all-time, uses campaigns.cached_* fields (aggregated totals from Instantly API)
 export async function GET(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(request.url);
     const period = searchParams.get("period") || "all_time";

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireCampaignAccess } from "@/lib/auth";
 
 // CSV export endpoint for campaign leads
 // Supports three filters: positive_replies, replied_not_positive, no_reply
@@ -9,6 +10,8 @@ export async function GET(
   { params }: { params: Promise<{ campaignId: string }> }
 ) {
   const { campaignId } = await params;
+  const auth = await requireCampaignAccess(campaignId);
+  if (auth.error) return auth.error;
   const { searchParams } = new URL(request.url);
   const filter = searchParams.get("filter") || "all";
 

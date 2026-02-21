@@ -225,12 +225,11 @@ async function handleStatsReport(request: NextRequest) {
     const forceClientId = searchParams.get("clientId");
     const forceInterval = searchParams.get("interval");
 
-    // Verify cron secret for security (only required for scheduled cron jobs, not test requests)
-    // Test requests with clientId are allowed without secret (for UI "Send Now" button)
+    // Verify cron secret for security (required for all requests)
     const cronSecret = searchParams.get("secret");
     const expectedSecret = process.env.CRON_SECRET;
 
-    if (expectedSecret && cronSecret !== expectedSecret && !forceClientId) {
+    if (expectedSecret && cronSecret !== expectedSecret) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

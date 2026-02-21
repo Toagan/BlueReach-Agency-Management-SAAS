@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireClientAccess } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -14,6 +15,8 @@ export async function GET(
 ) {
   try {
     const { clientId } = await params;
+    const auth = await requireClientAccess(clientId);
+    if (auth.error) return auth.error;
     const supabase = getSupabase();
 
     const { data: client, error } = await supabase
@@ -45,6 +48,8 @@ export async function PATCH(
 ) {
   try {
     const { clientId } = await params;
+    const auth = await requireClientAccess(clientId);
+    if (auth.error) return auth.error;
     const supabase = getSupabase();
     const body = await request.json();
 

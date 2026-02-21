@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { getCampaignAnalytics } from "@/lib/instantly";
+import { requireAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -11,6 +12,9 @@ function getSupabase() {
 
 // POST - Sync analytics from Instantly to Supabase
 export async function POST() {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const supabase = getSupabase();
 
@@ -73,6 +77,9 @@ export async function POST() {
 
 // GET - Get overview from stored analytics
 export async function GET() {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const supabase = getSupabase();
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAuth } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -11,6 +12,8 @@ function getSupabase() {
 // POST - Create a new client
 export async function POST(request: Request) {
   try {
+    const auth = await requireAuth();
+    if (auth.error) return auth.error;
     const body = await request.json();
     const { name } = body;
 
@@ -50,6 +53,8 @@ export async function POST(request: Request) {
 // GET - List all clients with their campaigns
 export async function GET() {
   try {
+    const auth = await requireAuth();
+    if (auth.error) return auth.error;
     const supabase = getSupabase();
 
     // Fetch all clients

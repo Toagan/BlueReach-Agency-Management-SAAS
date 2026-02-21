@@ -12,31 +12,40 @@ function getSupabase() {
 }
 
 // Verify webhook signature from Instantly
-async function verifySignature(payload: string, signature: string | null): Promise<boolean> {
-  if (!signature) return false;
-  
+async function verifySignature(payload: string, signature: string | null): Promise<{ valid: boolean; secretConfigured: boolean }> {
   const supabase = getSupabase();
   const { data: setting } = await supabase
     .from("settings")
     .select("value")
     .eq("key", "instantly_webhook_secret")
     .single();
-    
+
   const secret = setting?.value;
   if (!secret) {
-    console.warn("No webhook secret configured, accepting all webhooks");
-    return true; // Allow webhooks if no secret is configured
+    console.warn("[Webhook] instantly_webhook_secret not configured - signature verification disabled. Set this in production!");
+    return { valid: true, secretConfigured: false };
   }
-  
+
+  if (!signature) {
+    return { valid: false, secretConfigured: true };
+  }
+
   const expectedSignature = crypto
     .createHmac("sha256", secret)
     .update(payload)
     .digest("hex");
-    
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
-  );
+
+  try {
+    return {
+      valid: crypto.timingSafeEqual(
+        Buffer.from(signature),
+        Buffer.from(expectedSignature)
+      ),
+      secretConfigured: true,
+    };
+  } catch {
+    return { valid: false, secretConfigured: true };
+  }
 }
 
 interface InstantlyWebhookPayload {
@@ -124,8 +133,8 @@ export async function POST(request: Request) {
     const signature = headersList.get("x-instantly-signature");
     const rawBody = await request.text();
     
-    // Verify signature if configured
-    const isValid = await verifySignature(rawBody, signature);
+    // Verify webhook signature
+    const { valid: isValid } = await verifySignature(rawBody, signature);
     if (!isValid) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }

@@ -45,6 +45,8 @@ export class InstantlyApiClient {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  private static readonly REQUEST_TIMEOUT_MS = 30000; // 30 seconds
+
   async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const { method = "GET", body, params } = options;
     const url = this.buildUrl(endpoint, params);
@@ -68,8 +70,13 @@ export class InstantlyApiClient {
     const maxRetries = 3;
 
     while (retries < maxRetries) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), InstantlyApiClient.REQUEST_TIMEOUT_MS);
+
       try {
-        response = await fetch(url, fetchOptions);
+        response = await fetch(url, { ...fetchOptions, signal: controller.signal });
+
+        clearTimeout(timeoutId);
 
         // Handle rate limiting
         if (response.status === 429) {
@@ -85,7 +92,17 @@ export class InstantlyApiClient {
 
         break;
       } catch (error) {
-        if (retries >= maxRetries - 1) throw error;
+        clearTimeout(timeoutId);
+        if (error instanceof DOMException && error.name === "AbortError") {
+          const err = new ProviderError(
+            `Request timeout after ${InstantlyApiClient.REQUEST_TIMEOUT_MS}ms: ${endpoint}`,
+            "instantly",
+            408
+          );
+          if (retries >= maxRetries - 1) throw err;
+        } else if (retries >= maxRetries - 1) {
+          throw error;
+        }
         retries++;
         await this.sleep(Math.pow(2, retries) * 1000);
       }

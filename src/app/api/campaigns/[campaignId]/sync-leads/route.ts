@@ -6,6 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getProviderForCampaign } from "@/lib/providers";
 import { ProviderError } from "@/lib/providers/types";
 import type { ProviderLead } from "@/lib/providers/types";
+import { requireCampaignAccess } from "@/lib/auth";
 
 // Increase timeout for large syncs (up to 5 minutes on Vercel Pro)
 export const maxDuration = 300;
@@ -15,6 +16,8 @@ export async function POST(
   { params }: { params: Promise<{ campaignId: string }> }
 ) {
   const { campaignId } = await params;
+  const auth = await requireCampaignAccess(campaignId);
+  if (auth.error) return auth.error;
 
   // Use service role to bypass RLS
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -43,6 +46,35 @@ export async function POST(
         { status: 404 }
       );
     }
+
+    // Check sync lock - prevent concurrent syncs
+    const { data: lockCheck } = await supabase
+      .from("campaigns")
+      .select("sync_in_progress, sync_started_at")
+      .eq("id", campaignId)
+      .single();
+
+    if (lockCheck?.sync_in_progress) {
+      const syncAge = lockCheck.sync_started_at
+        ? Date.now() - new Date(lockCheck.sync_started_at).getTime()
+        : 0;
+      const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+      if (syncAge < LOCK_TIMEOUT_MS) {
+        return NextResponse.json(
+          { error: "Sync already in progress", syncStartedAt: lockCheck.sync_started_at },
+          { status: 409 }
+        );
+      }
+      // Lock expired, allow this sync to proceed
+      console.log(`[SyncLeads] Previous sync lock expired (${Math.round(syncAge / 1000)}s old), proceeding`);
+    }
+
+    // Acquire sync lock
+    await supabase
+      .from("campaigns")
+      .update({ sync_in_progress: true, sync_started_at: new Date().toISOString() })
+      .eq("id", campaignId);
 
     // Get client name for denormalization
     const { data: client } = await supabase
@@ -83,19 +115,6 @@ export async function POST(
     }
 
     console.log(`[SyncLeads] Fetched ${providerLeads.length} leads from provider`);
-
-    // DEBUG: Log sample of fetched leads for Smartlead debugging
-    if (provider.providerType === "smartlead" && providerLeads.length > 0) {
-      console.log(`[SyncLeads] Smartlead sample leads (with stats):`, providerLeads.slice(0, 3).map(l => ({
-        id: l.id,
-        email: l.email,
-        status: l.status,
-        interestStatus: l.interestStatus,
-        emailReplyCount: l.emailReplyCount,
-        emailOpenCount: l.emailOpenCount,
-        emailClickCount: l.emailClickCount,
-      })));
-    }
 
     // Get existing leads for this campaign
     const { data: existingLeads } = await supabase
@@ -884,6 +903,12 @@ export async function POST(
       `[SyncLeads] Completed: ${insertedCount} inserted, ${updatedCount} updated, ${positiveLeadsFromStats} positive, ${emailsSynced} emails synced`
     );
 
+    // Release sync lock
+    await supabase
+      .from("campaigns")
+      .update({ sync_in_progress: false, sync_started_at: null })
+      .eq("id", campaignId);
+
     return NextResponse.json({
       success: true,
       totalFromProvider: providerLeads.length,
@@ -910,10 +935,10 @@ export async function POST(
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       if (supabaseUrl && supabaseServiceKey) {
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
-        await supabase
+        const sb = createClient(supabaseUrl, supabaseServiceKey);
+        await sb
           .from("campaigns")
-          .update({ is_active: false })
+          .update({ is_active: false, sync_in_progress: false, sync_started_at: null })
           .eq("id", campaignId);
       }
 
@@ -924,6 +949,17 @@ export async function POST(
     }
 
     console.error("[SyncLeads] Error:", error);
+
+    // Release sync lock on error
+    try {
+      await supabase
+        .from("campaigns")
+        .update({ sync_in_progress: false, sync_started_at: null })
+        .eq("id", campaignId);
+    } catch {
+      // Ignore lock release errors
+    }
+
     return NextResponse.json(
       {
         error:
@@ -975,6 +1011,8 @@ export async function GET(
   { params }: { params: Promise<{ campaignId: string }> }
 ) {
   const { campaignId } = await params;
+  const auth = await requireCampaignAccess(campaignId);
+  if (auth.error) return auth.error;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

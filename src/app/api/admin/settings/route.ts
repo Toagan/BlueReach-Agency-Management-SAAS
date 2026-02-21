@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -10,6 +11,9 @@ function getSupabase() {
 
 // GET - Get all settings (values masked for security)
 export async function GET() {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const supabase = getSupabase();
 
@@ -46,6 +50,9 @@ export async function GET() {
 
 // POST - Update a setting
 export async function POST(request: Request) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const supabase = getSupabase();
     const body = await request.json();
@@ -100,6 +107,9 @@ export async function POST(request: Request) {
 
 // DELETE - Clear a setting value
 export async function DELETE(request: Request) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const supabase = getSupabase();
     const { searchParams } = new URL(request.url);

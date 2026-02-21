@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getProviderForCampaign } from "@/lib/providers";
 import type { ProviderEmail } from "@/lib/providers/types";
+import { requireClientAccess } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -17,6 +18,8 @@ export async function POST(
 ) {
   try {
     const { clientId } = await params;
+    const auth = await requireClientAccess(clientId);
+    if (auth.error) return auth.error;
     const supabase = getSupabase();
 
     // Get all campaigns for this client

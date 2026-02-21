@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { getProviderForCampaign } from "@/lib/providers";
+import { requireAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -16,6 +17,9 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // Supports per-campaign API keys and single-campaign mode for large datasets
 // Optional date range parameters for chunked processing of large campaigns
 export async function POST(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const supabase = getSupabase();
     const { searchParams } = new URL(request.url);
@@ -196,6 +200,9 @@ export async function POST(request: NextRequest) {
 
 // GET - Check backfill status (count of daily records)
 export async function GET() {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const supabase = getSupabase();
 

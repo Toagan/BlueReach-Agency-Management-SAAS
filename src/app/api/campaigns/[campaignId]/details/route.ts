@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getProviderForCampaign } from "@/lib/providers";
 import { ProviderError } from "@/lib/providers/types";
+import { requireCampaignAccess } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -26,6 +27,8 @@ function isCacheStale(cacheUpdatedAt: string | null): boolean {
 export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { campaignId } = await params;
+    const auth = await requireCampaignAccess(campaignId);
+    if (auth.error) return auth.error;
     const { searchParams } = new URL(request.url);
     const forceRefresh = searchParams.get("refresh") === "true";
 

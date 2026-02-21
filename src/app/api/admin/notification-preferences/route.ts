@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -10,6 +11,9 @@ function getSupabase() {
 
 // GET - Get all workspace users with their notification preferences
 export async function GET() {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   const supabase = getSupabase();
 
   try {
@@ -69,6 +73,9 @@ export async function GET() {
 
 // POST - Update notification preferences
 export async function POST(request: Request) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   const supabase = getSupabase();
 
   try {

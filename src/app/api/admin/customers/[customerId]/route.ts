@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/auth";
 
 // Service role client for operations that bypass RLS
 function getServiceSupabase() {
@@ -14,6 +15,9 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ customerId: string }> }
 ) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const { customerId } = await params;
     const supabase = await createClient();
@@ -64,6 +68,9 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ customerId: string }> }
 ) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const { customerId } = await params;
     const supabase = await createClient();
@@ -136,6 +143,9 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ customerId: string }> }
 ) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const { customerId } = await params;
     const supabase = await createClient();

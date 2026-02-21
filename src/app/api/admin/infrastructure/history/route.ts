@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -10,6 +11,9 @@ function getSupabase() {
 
 // GET - Get health history for account(s)
 export async function GET(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(request.url);
     const accountId = searchParams.get("account_id");
@@ -55,6 +59,9 @@ export async function GET(request: NextRequest) {
 
 // POST - Create daily snapshot for all accounts
 export async function POST() {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const supabase = getSupabase();
     const today = new Date().toISOString().split("T")[0];
@@ -127,6 +134,9 @@ export async function POST() {
 
 // DELETE - Clean up old history (retention policy)
 export async function DELETE(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(request.url);
     const retentionDays = parseInt(searchParams.get("retention_days") || "90");

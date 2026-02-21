@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { checkDomainHealth, checkDomainsHealth } from "@/lib/dns";
+import { requireAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -11,6 +12,9 @@ function getSupabase() {
 
 // GET - Get domain health records from database
 export async function GET(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(request.url);
     const domain = searchParams.get("domain");
@@ -54,6 +58,9 @@ export async function GET(request: NextRequest) {
 
 // POST - Check DNS health for domain(s) and store results
 export async function POST(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const body = await request.json();
     const domains: string[] = body.domains || [];
@@ -133,6 +140,9 @@ export async function POST(request: NextRequest) {
 
 // PATCH - Refresh DNS health for domains from email accounts
 export async function PATCH() {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
   try {
     const supabase = getSupabase();
 

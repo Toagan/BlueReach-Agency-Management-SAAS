@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getProviderForCampaign } from "@/lib/providers";
 import type { ProviderEmail } from "@/lib/providers/types";
+import { requireAuth } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -16,6 +17,8 @@ export async function GET(
   { params }: { params: Promise<{ leadId: string }> }
 ) {
   try {
+    const auth = await requireAuth();
+    if (auth.error) return auth.error;
     const { leadId } = await params;
     const supabase = getSupabase();
 
@@ -50,6 +53,8 @@ export async function POST(
   { params }: { params: Promise<{ leadId: string }> }
 ) {
   try {
+    const auth = await requireAuth();
+    if (auth.error) return auth.error;
     const { leadId } = await params;
     const supabase = getSupabase();
 

@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { getInstantlyClient } from "@/lib/instantly";
+import { requireAuth } from "@/lib/auth";
 
 // Lightweight status check - just verify API is configured and working
 export async function GET() {
   try {
+    const auth = await requireAuth();
+    if (auth.error) return auth.error;
     const client = getInstantlyClient();
 
     if (!client.isConfigured()) {

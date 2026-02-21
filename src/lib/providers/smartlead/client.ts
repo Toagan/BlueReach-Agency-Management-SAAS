@@ -76,6 +76,8 @@ export class SmartleadApiClient {
     this.requestCount++;
   }
 
+  private static readonly REQUEST_TIMEOUT_MS = 30000; // 30 seconds
+
   async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const { method = "GET", body, params } = options;
 
@@ -101,14 +103,17 @@ export class SmartleadApiClient {
     const maxRetries = 3;
 
     while (retries < maxRetries) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), SmartleadApiClient.REQUEST_TIMEOUT_MS);
+
       try {
-        response = await fetch(url, fetchOptions);
+        response = await fetch(url, { ...fetchOptions, signal: controller.signal });
+
+        clearTimeout(timeoutId);
 
         // Handle rate limiting
         if (response.status === 429) {
           const retryAfter = response.headers.get("Retry-After");
-          // Cap wait time at 10 seconds to avoid long delays
-          // Even if Smartlead says 60s, we'll retry sooner with exponential backoff
           const suggestedWait = retryAfter ? parseInt(retryAfter) * 1000 : 5000;
           const waitTime = Math.min(suggestedWait, 10000) * (retries + 1);
           console.log(`[Smartlead] Rate limited (429), waiting ${waitTime}ms before retry ${retries + 1}/${maxRetries}`);
@@ -119,7 +124,17 @@ export class SmartleadApiClient {
 
         break;
       } catch (error) {
-        if (retries >= maxRetries - 1) throw error;
+        clearTimeout(timeoutId);
+        if (error instanceof DOMException && error.name === "AbortError") {
+          const err = new ProviderError(
+            `Request timeout after ${SmartleadApiClient.REQUEST_TIMEOUT_MS}ms: ${endpoint}`,
+            "smartlead",
+            408
+          );
+          if (retries >= maxRetries - 1) throw err;
+        } else if (retries >= maxRetries - 1) {
+          throw error;
+        }
         retries++;
         await this.sleep(Math.pow(2, retries) * 1000);
       }

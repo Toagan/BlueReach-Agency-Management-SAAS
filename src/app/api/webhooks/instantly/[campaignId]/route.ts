@@ -41,32 +41,40 @@ async function updateDailyAnalytics(
   if (!column) return; // Event type doesn't affect daily stats
 
   try {
-    // Try to increment existing record, or create new one
-    const { data: existing } = await supabase
+    // Upsert with atomic increment - try insert first, update on conflict
+    const { error: upsertError } = await supabase
       .from("campaign_analytics_daily")
-      .select("id, " + column)
-      .eq("campaign_id", campaignId)
-      .eq("snapshot_date", eventDate)
-      .single();
-
-    if (existing) {
-      // Increment existing counter
-      const currentValue = (existing as Record<string, number>)[column] || 0;
-      await supabase
-        .from("campaign_analytics_daily")
-        .update({
-          [column]: currentValue + 1,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existing.id);
-    } else {
-      // Create new daily record
-      await supabase.from("campaign_analytics_daily").insert({
+      .upsert({
         campaign_id: campaignId,
         snapshot_date: eventDate,
         [column]: 1,
         updated_at: new Date().toISOString(),
+      }, {
+        onConflict: "campaign_id,snapshot_date",
+        ignoreDuplicates: false,
       });
+
+    // If upsert added a new row, we're done. If it updated, we need to increment.
+    // Since upsert replaces, we need a different approach for existing rows.
+    if (upsertError) {
+      // Fallback: try increment on existing row
+      const { data: existing } = await supabase
+        .from("campaign_analytics_daily")
+        .select("id, " + column)
+        .eq("campaign_id", campaignId)
+        .eq("snapshot_date", eventDate)
+        .single();
+
+      if (existing) {
+        const currentValue = (existing as Record<string, number>)[column] || 0;
+        await supabase
+          .from("campaign_analytics_daily")
+          .update({
+            [column]: currentValue + 1,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existing.id);
+      }
     }
   } catch (err) {
     console.error("[Webhook] Error updating daily analytics:", err);
@@ -108,15 +116,14 @@ interface InstantlyWebhookPayload {
   [key: string]: unknown;
 }
 
-// Verify webhook signature if secret is configured
+// Verify webhook signature
 function verifyWebhookSignature(
   payload: string,
   signature: string | null,
-  secret: string | null
+  secret: string
 ): boolean {
-  if (!secret || !signature) {
-    // If no secret configured, allow all webhooks (for development)
-    return true;
+  if (!signature) {
+    return false;
   }
 
   const expectedSignature = crypto
@@ -124,10 +131,14 @@ function verifyWebhookSignature(
     .update(payload)
     .digest("hex");
 
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
-  );
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    );
+  } catch {
+    return false;
+  }
 }
 
 // POST - Receive webhook events from Instantly
@@ -141,11 +152,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     const rawBody = await request.text();
     const payload: InstantlyWebhookPayload = JSON.parse(rawBody);
 
-    // Verify signature if configured
+    // Verify webhook signature
     const signature = request.headers.get("x-instantly-signature");
     const webhookSecret = process.env.INSTANTLY_WEBHOOK_SECRET;
 
-    if (webhookSecret && !verifyWebhookSignature(rawBody, signature, webhookSecret)) {
+    if (!webhookSecret) {
+      console.warn("[Webhook] INSTANTLY_WEBHOOK_SECRET not configured - webhook signature verification disabled. Set this in production!");
+    } else if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
       console.error("[Webhook] Invalid signature for campaign:", campaignId);
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
@@ -169,18 +182,49 @@ export async function POST(request: Request, { params }: RouteParams) {
       interest_status: payload.interest_status || payload.lt_interest_status,
     });
 
-    // Store webhook payload in webhook_logs table
+    // Idempotency check: build a unique key for this event to prevent duplicate processing
+    const idempotencyKey = payload.email_id
+      ? `${payload.event_type}:${payload.email_id}`
+      : `${payload.event_type}:${payload.lead_email}:${payload.timestamp}`;
+
+    // Check if we've already processed this exact event
+    const { data: existingLog } = await supabase
+      .from("webhook_logs")
+      .select("id")
+      .eq("campaign_id", campaignId)
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+
+    if (existingLog) {
+      console.log(`[Webhook] Duplicate event skipped: ${idempotencyKey}`);
+      return NextResponse.json({
+        success: true,
+        message: "Duplicate event, already processed",
+        deduplicated: true,
+      });
+    }
+
+    // Store webhook payload in webhook_logs table with idempotency key
     const { error: logError } = await supabase
       .from("webhook_logs")
       .insert({
         campaign_id: campaignId,
         event_type: payload.event_type || "unknown",
         lead_email: payload.lead_email?.toLowerCase().trim() || null,
+        idempotency_key: idempotencyKey,
         payload: payload,
       });
 
     if (logError) {
-      // Don't fail the webhook if logging fails, just warn
+      // If insert fails due to duplicate key constraint, this is a concurrent duplicate
+      if (logError.code === "23505") {
+        console.log(`[Webhook] Concurrent duplicate event skipped: ${idempotencyKey}`);
+        return NextResponse.json({
+          success: true,
+          message: "Duplicate event, already processed",
+          deduplicated: true,
+        });
+      }
       console.warn("[Webhook] Failed to log webhook payload:", logError.message);
     }
 
@@ -304,16 +348,12 @@ export async function POST(request: Request, { params }: RouteParams) {
         updateData.reply_from_variant = payload.variant;
         updateData.reply_from_variant_label = replyVariantLabel;
       }
-      // Increment campaign's cached_reply_count
-      const { data: campaignData } = await supabase
-        .from("campaigns")
-        .select("cached_reply_count")
-        .eq("id", campaignId)
-        .single();
-      await supabase
-        .from("campaigns")
-        .update({ cached_reply_count: (campaignData?.cached_reply_count || 0) + 1 })
-        .eq("id", campaignId);
+      // Atomically increment campaign's cached_reply_count
+      const { error: rpcErr1 } = await supabase.rpc("increment_campaign_counter", {
+        campaign_uuid: campaignId,
+        counter_name: "cached_reply_count",
+      });
+      if (rpcErr1) console.error("[Webhook] Failed to increment cached_reply_count:", rpcErr1);
     }
 
     if (isEmailSent) {
@@ -321,27 +361,22 @@ export async function POST(request: Request, { params }: RouteParams) {
       if (!existingLead || existingLead.status === "new") {
         updateData.status = "contacted";
       }
-      // Increment campaign's cached_emails_sent
-      try {
-        await supabase.rpc("increment_campaign_emails_sent", { campaign_uuid: campaignId });
-      } catch {
-        // RPC might not exist, update directly
-        const currentSent = (campaign as { cached_emails_sent?: number }).cached_emails_sent || 0;
-        await supabase
-          .from("campaigns")
-          .update({ cached_emails_sent: currentSent + 1 })
-          .eq("id", campaignId);
-      }
+      // Atomically increment campaign's cached_emails_sent
+      const { error: rpcErr2 } = await supabase.rpc("increment_campaign_counter", {
+        campaign_uuid: campaignId,
+        counter_name: "cached_emails_sent",
+      });
+      if (rpcErr2) console.error("[Webhook] Failed to increment cached_emails_sent:", rpcErr2);
     }
 
     if (isBounced) {
       updateData.status = "bounced";
-      // Increment campaign's cached_emails_bounced
-      const currentBounced = (campaign as { cached_emails_bounced?: number }).cached_emails_bounced || 0;
-      await supabase
-        .from("campaigns")
-        .update({ cached_emails_bounced: currentBounced + 1 })
-        .eq("id", campaignId);
+      // Atomically increment campaign's cached_emails_bounced
+      const { error: rpcErr3 } = await supabase.rpc("increment_campaign_counter", {
+        campaign_uuid: campaignId,
+        counter_name: "cached_emails_bounced",
+      });
+      if (rpcErr3) console.error("[Webhook] Failed to increment cached_emails_bounced:", rpcErr3);
     }
 
     if (isEmailOpened && existingLead) {
@@ -352,16 +387,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       if (existingLead.status === "contacted" || existingLead.status === "new") {
         updateData.status = "opened";
       }
-      // Increment campaign's cached_emails_opened
-      const { data: campaignData } = await supabase
-        .from("campaigns")
-        .select("cached_emails_opened")
-        .eq("id", campaignId)
-        .single();
-      await supabase
-        .from("campaigns")
-        .update({ cached_emails_opened: (campaignData?.cached_emails_opened || 0) + 1 })
-        .eq("id", campaignId);
+      // Atomically increment campaign's cached_emails_opened
+      const { error: rpcErr4 } = await supabase.rpc("increment_campaign_counter", {
+        campaign_uuid: campaignId,
+        counter_name: "cached_emails_opened",
+      });
+      if (rpcErr4) console.error("[Webhook] Failed to increment cached_emails_opened:", rpcErr4);
     }
 
     if (isLinkClicked && existingLead) {

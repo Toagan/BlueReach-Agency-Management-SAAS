@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useParams } from "next/navigation";
+import DOMPurify from "dompurify";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -658,14 +660,8 @@ export default function CampaignDetailPage() {
     fetchData();
   }, [fetchData]);
 
-  // Auto-refresh interval (every 30 seconds)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refreshAnalytics();
-    }, 30000); // 30 seconds
-
-    return () => clearInterval(interval);
-  }, [refreshAnalytics]);
+  // Auto-refresh every 30 seconds (pauses when tab is hidden)
+  useVisibilityPolling(() => refreshAnalytics(), 30000);
 
   if (loading && !campaign) {
     return (
@@ -1304,7 +1300,7 @@ export default function CampaignDetailPage() {
                                   )}
                                   <div
                                     className="bg-muted/50 rounded-lg p-3 text-sm max-h-64 overflow-y-auto [&_div]:mb-1 [&_br]:block [&_a]:text-blue-600 [&_a]:underline"
-                                    dangerouslySetInnerHTML={{ __html: body }}
+                                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(body, { ALLOWED_TAGS: ["p", "br", "strong", "em", "b", "i", "u", "a", "ul", "ol", "li", "blockquote", "div", "span", "h1", "h2", "h3", "table", "tr", "td", "th", "tbody", "thead"], ALLOWED_ATTR: ["href", "target", "rel", "style"], ALLOW_DATA_ATTR: false }) }}
                                   />
                                 </>
                               );

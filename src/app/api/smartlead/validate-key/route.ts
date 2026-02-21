@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth";
 
 const SMARTLEAD_API_BASE = "https://server.smartlead.ai/api/v1";
 
 // POST - Validate a Smartlead API key
 export async function POST(request: Request) {
   try {
+    const auth = await requireAuth();
+    if (auth.error) return auth.error;
     const { apiKey } = await request.json();
 
     if (!apiKey || typeof apiKey !== "string") {

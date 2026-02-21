@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireCampaignAccess } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -16,6 +17,8 @@ interface RouteParams {
 export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { campaignId } = await params;
+    const auth = await requireCampaignAccess(campaignId);
+    if (auth.error) return auth.error;
     const supabase = getSupabase();
 
     // Get leads for this campaign

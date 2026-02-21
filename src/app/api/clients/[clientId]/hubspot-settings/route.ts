@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { HubSpotClient } from "@/lib/hubspot";
+import { requireClientAccess } from "@/lib/auth";
 
 function getSupabaseAdmin() {
   return createClient(
@@ -17,28 +18,8 @@ export async function GET(
 ) {
   try {
     const { clientId } = await params;
-    const supabase = await createServerClient();
-
-    // Verify user is admin
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role !== "admin") {
-      return NextResponse.json(
-        { error: "Admin access required" },
-        { status: 403 }
-      );
-    }
+    const auth = await requireClientAccess(clientId);
+    if (auth.error) return auth.error;
 
     const adminSupabase = getSupabaseAdmin();
 
@@ -101,34 +82,14 @@ export async function POST(
 ) {
   try {
     const { clientId } = await params;
+    const auth = await requireClientAccess(clientId);
+    if (auth.error) return auth.error;
+
     const body = await request.json();
     const { enabled, accessToken } = body as {
       enabled?: boolean;
       accessToken?: string;
     };
-
-    const supabase = await createServerClient();
-
-    // Verify user is admin
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role !== "admin") {
-      return NextResponse.json(
-        { error: "Admin access required" },
-        { status: 403 }
-      );
-    }
 
     const adminSupabase = getSupabaseAdmin();
 
@@ -227,28 +188,8 @@ export async function DELETE(
 ) {
   try {
     const { clientId } = await params;
-    const supabase = await createServerClient();
-
-    // Verify user is admin
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role !== "admin") {
-      return NextResponse.json(
-        { error: "Admin access required" },
-        { status: 403 }
-      );
-    }
+    const auth = await requireClientAccess(clientId);
+    if (auth.error) return auth.error;
 
     const adminSupabase = getSupabaseAdmin();
 

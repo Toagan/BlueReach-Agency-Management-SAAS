@@ -31,7 +31,7 @@ export function LoginClient() {
       const { data: { session } } = await supabase.auth.getSession();
 
       if (session) {
-        if (redirectPath) {
+        if (redirectPath && redirectPath.startsWith("/") && !redirectPath.startsWith("//")) {
           router.push(redirectPath);
         } else {
           router.push("/dashboard");

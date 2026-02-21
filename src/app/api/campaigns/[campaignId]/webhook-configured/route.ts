@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireCampaignAccess } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -16,6 +17,8 @@ interface RouteParams {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const { campaignId } = await params;
+    const auth = await requireCampaignAccess(campaignId);
+    if (auth.error) return auth.error;
     const body = await request.json();
     const { configured } = body;
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -121,14 +122,10 @@ export default function AdminCommandCenter() {
     // Reset hasFetched when timeRange changes to allow refetch
     hasFetched.current = false;
     fetchData();
-
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => {
-      fetchData(true);
-    }, 30000);
-
-    return () => clearInterval(interval);
   }, [fetchData, timeRange]);
+
+  // Auto-refresh every 30 seconds (pauses when tab is hidden)
+  useVisibilityPolling(() => fetchData(true), 30000);
 
   const filteredCustomers = customers.filter((customer) => {
     let matchesFilter = false;
