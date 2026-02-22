@@ -359,6 +359,53 @@ export function LeadDetailPanel({
                 </CardContent>
               </Card>
 
+              {/* Latest Reply */}
+              {(() => {
+                const latestInbound = emails.filter(e => e.direction === "inbound").at(-1);
+                if (isLoadingEmails) {
+                  return (
+                    <Card>
+                      <CardContent className="p-4 flex items-center justify-center py-6">
+                        <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                      </CardContent>
+                    </Card>
+                  );
+                }
+                if (!latestInbound) return null;
+                const bodyPreview = latestInbound.body_text
+                  || latestInbound.body_html?.replace(/<[^>]*>/g, "")
+                  || "";
+                const truncated = bodyPreview.length > 500 ? bodyPreview.slice(0, 500) + "..." : bodyPreview;
+                return (
+                  <Card className="border-l-4 border-l-green-500">
+                    <CardContent className="p-4">
+                      <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+                        <ArrowDownLeft className="h-4 w-4" />
+                        Latest Reply
+                      </h4>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>{latestInbound.from_email}</span>
+                          <span>{latestInbound.sent_at ? new Date(latestInbound.sent_at).toLocaleString() : ""}</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground bg-muted p-3 rounded-md whitespace-pre-line">
+                          {truncated}
+                        </p>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-primary px-0 h-auto"
+                          onClick={() => setActiveTab("emails")}
+                        >
+                          View all emails
+                          <ArrowUpRight className="h-3 w-3 ml-1" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
               {/* Personalization */}
               {lead.personalization && (
                 <Card>
@@ -457,7 +504,7 @@ export function LeadDetailPanel({
                     <Mail className="h-6 w-6 text-muted-foreground" />
                   </div>
                   <p className="text-sm font-medium">No emails yet</p>
-                  <p className="text-xs text-muted-foreground mt-1">Click Sync to fetch emails from Instantly</p>
+                  <p className="text-xs text-muted-foreground mt-1">Click Sync to fetch emails from your email provider</p>
                 </div>
               ) : (
                 <div className="space-y-3">
