@@ -136,14 +136,14 @@ export const StatsReport = ({
             {/* Stats Grid - Table based for email client compatibility */}
             <table width="100%" cellPadding="0" cellSpacing="0" style={{ marginBottom: "24px" }}>
               <tr>
-                {/* Leads Contacted */}
+                {/* Emails Sent */}
                 <td width="33%" style={statCell}>
                   <table width="100%" cellPadding="0" cellSpacing="0" style={statCard}>
                     <tr>
                       <td align="center">
                         <Text style={statIconStyle}>📧</Text>
                         <Text style={statValue}>{stats.emailsSent.toLocaleString()}</Text>
-                        <Text style={statLabel}>Leads Contacted</Text>
+                        <Text style={statLabel}>Emails Sent</Text>
                         {leadsChange !== null && (
                           <Text style={leadsChange >= 0 ? statChangePositive : statChangeNegative}>
                             {formatChange(leadsChange)}

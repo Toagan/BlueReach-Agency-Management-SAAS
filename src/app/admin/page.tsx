@@ -198,7 +198,7 @@ export default function AdminCommandCenter() {
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <StatCard
-              label="Leads Contacted"
+              label="Total Leads"
               value={stats.leadsContacted}
               icon={<Users className="h-5 w-5 text-blue-500" />}
               loading={loading}
