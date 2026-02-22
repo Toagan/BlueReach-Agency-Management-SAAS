@@ -323,7 +323,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       // Try payload.category first, then extract from description as fallback
       let category = payload.category;
       if (!category && typeof payload.description === "string") {
-        const match = payload.description.match(/category (?:updated|changed) to (.+)/i);
+        const match = payload.description.match(/category (?:updated|changed) to (.+?)(?:\s+for\s+campaign\b|$)/i);
         if (match) {
           category = match[1].trim();
         }

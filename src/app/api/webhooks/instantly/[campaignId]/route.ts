@@ -284,7 +284,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       let category = (payload as Record<string, unknown>).category as string | undefined;
       if (!category && typeof (payload as Record<string, unknown>).description === "string") {
         const desc = (payload as Record<string, unknown>).description as string;
-        const match = desc.match(/category (?:updated|changed) to (.+)/i);
+        const match = desc.match(/category (?:updated|changed) to (.+?)(?:\s+for\s+campaign\b|$)/i);
         if (match) {
           category = match[1].trim();
         }
