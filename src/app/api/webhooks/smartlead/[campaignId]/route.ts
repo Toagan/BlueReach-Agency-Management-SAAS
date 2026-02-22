@@ -198,16 +198,31 @@ export async function POST(request: Request, { params }: RouteParams) {
     const eventType = payload.event_type || "";
     const normalizedEvent = normalizeEventType(eventType);
 
+    // Extract lead email - SmartLead may send it as top-level "email" field,
+    // or only in the "description" field for LEAD_CATEGORY_UPDATED events
+    let rawLeadEmail = payload.email;
+    if (!rawLeadEmail && typeof payload.description === "string") {
+      // Parse from: "Lead - sebastian.schmal@example.de category updated to Interested for campaign - ..."
+      const emailMatch = payload.description.match(/Lead\s*-\s*(\S+@\S+)\s+category/i);
+      if (emailMatch) {
+        rawLeadEmail = emailMatch[1];
+      }
+    }
+    // Also try to_email or from nested reply objects
+    if (!rawLeadEmail && payload.to_email) {
+      rawLeadEmail = payload.to_email;
+    }
+
     // Log the webhook event
     console.log(`[SmartLead Webhook] Received event for campaign ${campaign.name}:`, {
       event_type: eventType,
       normalized: normalizedEvent,
-      email: payload.email,
+      email: rawLeadEmail,
       category: payload.category,
+      description: payload.description,
     });
 
     // Normalize lead email
-    const rawLeadEmail = payload.email;
     const leadEmail = rawLeadEmail?.toLowerCase().trim() || null;
 
     // Idempotency check: build a unique key for this event
@@ -439,16 +454,20 @@ export async function POST(request: Request, { params }: RouteParams) {
       console.warn(`[SmartLead Webhook] Lead not found and not creating for event ${eventType}: ${leadEmail}`);
     }
 
-    // Save email content for reply and sent events
-    if (leadDbId && (isReply || isEmailSent)) {
+    // Save email content for reply, sent, and category change events
+    if (leadDbId && (isReply || isEmailSent || isCategoryChange)) {
+      // For category change events, extract reply data from lastReply/last_reply
+      const lastReplyData = payload.lastReply || payload.last_reply;
       const emailId = `smartlead-${Date.now()}-${Math.random().toString(36).substring(7)}`;
       const subject = payload.subject || null;
-      const bodyHtml = payload.body || null;
+      const bodyHtml = payload.body || lastReplyData?.email_body || null;
 
       if (subject || bodyHtml) {
-        const direction = isReply ? "inbound" : "outbound";
-        const fromEmail = isReply ? leadEmail : (payload.from_email || "");
-        const toEmail = isReply ? (payload.to_email || "") : leadEmail;
+        const direction = (isReply || isCategoryChange) ? "inbound" as const : "outbound" as const;
+        const replyFromEmail = lastReplyData?.reply_from_email;
+        const fromEmail = (isReply || isCategoryChange) ? (replyFromEmail || leadEmail) : (payload.from_email || "");
+        const toEmail = (isReply || isCategoryChange) ? (payload.to_email || payload.from_email || "") : leadEmail;
+        const sentAt = lastReplyData?.time || payload.timestamp || new Date().toISOString();
 
         const { error: emailError } = await supabase
           .from("lead_emails")
@@ -462,7 +481,7 @@ export async function POST(request: Request, { params }: RouteParams) {
               to_email: toEmail,
               subject,
               body_html: bodyHtml,
-              sent_at: payload.timestamp || new Date().toISOString(),
+              sent_at: sentAt,
             },
             {
               onConflict: "provider_email_id",
@@ -486,8 +505,12 @@ export async function POST(request: Request, { params }: RouteParams) {
           ? [existingLead.first_name, existingLead.last_name].filter(Boolean).join(" ") || undefined
           : undefined;
 
-        const replySnippet = payload.body
-          ? payload.body.substring(0, 150) + (payload.body.length > 150 ? "..." : "")
+        // Get reply snippet from various SmartLead payload locations
+        const replyBody = payload.body
+          || payload.lastReply?.email_body
+          || payload.last_reply?.email_body;
+        const replySnippet = replyBody
+          ? replyBody.replace(/<[^>]+>/g, "").substring(0, 150) + (replyBody.length > 150 ? "..." : "")
           : undefined;
 
         // Fetch the full email thread from lead_emails

@@ -122,6 +122,27 @@ export interface SmartleadWebhookPayload {
   category?: string;
   previous_category?: string;
   description?: string;
+  // Webhook metadata fields
+  webhook_id?: number;
+  webhook_name?: string;
+  secret_key?: string;
+  app_url?: string;
+  ui_master_inbox_link?: string;
+  metadata?: Record<string, unknown>;
+  webhook_url?: string;
+  // Reply data (present in LEAD_CATEGORY_UPDATED events)
+  lastReply?: {
+    email_body?: string;
+    reply_from_email?: string;
+    time?: string;
+    [key: string]: unknown;
+  };
+  last_reply?: {
+    email_body?: string;
+    reply_from_email?: string;
+    time?: string;
+    [key: string]: unknown;
+  };
   // Additional fields
   [key: string]: unknown;
 }
