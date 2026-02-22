@@ -42,6 +42,7 @@ import {
   Trash2,
   AlertCircle,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 import type { Subscription, BillingCycle } from "@/types/database";
@@ -52,6 +53,13 @@ const BILLING_CYCLES: { value: BillingCycle; label: string }[] = [
   { value: "quarterly", label: "Quarterly" },
   { value: "weekly", label: "Weekly" },
   { value: "custom", label: "Custom" },
+];
+
+const PROVIDERS = [
+  { value: "prospeo", label: "Prospeo" },
+  { value: "leadmagic", label: "LeadMagic" },
+  { value: "findymail", label: "Findymail" },
+  { value: "instantly", label: "Instantly" },
 ];
 
 const CATEGORIES = [
@@ -124,7 +132,12 @@ export default function SubscriptionsPage() {
     credits_limit: "",
     category: "",
     notes: "",
+    provider_type: "",
+    api_key: "",
   });
+
+  // Sync state
+  const [syncingId, setSyncingId] = useState<string | null>(null);
 
   // UI states
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
@@ -167,6 +180,8 @@ export default function SubscriptionsPage() {
       credits_limit: "",
       category: "",
       notes: "",
+      provider_type: "",
+      api_key: "",
     });
     setEditingSubscription(null);
   }
@@ -190,6 +205,8 @@ export default function SubscriptionsPage() {
       credits_limit: subscription.credits_limit.toString(),
       category: subscription.category || "",
       notes: subscription.notes || "",
+      provider_type: subscription.provider_type || "",
+      api_key: subscription.api_key || "",
     });
     setDialogOpen(true);
   }
@@ -262,6 +279,28 @@ export default function SubscriptionsPage() {
       setTimeout(() => setCopiedId(null), 2000);
     } catch (err) {
       console.error("Failed to copy:", err);
+    }
+  }
+
+  async function handleSync(id: string) {
+    setSyncingId(id);
+    try {
+      const res = await fetch(`/api/admin/subscriptions/${id}/sync`, {
+        method: "POST",
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Sync failed");
+      }
+
+      setSubscriptions((prev) =>
+        prev.map((sub) => (sub.id === id ? data.subscription : sub))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setSyncingId(null);
     }
   }
 
@@ -469,6 +508,20 @@ export default function SubscriptionsPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {sub.provider_type && sub.api_key && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                disabled={syncingId === sub.id}
+                                onClick={() => handleSync(sub.id)}
+                                title="Sync credits from provider"
+                              >
+                                <RefreshCw
+                                  className={`h-4 w-4 ${syncingId === sub.id ? "animate-spin" : ""}`}
+                                />
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -703,6 +756,47 @@ export default function SubscriptionsPage() {
                   rows={2}
                 />
               </div>
+
+              {/* Provider Sync */}
+              <div>
+                <Label htmlFor="provider_type">Provider (for credit sync)</Label>
+                <Select
+                  value={formData.provider_type || "none"}
+                  onValueChange={(value) =>
+                    setFormData({
+                      ...formData,
+                      provider_type: value === "none" ? "" : value,
+                      api_key: value === "none" ? "" : formData.api_key,
+                    })
+                  }
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="No provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {PROVIDERS.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {formData.provider_type && (
+                <div>
+                  <Label htmlFor="api_key">API Key</Label>
+                  <Input
+                    id="api_key"
+                    type="password"
+                    value={formData.api_key}
+                    onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                    placeholder="Enter API key for credit sync"
+                    className="mt-1"
+                  />
+                </div>
+              )}
             </div>
 
             <DialogFooter>

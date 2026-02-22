@@ -60,6 +60,8 @@ export async function POST(request: Request) {
       credits_limit,
       category,
       notes,
+      provider_type,
+      api_key,
     } = body;
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
@@ -83,6 +85,8 @@ export async function POST(request: Request) {
       credits_limit: parseInt(credits_limit) || 0,
       category: category?.trim() || null,
       notes: notes?.trim() || null,
+      provider_type: provider_type?.trim() || null,
+      api_key: api_key?.trim() || null,
       is_active: true,
     };
 

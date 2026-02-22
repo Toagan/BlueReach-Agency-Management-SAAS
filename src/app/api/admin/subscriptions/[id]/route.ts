@@ -69,6 +69,8 @@ export async function PUT(
       credits_limit,
       category,
       notes,
+      provider_type,
+      api_key,
       is_active,
     } = body;
 
@@ -87,6 +89,8 @@ export async function PUT(
     if (credits_limit !== undefined) updateData.credits_limit = parseInt(credits_limit) || 0;
     if (category !== undefined) updateData.category = category?.trim() || null;
     if (notes !== undefined) updateData.notes = notes?.trim() || null;
+    if (provider_type !== undefined) updateData.provider_type = provider_type?.trim() || null;
+    if (api_key !== undefined) updateData.api_key = api_key?.trim() || null;
     if (is_active !== undefined) updateData.is_active = is_active;
 
     const { data: subscription, error } = await supabase
