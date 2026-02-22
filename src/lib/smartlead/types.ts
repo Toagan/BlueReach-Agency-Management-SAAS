@@ -121,6 +121,7 @@ export interface SmartleadWebhookPayload {
   link_url?: string;
   category?: string;
   previous_category?: string;
+  description?: string;
   // Additional fields
   [key: string]: unknown;
 }

@@ -229,7 +229,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Get lead email from payload and normalize it
-    const rawLeadEmail = payload.lead_email;
+    // SmartLead uses "email" field, Instantly uses "lead_email"
+    const rawLeadEmail = payload.lead_email || (payload as Record<string, unknown>).email as string | undefined;
 
     if (!rawLeadEmail) {
       console.warn("[Webhook] No lead_email in payload:", payload);
@@ -250,7 +251,14 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const eventType = payload.event_type || "";
 
-    // Positive event types
+    // Check if this is a SmartLead event hitting the Instantly handler (misconfigured webhook URL)
+    const smartleadEvents = ["LEAD_CATEGORY_UPDATED", "LEAD_CATEGORY_CHANGE", "EMAIL_SENT", "EMAIL_OPEN", "EMAIL_OPENED", "EMAIL_REPLY", "REPLY", "EMAIL_BOUNCED", "EMAIL_LINK_CLICK", "LINK_CLICKED"];
+    const isSmartLeadEvent = smartleadEvents.includes(eventType);
+    if (isSmartLeadEvent) {
+      console.warn(`[Webhook] SmartLead event "${eventType}" received on Instantly handler for campaign ${campaignId}. The webhook URL should use /api/webhooks/smartlead/${campaignId} instead of /api/webhooks/instantly/${campaignId}`);
+    }
+
+    // Positive event types (Instantly-style)
     const positiveEvents = [
       "lead_interested",
       "lead_meeting_booked",
@@ -258,7 +266,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       "lead_closed",
     ];
 
-    // Negative event types
+    // Negative event types (Instantly-style)
     const negativeEvents = [
       "lead_not_interested",
       "lead_out_of_office",
@@ -266,13 +274,47 @@ export async function POST(request: Request, { params }: RouteParams) {
       "lead_neutral",
     ];
 
-    const isPositive = positiveEvents.includes(eventType);
+    // SmartLead category change handling (safety net for misconfigured webhooks)
+    const isCategoryChange = eventType === "LEAD_CATEGORY_UPDATED" || eventType === "LEAD_CATEGORY_CHANGE";
+    let smartleadPositive = false;
+    let smartleadCategoryStatus: string | null = null;
+
+    if (isCategoryChange) {
+      // Extract category from payload
+      let category = (payload as Record<string, unknown>).category as string | undefined;
+      if (!category && typeof (payload as Record<string, unknown>).description === "string") {
+        const desc = (payload as Record<string, unknown>).description as string;
+        const match = desc.match(/category (?:updated|changed) to (.+)/i);
+        if (match) {
+          category = match[1].trim();
+        }
+      }
+
+      if (category) {
+        const upper = category.toUpperCase();
+        const positiveCategories = ["INTERESTED", "MEETING_BOOKED", "MEETING BOOKED", "MEETING_COMPLETED", "MEETING COMPLETED", "CLOSED"];
+        const negativeCategories = ["NOT_INTERESTED", "NOT INTERESTED", "WRONG_PERSON", "WRONG PERSON", "DO_NOT_CONTACT", "DO NOT CONTACT"];
+
+        if (positiveCategories.includes(upper)) {
+          smartleadPositive = true;
+          smartleadCategoryStatus = upper === "INTERESTED" ? "replied" :
+            (upper.startsWith("MEETING") ? "booked" : "won");
+        } else if (negativeCategories.includes(upper)) {
+          smartleadCategoryStatus = upper.includes("NOT_INTERESTED") || upper.includes("NOT INTERESTED") ? "not_interested" : "lost";
+        }
+        console.log(`[Webhook] SmartLead category "${category}" -> positive=${smartleadPositive}, status=${smartleadCategoryStatus}`);
+      } else {
+        console.warn(`[Webhook] LEAD_CATEGORY event but no category found in payload`);
+      }
+    }
+
+    const isPositive = positiveEvents.includes(eventType) || smartleadPositive;
     const isNegative = negativeEvents.includes(eventType);
-    const isReply = eventType === "reply_received" || eventType === "auto_reply_received";
-    const isEmailSent = eventType === "email_sent";
-    const isEmailOpened = eventType === "email_opened";
-    const isLinkClicked = eventType === "link_clicked";
-    const isBounced = eventType === "email_bounced";
+    const isReply = eventType === "reply_received" || eventType === "auto_reply_received" || eventType === "EMAIL_REPLY" || eventType === "REPLY";
+    const isEmailSent = eventType === "email_sent" || eventType === "EMAIL_SENT";
+    const isEmailOpened = eventType === "email_opened" || eventType === "EMAIL_OPEN" || eventType === "EMAIL_OPENED";
+    const isLinkClicked = eventType === "link_clicked" || eventType === "LINK_CLICKED" || eventType === "EMAIL_LINK_CLICK";
+    const isBounced = eventType === "email_bounced" || eventType === "EMAIL_BOUNCED";
 
     // Update daily analytics (real-time stats from webhooks)
     await updateDailyAnalytics(
@@ -324,7 +366,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (isPositive) {
       updateData.is_positive_reply = true;
       updateData.has_replied = true;
-      updateData.status = "replied";
+      // Use SmartLead category-specific status if available, otherwise default to "replied"
+      updateData.status = smartleadCategoryStatus || "replied";
       // Track which email variant triggered the positive reply
       if (payload.step !== undefined) {
         updateData.reply_from_step = payload.step;
@@ -333,8 +376,12 @@ export async function POST(request: Request, { params }: RouteParams) {
         updateData.reply_from_variant = payload.variant;
         updateData.reply_from_variant_label = replyVariantLabel;
       }
-    } else if (isNegative) {
+    } else if (isNegative || (isCategoryChange && smartleadCategoryStatus && !smartleadPositive)) {
       updateData.is_positive_reply = false;
+      if (smartleadCategoryStatus) {
+        updateData.status = smartleadCategoryStatus;
+      }
+      updateData.has_replied = true;
     }
 
     if (isReply) {
@@ -420,7 +467,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         console.log(`[Webhook] Updated lead ${leadEmail} - event: ${eventType}`);
         leadDbId = existingLead.id;
       }
-    } else if (clientId && (isPositive || isReply || isEmailSent)) {
+    } else if (clientId && (isPositive || isReply || isEmailSent || isCategoryChange)) {
       // Create new lead if it doesn't exist and this is a meaningful event
       const { data: insertedLead, error: insertError } = await supabase
         .from("leads")
@@ -573,9 +620,11 @@ export async function POST(request: Request, { params }: RouteParams) {
           ? [leadDetails.first_name, leadDetails.last_name].filter(Boolean).join(" ") || undefined
           : undefined;
 
-        // Get reply snippet as fallback
+        // Get reply snippet as fallback (check both Instantly and SmartLead payload fields)
+        const smartleadBody = (payload as Record<string, unknown>).body as string | undefined;
         const replySnippet = payload.reply_text_snippet ||
-          (payload.reply_text ? payload.reply_text.substring(0, 150) + (payload.reply_text.length > 150 ? "..." : "") : undefined);
+          (payload.reply_text ? payload.reply_text.substring(0, 150) + (payload.reply_text.length > 150 ? "..." : "") : undefined) ||
+          (smartleadBody ? smartleadBody.substring(0, 150) + (smartleadBody.length > 150 ? "..." : "") : undefined);
 
         // Fetch the full email thread from lead_emails (already saved above)
         let emailThread;

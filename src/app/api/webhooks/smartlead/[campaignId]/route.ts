@@ -304,8 +304,21 @@ export async function POST(request: Request, { params }: RouteParams) {
     let isPositive = false;
 
     // Handle category changes (SmartLead-specific)
-    if (isCategoryChange && payload.category) {
-      const { status, isPositiveReply } = mapCategory(payload.category);
+    if (isCategoryChange) {
+      // Try payload.category first, then extract from description as fallback
+      let category = payload.category;
+      if (!category && typeof payload.description === "string") {
+        const match = payload.description.match(/category (?:updated|changed) to (.+)/i);
+        if (match) {
+          category = match[1].trim();
+        }
+      }
+
+      if (!category) {
+        console.warn(`[SmartLead Webhook] LEAD_CATEGORY event but no category found. payload.category=${payload.category}, description=${payload.description}`);
+      }
+
+      const { status, isPositiveReply } = mapCategory(category);
       if (status) {
         updateData.status = status;
       }
