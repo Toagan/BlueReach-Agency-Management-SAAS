@@ -32,7 +32,7 @@ async function syncProspeo(apiKey: string) {
 
 async function syncLeadmagic(apiKey: string) {
   const res = await fetch("https://api.leadmagic.io/v1/credits", {
-    headers: { "X-API-Key": apiKey },
+    headers: { "x-api-key": apiKey },
   });
   if (!res.ok) throw new Error(`LeadMagic API error: ${res.status}`);
   const data = await res.json();
@@ -40,7 +40,7 @@ async function syncLeadmagic(apiKey: string) {
   const updateData: Record<string, unknown> = {};
 
   if (data.credits !== undefined) {
-    updateData.credits_balance = data.credits;
+    updateData.credits_balance = Math.round(data.credits);
   }
 
   return updateData;
