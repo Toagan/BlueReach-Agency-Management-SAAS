@@ -60,6 +60,7 @@ const PROVIDERS = [
   { value: "leadmagic", label: "LeadMagic" },
   { value: "findymail", label: "Findymail" },
   { value: "instantly", label: "Instantly" },
+  { value: "smartlead", label: "Smartlead" },
 ];
 
 const CATEGORIES = [

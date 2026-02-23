@@ -65,6 +65,30 @@ async function syncFindymail(apiKey: string) {
   return updateData;
 }
 
+async function syncSmartlead(apiKey: string) {
+  const [accountsRes, campaignsRes] = await Promise.all([
+    fetch(`https://server.smartlead.ai/api/v1/email-accounts?api_key=${apiKey}`),
+    fetch(`https://server.smartlead.ai/api/v1/campaigns?api_key=${apiKey}`),
+  ]);
+  if (!accountsRes.ok) throw new Error(`Smartlead API error: ${accountsRes.status}`);
+  if (!campaignsRes.ok) throw new Error(`Smartlead API error: ${campaignsRes.status}`);
+
+  const accounts = await accountsRes.json();
+  const campaigns = await campaignsRes.json();
+
+  const updateData: Record<string, unknown> = {};
+
+  if (Array.isArray(accounts)) {
+    updateData.credits_balance = accounts.length;
+  }
+  if (Array.isArray(campaigns)) {
+    updateData.credits_limit = campaigns.length;
+  }
+  updateData.notes = `${accounts.length} email accounts, ${campaigns.length} campaigns`;
+
+  return updateData;
+}
+
 async function syncInstantly(apiKey: string) {
   const res = await fetch(
     "https://api.instantly.ai/api/v2/workspace-billing/plan-details",
@@ -130,6 +154,9 @@ export async function POST(
         break;
       case "findymail":
         updateData = await syncFindymail(subscription.api_key);
+        break;
+      case "smartlead":
+        updateData = await syncSmartlead(subscription.api_key);
         break;
       case "instantly":
         updateData = await syncInstantly(subscription.api_key);
