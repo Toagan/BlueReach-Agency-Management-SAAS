@@ -14,7 +14,8 @@ async function syncProspeo(apiKey: string) {
     headers: { "X-KEY": apiKey },
   });
   if (!res.ok) throw new Error(`Prospeo API error: ${res.status}`);
-  const data = await res.json();
+  const json = await res.json();
+  const data = json.response || json;
 
   const updateData: Record<string, unknown> = {};
 
@@ -23,7 +24,7 @@ async function syncProspeo(apiKey: string) {
     updateData.credits_limit = data.remaining_credits + data.used_credits;
   }
   if (data.next_quota_renewal_date) {
-    updateData.renewal_date = data.next_quota_renewal_date;
+    updateData.renewal_date = data.next_quota_renewal_date.split(" ")[0];
   }
 
   return updateData;
