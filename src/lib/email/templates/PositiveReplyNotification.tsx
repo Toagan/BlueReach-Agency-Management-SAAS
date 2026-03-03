@@ -33,6 +33,7 @@ export interface PositiveReplyNotificationProps {
   replySnippet?: string;
   emailThread?: EmailThreadMessage[];
   dashboardUrl: string;
+  replyUrl?: string;
 }
 
 function stripHtml(html: string): string {
@@ -77,6 +78,7 @@ export const PositiveReplyNotification = ({
   replySnippet,
   emailThread,
   dashboardUrl = "https://app.blue-reach.com",
+  replyUrl,
 }: PositiveReplyNotificationProps) => {
   const firstName = recipientName.split(" ")[0] || "there";
   const hasThread = emailThread && emailThread.length > 0;
@@ -184,11 +186,24 @@ export const PositiveReplyNotification = ({
               </div>
             ) : null}
 
-            {/* CTA */}
+            {/* CTA Buttons */}
             <Section style={ctaSection}>
-              <Button style={ctaButton} href={dashboardUrl}>
-                View in Dashboard
-              </Button>
+              <table cellPadding="0" cellSpacing="0" style={{ margin: "0 auto" }}>
+                <tr>
+                  {replyUrl && (
+                    <td style={{ paddingRight: "12px" }}>
+                      <Button style={ctaButton} href={replyUrl}>
+                        Reply to Lead
+                      </Button>
+                    </td>
+                  )}
+                  <td>
+                    <Button style={ctaButtonSecondary} href={dashboardUrl}>
+                      View in Dashboard
+                    </Button>
+                  </td>
+                </tr>
+              </table>
             </Section>
 
             <Text style={tipText}>
@@ -251,6 +266,8 @@ ${props.companyName ? `• Company: ${props.companyName}` : ""}
 ${threadText}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Reply directly to ${props.leadName || props.leadEmail}: ${props.leadEmail}
 
 View in Dashboard: ${props.dashboardUrl}
 
@@ -508,6 +525,19 @@ const ctaButton = {
   textAlign: "center" as const,
   display: "inline-block",
   padding: "14px 32px",
+};
+
+const ctaButtonSecondary = {
+  backgroundColor: colors.white,
+  borderRadius: "10px",
+  color: colors.gray800,
+  fontSize: "15px",
+  fontWeight: "600",
+  textDecoration: "none",
+  textAlign: "center" as const,
+  display: "inline-block",
+  padding: "13px 32px",
+  border: `2px solid ${colors.gray200}`,
 };
 
 const tipText = {

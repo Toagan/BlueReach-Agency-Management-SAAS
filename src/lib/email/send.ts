@@ -182,6 +182,175 @@ export interface SendPositiveReplyNotificationParams {
   clientName: string;
   replySnippet?: string;
   emailThread?: EmailThreadMessage[];
+  leadDbId?: string;
+  originalSubject?: string;
+}
+
+function stripHtmlToPlainText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+interface ComposeUrlParams {
+  leadEmail: string;
+  leadName?: string;
+  originalSubject?: string;
+  emailThread?: EmailThreadMessage[];
+}
+
+function getReplySubject(params: ComposeUrlParams): string {
+  let subject = params.originalSubject
+    || params.emailThread?.find(e => e.direction === "outbound")?.subject
+    || "Following up";
+  subject = subject.replace(/^(Re:\s*)+/i, "").trim();
+  return `Re: ${subject}`;
+}
+
+function getMessageBody(email: EmailThreadMessage): string {
+  return email.body_text
+    || (email.body_html ? stripHtmlToPlainText(email.body_html) : "");
+}
+
+function truncateBody(body: string, max = 1500): string {
+  if (body.length <= max) return body;
+  return body.substring(0, max) + "\n\n[Thread truncated]";
+}
+
+const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const DAY_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTH_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function formatTime12h(d: Date): { h12: number; minutes: string; ampm: string } {
+  const hours = d.getHours();
+  return {
+    h12: hours % 12 || 12,
+    minutes: d.getMinutes().toString().padStart(2, "0"),
+    ampm: hours < 12 ? "AM" : "PM",
+  };
+}
+
+function getSenderName(email: EmailThreadMessage, leadName?: string): string {
+  if (email.direction === "inbound" && leadName) return leadName;
+  return email.from_email.split("@")[0];
+}
+
+/**
+ * Gmail compose URL — opens Gmail web/app on mobile.
+ *
+ * Builds the full thread in Gmail's native quoted-reply format:
+ * each message is nested one level deeper with > prefixes,
+ * exactly as it would appear if you hit Reply in Gmail.
+ *
+ *   On Tue, Mar 3, 2026 at 4:51 PM Max Mustermann <max@example.de> wrote:
+ *   > Their reply text...
+ *   >
+ *   > On Sat, Feb 28, 2026 at 5:38 PM tilman@blue-reach.com wrote:
+ *   >> Original outbound text...
+ */
+function buildGmailComposeUrl(params: ComposeUrlParams): string {
+  const subject = getReplySubject(params);
+  const thread = params.emailThread;
+
+  let body = "\n\n";
+  if (thread && thread.length > 0) {
+    // Build from the bottom up: the earliest message is the most deeply nested.
+    // Walk the thread in reverse to build nested quoting.
+    let quoted = "";
+    for (let i = 0; i < thread.length; i++) {
+      const email = thread[i];
+      const d = new Date(email.sent_at);
+      const { h12, minutes, ampm } = formatTime12h(d);
+      const name = getSenderName(email, params.leadName);
+
+      const attribution = `On ${DAY_SHORT[d.getDay()]}, ${MONTH_SHORT[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} at ${h12}:${minutes} ${ampm} ${name} <${email.from_email}> wrote:`;
+      const msgBody = getMessageBody(email);
+
+      // The depth for message i is (thread.length - i):
+      // last message = depth 1 (>), second-to-last = depth 2 (>>), etc.
+      const depth = thread.length - i;
+      const prefix = "> ".repeat(depth);
+      const attrPrefix = depth > 1 ? "> ".repeat(depth - 1) : "";
+
+      // Build this message's block: attribution line + quoted body
+      const quotedLines = msgBody.split("\n").map(line => `${prefix}${line}`).join("\n");
+
+      if (i === 0) {
+        // Deepest / earliest message — just the attribution + quoted body
+        quoted = `${attrPrefix}${attribution}\n${quotedLines}`;
+      } else {
+        // Append previous (deeper) content after this message's body
+        quoted = `${attrPrefix}${attribution}\n${quotedLines}\n${attrPrefix}>\n${quoted}`;
+      }
+    }
+
+    body += quoted + "\n";
+  }
+
+  body = truncateBody(body);
+
+  return `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(params.leadEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+/**
+ * Outlook compose URL — opens Outlook web/app on mobile.
+ *
+ * Builds the full thread in Outlook's native format:
+ * each message gets a separator + From/Sent/To/Subject header block,
+ * body is unquoted, and earlier messages appear below.
+ *
+ *   ________________________________
+ *   From: Max Mustermann <max@example.de>
+ *   Sent: Tuesday, March 3, 2026 4:51 PM
+ *   To: tilman@blue-reach.com
+ *   Subject: Re: ...
+ *
+ *   Their reply text...
+ *
+ *   ________________________________
+ *   From: tilman@blue-reach.com
+ *   Sent: Saturday, February 28, 2026 5:38 PM
+ *   ...
+ */
+function buildOutlookComposeUrl(params: ComposeUrlParams): string {
+  const subject = getReplySubject(params);
+  const thread = params.emailThread;
+
+  let body = "\n\n";
+  if (thread && thread.length > 0) {
+    // Walk thread from newest to oldest (reverse chronological)
+    for (let i = thread.length - 1; i >= 0; i--) {
+      const email = thread[i];
+      const d = new Date(email.sent_at);
+      const { h12, minutes, ampm } = formatTime12h(d);
+      const name = getSenderName(email, params.leadName);
+      const toEmail = email.to_email || "";
+      const msgSubject = email.subject || subject;
+
+      body += "________________________________\n";
+      body += `From: ${name} <${email.from_email}>\n`;
+      body += `Sent: ${DAY_FULL[d.getDay()]}, ${MONTH_FULL[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} ${h12}:${minutes} ${ampm}\n`;
+      body += `To: ${toEmail}\n`;
+      body += `Subject: ${msgSubject}\n\n`;
+      body += getMessageBody(email);
+      body += "\n\n";
+    }
+  }
+
+  body = truncateBody(body);
+
+  return `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(params.leadEmail)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 export async function sendPositiveReplyNotification(
@@ -251,9 +420,22 @@ export async function sendPositiveReplyNotification(
     return { success: true, sentTo: [] };
   }
 
-  // Build dashboard URL
+  // Build dashboard URL with optional deep link to specific lead
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bluereach-agency-management-saas-production.up.railway.app";
-  const dashboardUrl = `${baseUrl}/admin/clients/${params.clientId}`;
+  const dashboardUrl = params.leadDbId
+    ? `${baseUrl}/admin/clients/${params.clientId}?lead=${params.leadDbId}`
+    : `${baseUrl}/admin/clients/${params.clientId}`;
+
+  // Build smart reply URL — redirects to Gmail or Outlook based on user preference
+  const composeParams = {
+    leadEmail: params.leadEmail,
+    leadName: params.leadName,
+    originalSubject: params.originalSubject,
+    emailThread: params.emailThread,
+  };
+  const gmailUrl = buildGmailComposeUrl(composeParams);
+  const outlookUrl = buildOutlookComposeUrl(composeParams);
+  const replyUrl = `${baseUrl}/reply?to=${encodeURIComponent(params.leadEmail)}&gmail=${encodeURIComponent(gmailUrl)}&outlook=${encodeURIComponent(outlookUrl)}`;
 
   const sentTo: string[] = [];
   const errors: string[] = [];
@@ -271,6 +453,7 @@ export async function sendPositiveReplyNotification(
       replySnippet: params.replySnippet,
       emailThread: params.emailThread,
       dashboardUrl,
+      replyUrl,
     };
 
     try {
@@ -464,4 +647,11 @@ export async function sendStatsReport(
   };
 }
 
-export { getBrandingSettings };
+/** Build the smart reply redirect URL that auto-detects Gmail vs Outlook */
+function buildReplyUrl(baseUrl: string, params: ComposeUrlParams): string {
+  const gmailUrl = buildGmailComposeUrl(params);
+  const outlookUrl = buildOutlookComposeUrl(params);
+  return `${baseUrl}/reply?to=${encodeURIComponent(params.leadEmail)}&gmail=${encodeURIComponent(gmailUrl)}&outlook=${encodeURIComponent(outlookUrl)}`;
+}
+
+export { getBrandingSettings, buildGmailComposeUrl, buildOutlookComposeUrl, buildReplyUrl };

@@ -202,6 +202,7 @@ export default function ClientDashboardPage() {
   const [updatingLeadId, setUpdatingLeadId] = useState<string | null>(null);
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [notesInput, setNotesInput] = useState("");
+  const [highlightLeadId, setHighlightLeadId] = useState<string | null>(null);
 
   // Collapsible sections state
   const [showOffer, setShowOffer] = useState(false);
@@ -514,6 +515,33 @@ export default function ClientDashboardPage() {
       fetchToolLinks();
     }
   }, [isAdmin, fetchToolLinks]);
+
+  // Deep link: read ?lead= param and scroll to the matching lead card
+  useEffect(() => {
+    const leadParam = new URLSearchParams(window.location.search).get("lead");
+    if (leadParam) {
+      setHighlightLeadId(leadParam);
+      // Ensure workflow section is expanded
+      setShowWorkflow(true);
+    }
+  }, []);
+
+  // Scroll to highlighted lead once positiveLeads are loaded
+  useEffect(() => {
+    if (!highlightLeadId || positiveLeads.length === 0) return;
+    const el = document.getElementById(`lead-card-${highlightLeadId}`);
+    if (el) {
+      // Small delay to ensure DOM is rendered
+      setTimeout(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("ring-2", "ring-green-500", "ring-offset-2");
+        setTimeout(() => {
+          el.classList.remove("ring-2", "ring-green-500", "ring-offset-2");
+          setHighlightLeadId(null);
+        }, 3000);
+      }, 100);
+    }
+  }, [highlightLeadId, positiveLeads]);
 
   if (loading && !client) {
     return (
@@ -1072,7 +1100,8 @@ export default function ClientDashboardPage() {
                 {positiveLeads.map((lead) => (
                   <div
                     key={lead.id}
-                    className="border border-border rounded-lg p-4 relative"
+                    id={`lead-card-${lead.id}`}
+                    className="border border-border rounded-lg p-4 relative transition-all duration-300"
                   >
                     {/* Lead Header */}
                     <div className="flex items-start justify-between mb-3">

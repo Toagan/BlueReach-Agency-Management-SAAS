@@ -538,6 +538,8 @@ export async function POST(request: Request, { params }: RouteParams) {
           clientName,
           replySnippet,
           emailThread,
+          leadDbId: leadDbId || undefined,
+          originalSubject: emailThread?.find(e => e.direction === "outbound")?.subject || undefined,
         });
 
         if (notificationResult.success) {
