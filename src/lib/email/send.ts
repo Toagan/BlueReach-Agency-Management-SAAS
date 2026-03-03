@@ -10,6 +10,10 @@ import {
   StatsReport,
   generateStatsReportPlainText,
 } from "./templates/StatsReport";
+import {
+  SlackWebhookSetup,
+  generateSlackSetupPlainText,
+} from "./templates/SlackWebhookSetup";
 
 function getSupabase() {
   return createClient(
@@ -452,6 +456,7 @@ export async function sendPositiveReplyNotification(
       const { data, error } = await resend.emails.send({
         from: `${branding.senderName} <${branding.senderEmail}>`,
         to: recipient.email,
+        replyTo: params.leadEmail,
         subject: `🎯 New Positive Reply: ${params.leadName || params.leadEmail} - ${params.clientName}`,
         html: emailHtml,
         text: emailText,
@@ -634,6 +639,64 @@ export async function sendStatsReport(
     error: errors.length > 0 ? errors.join("; ") : undefined,
     sentTo,
   };
+}
+
+export interface SendSlackSetupEmailParams {
+  to: string;
+  recipientName: string;
+  clientName: string;
+  clientId: string;
+}
+
+export async function sendSlackSetupEmail(
+  params: SendSlackSetupEmailParams
+): Promise<{ success: boolean; error?: string; emailId?: string }> {
+  const resend = await getResendClient();
+
+  if (!resend) {
+    return { success: false, error: "Email service not configured" };
+  }
+
+  const branding = await getBrandingSettings();
+
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bluereach-agency-management-saas-production.up.railway.app";
+  const dashboardUrl = `${baseUrl}/admin/clients/${params.clientId}/settings`;
+
+  const templateProps = {
+    recipientName: params.recipientName,
+    clientName: params.clientName,
+    agencyName: branding.agencyName,
+    dashboardUrl,
+  };
+
+  const emailHtml = await render(SlackWebhookSetup(templateProps));
+  const emailText = generateSlackSetupPlainText(templateProps);
+
+  try {
+    console.log(`[Email] Sending Slack setup instructions to ${params.to} for client "${params.clientName}"`);
+
+    const { data, error } = await resend.emails.send({
+      from: `${branding.senderName} <${branding.senderEmail}>`,
+      to: params.to,
+      subject: `Set Up Slack Notifications for ${params.clientName}`,
+      html: emailHtml,
+      text: emailText,
+    });
+
+    if (error) {
+      console.error("[Email] Failed to send Slack setup email:", error);
+      return { success: false, error: error.message };
+    }
+
+    console.log(`[Email] Successfully sent Slack setup email (ID: ${data?.id})`);
+    return { success: true, emailId: data?.id };
+  } catch (err) {
+    console.error("[Email] Error sending Slack setup email:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to send email",
+    };
+  }
 }
 
 export { getBrandingSettings, buildReplyBody, getReplySubject };

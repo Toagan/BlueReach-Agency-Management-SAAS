@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendStatsReport } from "@/lib/email";
+import { sendSlackStatsReport } from "@/lib/slack";
 
 function getSupabase() {
   return createClient(
@@ -413,6 +414,92 @@ async function handleStatsReport(request: NextRequest) {
       }
     }
 
+    // Slack stats report pass
+    const slackResults: Array<{ clientId: string; success: boolean; skipped?: boolean }> = [];
+    try {
+      const { data: slackSettings } = await supabase
+        .from("settings")
+        .select("key, value")
+        .like("key", "client_%_slack_stats_interval");
+
+      if (slackSettings) {
+        for (const setting of slackSettings) {
+          const match = setting.key.match(/^client_(.+)_slack_stats_interval$/);
+          if (!match || !setting.value || setting.value === "disabled") continue;
+
+          const slackClientId = match[1];
+          const slackInterval = setting.value; // "weekly", "monthly", "quarterly"
+
+          // Check if interval has elapsed
+          const { data: lastSentSetting } = await supabase
+            .from("settings")
+            .select("value")
+            .eq("key", `client_${slackClientId}_slack_stats_last_sent`)
+            .single();
+
+          const lastSent = lastSentSetting?.value ? new Date(lastSentSetting.value) : null;
+          const now = new Date();
+
+          if (lastSent) {
+            const daysSinceLastSent = (now.getTime() - lastSent.getTime()) / (1000 * 60 * 60 * 24);
+            const minDays = slackInterval === "weekly" ? 6 : slackInterval === "monthly" ? 28 : 85; // quarterly ~90 days
+            if (daysSinceLastSent < minDays) continue;
+          }
+
+          // Get client info
+          const { data: slackClient } = await supabase
+            .from("clients")
+            .select("id, name")
+            .eq("id", slackClientId)
+            .single();
+
+          if (!slackClient) continue;
+
+          // Compute stats
+          const slackIntervalForStats = slackInterval === "quarterly" ? "monthly" : slackInterval;
+          const { startDate, endDate, previousStartDate, previousEndDate } = getDateRange(slackIntervalForStats);
+          const stats = await getClientStats(supabase, slackClientId, startDate, endDate, false);
+          const previousStats = await getClientStats(supabase, slackClientId, previousStartDate, previousEndDate, false);
+
+          const periodLabels: Record<string, string> = { weekly: "Weekly", monthly: "Monthly", quarterly: "Quarterly" };
+          const periodLabel = periodLabels[slackInterval] || "Weekly";
+          const periodRange = formatDateRange(startDate, endDate);
+
+          const slackResult = await sendSlackStatsReport({
+            clientId: slackClientId,
+            clientName: slackClient.name,
+            periodLabel,
+            periodRange,
+            stats,
+            previousStats: {
+              emailsSent: previousStats.emailsSent,
+              replies: previousStats.replies,
+              positiveReplies: previousStats.positiveReplies,
+            },
+          });
+
+          slackResults.push({ clientId: slackClientId, success: slackResult.success, skipped: slackResult.skipped });
+
+          if (slackResult.success && !slackResult.skipped) {
+            await supabase
+              .from("settings")
+              .upsert({
+                key: `client_${slackClientId}_slack_stats_last_sent`,
+                value: now.toISOString(),
+                updated_at: now.toISOString(),
+              }, { onConflict: "key" });
+          }
+        }
+      }
+    } catch (slackError) {
+      console.error("[Stats Report] Error in Slack stats pass:", slackError);
+    }
+
+    const slackSent = slackResults.filter((r) => r.success && !r.skipped).length;
+    if (slackSent > 0) {
+      console.log(`[Stats Report] Sent ${slackSent} Slack stats reports`);
+    }
+
     const successCount = results.filter((r) => r.success).length;
     const totalRecipients = results.reduce((sum, r) => sum + r.sentTo.length, 0);
 
@@ -423,8 +510,9 @@ async function handleStatsReport(request: NextRequest) {
       message: `Stats reports sent for ${successCount} clients`,
       reportsSent: successCount,
       totalRecipients,
+      slackReportsSent: slackSent,
       results,
-      version: "v6",
+      version: "v7",
     });
   } catch (error) {
     console.error("[Stats Report] Error:", error);

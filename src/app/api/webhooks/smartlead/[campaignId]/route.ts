@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
 import { sendPositiveReplyNotification } from "@/lib/email";
 import { syncLeadToHubSpot, getEmailThreadForLead } from "@/lib/hubspot";
+import { sendSlackPositiveReply } from "@/lib/slack";
 import type { SmartleadWebhookPayload } from "@/lib/smartlead";
 
 function getSupabase() {
@@ -549,6 +550,37 @@ export async function POST(request: Request, { params }: RouteParams) {
         }
       } catch (notifyError) {
         console.error("[SmartLead Webhook] Error sending notification:", notifyError);
+      }
+
+      // Send Slack notification
+      try {
+        const slackLeadName = existingLead
+          ? [existingLead.first_name, existingLead.last_name].filter(Boolean).join(" ") || undefined
+          : undefined;
+
+        const slackReplyBody = payload.body
+          || payload.lastReply?.email_body
+          || payload.last_reply?.email_body;
+        const slackReplySnippet = slackReplyBody
+          ? slackReplyBody.replace(/<[^>]+>/g, "").substring(0, 150)
+          : undefined;
+
+        const slackResult = await sendSlackPositiveReply({
+          leadEmail,
+          leadName: slackLeadName,
+          companyName: existingLead?.company_name || undefined,
+          campaignName: campaign.name,
+          campaignId,
+          clientId,
+          clientName,
+          replySnippet: slackReplySnippet,
+        });
+
+        if (slackResult.success && !slackResult.skipped) {
+          console.log(`[SmartLead Webhook] Slack notification sent for ${leadEmail}`);
+        }
+      } catch (slackError) {
+        console.error("[SmartLead Webhook] Error sending Slack notification:", slackError);
       }
 
       // HubSpot sync

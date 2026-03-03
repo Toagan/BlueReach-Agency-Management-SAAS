@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users, Bell, BarChart3, Send, Zap, Link2, Unlink, FlaskConical, Target } from "lucide-react";
+import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users, Bell, BarChart3, Send, Zap, Link2, Unlink, FlaskConical, Target, Hash } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -132,6 +132,19 @@ export default function ClientSettingsPage() {
     leads: Array<{ email: string; campaign: string; vertical: string | null }>;
   } | null>(null);
   const [loadingBackfillPreview, setLoadingBackfillPreview] = useState(false);
+
+  // Slack notification settings
+  const [slackWebhookUrl, setSlackWebhookUrl] = useState("");
+  const [slackHasWebhook, setSlackHasWebhook] = useState(false);
+  const [slackPositiveReplyCampaigns, setSlackPositiveReplyCampaigns] = useState<"all" | string[]>("all");
+  const [slackStatsInterval, setSlackStatsInterval] = useState("disabled");
+  const [slackSetupEmailSent, setSlackSetupEmailSent] = useState<string | null>(null);
+  const [loadingSlackSettings, setLoadingSlackSettings] = useState(true);
+  const [savingSlackSettings, setSavingSlackSettings] = useState(false);
+  const [testingSlackWebhook, setTestingSlackWebhook] = useState(false);
+  const [slackSetupEmail, setSlackSetupEmail] = useState("");
+  const [sendingSlackSetupEmail, setSendingSlackSetupEmail] = useState(false);
+  const [clientCampaigns, setClientCampaigns] = useState<Array<{ id: string; name: string }>>([]);
 
   const fetchNotificationPreferences = async () => {
     setLoadingNotifications(true);
@@ -418,12 +431,152 @@ export default function ClientSettingsPage() {
     }
   };
 
+  const fetchSlackSettings = async () => {
+    setLoadingSlackSettings(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/slack-settings`);
+      if (res.ok) {
+        const data = await res.json();
+        setSlackWebhookUrl(data.webhookUrl || "");
+        setSlackHasWebhook(data.hasWebhook || false);
+        setSlackPositiveReplyCampaigns(data.positiveReplyCampaigns || "all");
+        setSlackStatsInterval(data.statsInterval || "disabled");
+        setSlackSetupEmailSent(data.setupEmailSent || null);
+      }
+    } catch (error) {
+      console.error("Error fetching Slack settings:", error);
+    } finally {
+      setLoadingSlackSettings(false);
+    }
+  };
+
+  const fetchClientCampaigns = async () => {
+    try {
+      const res = await fetch(`/api/campaigns?clientId=${clientId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setClientCampaigns((data.campaigns || data || []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
+      }
+    } catch (error) {
+      console.error("Error fetching campaigns:", error);
+    }
+  };
+
+  const saveSlackWebhook = async () => {
+    setSavingSlackSettings(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/slack-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ webhookUrl: slackWebhookUrl }),
+      });
+
+      if (res.ok) {
+        setSlackHasWebhook(!!slackWebhookUrl);
+        setSuccess(slackWebhookUrl ? "Slack webhook URL saved" : "Slack webhook URL removed");
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        const data = await res.json();
+        setError(data.error || "Failed to save webhook URL");
+      }
+    } catch (error) {
+      console.error("Error saving Slack webhook:", error);
+      setError("Failed to save webhook URL");
+    } finally {
+      setSavingSlackSettings(false);
+    }
+  };
+
+  const testSlackWebhook = async () => {
+    setTestingSlackWebhook(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/slack-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "test" }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess("Test message sent to Slack!");
+      } else {
+        setError(data.error || "Failed to send test message");
+      }
+    } catch (error) {
+      console.error("Error testing Slack webhook:", error);
+      setError("Failed to send test message");
+    } finally {
+      setTestingSlackWebhook(false);
+      setTimeout(() => { setSuccess(null); setError(null); }, 5000);
+    }
+  };
+
+  const sendSlackSetupInstructions = async () => {
+    if (!slackSetupEmail.trim()) return;
+    setSendingSlackSetupEmail(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/slack-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sendSetupEmail", recipientEmail: slackSetupEmail.trim() }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess(data.message || "Setup instructions sent!");
+        setSlackSetupEmail("");
+        setSlackSetupEmailSent(new Date().toISOString());
+      } else {
+        setError(data.error || "Failed to send setup email");
+      }
+    } catch (error) {
+      console.error("Error sending Slack setup email:", error);
+      setError("Failed to send setup email");
+    } finally {
+      setSendingSlackSetupEmail(false);
+      setTimeout(() => { setSuccess(null); setError(null); }, 5000);
+    }
+  };
+
+  const saveSlackCampaignFilter = async (value: "all" | string[]) => {
+    setSlackPositiveReplyCampaigns(value);
+    try {
+      await fetch(`/api/clients/${clientId}/slack-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ positiveReplyCampaigns: value }),
+      });
+    } catch (error) {
+      console.error("Error saving Slack campaign filter:", error);
+    }
+  };
+
+  const saveSlackStatsInterval = async (interval: string) => {
+    setSlackStatsInterval(interval);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/slack-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ statsInterval: interval }),
+      });
+
+      if (res.ok) {
+        setSuccess(interval === "disabled" ? "Slack stats reports disabled" : `Slack stats reports set to ${interval}`);
+        setTimeout(() => setSuccess(null), 3000);
+      }
+    } catch (error) {
+      console.error("Error saving Slack stats interval:", error);
+    }
+  };
+
   useEffect(() => {
     fetchClient();
     fetchTeamMembers();
     fetchNotificationPreferences();
     fetchStatsSettings();
     fetchHubspotSettings();
+    fetchSlackSettings();
+    fetchClientCampaigns();
   }, [clientId]);
 
   const fetchTeamMembers = async () => {
@@ -1240,6 +1393,181 @@ export default function ClientSettingsPage() {
                 <p className="text-xs text-amber-600">
                   Enable at least one notification recipient above to receive stats reports.
                 </p>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Slack Notifications */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Hash className="h-5 w-5" />
+            Slack Notifications
+          </CardTitle>
+          <CardDescription>
+            Send positive reply notifications and stats reports to a Slack channel
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {loadingSlackSettings ? (
+            <div className="flex items-center justify-center py-4">
+              <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              {/* Webhook URL */}
+              <div className="space-y-2">
+                <Label htmlFor="slackWebhookUrl" className="flex items-center gap-2">
+                  Webhook URL
+                  <span
+                    className={`inline-block h-2 w-2 rounded-full ${slackHasWebhook ? "bg-green-500" : "bg-gray-300"}`}
+                    title={slackHasWebhook ? "Connected" : "Not configured"}
+                  />
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="slackWebhookUrl"
+                    type="url"
+                    value={slackWebhookUrl}
+                    onChange={(e) => setSlackWebhookUrl(e.target.value)}
+                    placeholder="https://hooks.slack.com/services/..."
+                    className="flex-1"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={saveSlackWebhook}
+                    disabled={savingSlackSettings}
+                  >
+                    {savingSlackSettings ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                  </Button>
+                  {slackHasWebhook && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={testSlackWebhook}
+                      disabled={testingSlackWebhook}
+                    >
+                      {testingSlackWebhook ? (
+                        <RefreshCw className="h-4 w-4 animate-spin mr-1" />
+                      ) : (
+                        <Send className="h-4 w-4 mr-1" />
+                      )}
+                      Test
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Send Setup Instructions */}
+              <div className="space-y-2 pt-2 border-t">
+                <Label htmlFor="slackSetupEmail">Send Setup Instructions</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="slackSetupEmail"
+                    type="email"
+                    value={slackSetupEmail}
+                    onChange={(e) => setSlackSetupEmail(e.target.value)}
+                    placeholder="client@example.com"
+                    className="flex-1"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={sendSlackSetupInstructions}
+                    disabled={sendingSlackSetupEmail || !slackSetupEmail.trim()}
+                  >
+                    {sendingSlackSetupEmail ? (
+                      <RefreshCw className="h-4 w-4 animate-spin mr-1" />
+                    ) : (
+                      <Mail className="h-4 w-4 mr-1" />
+                    )}
+                    Send
+                  </Button>
+                </div>
+                {slackSetupEmailSent && (
+                  <p className="text-xs text-muted-foreground">
+                    Last sent: {new Date(slackSetupEmailSent).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                )}
+              </div>
+
+              {/* Campaign filter + stats interval (visible when webhook set) */}
+              {slackHasWebhook && (
+                <>
+                  {/* Positive Reply Campaigns */}
+                  <div className="space-y-2 pt-2 border-t">
+                    <Label>Positive Reply Campaigns</Label>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={slackPositiveReplyCampaigns === "all"}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              saveSlackCampaignFilter("all");
+                            } else {
+                              saveSlackCampaignFilter([]);
+                            }
+                          }}
+                        />
+                        <span className="text-sm">All campaigns</span>
+                      </div>
+                      {slackPositiveReplyCampaigns !== "all" && (
+                        <div className="space-y-1 pl-6">
+                          {clientCampaigns.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No campaigns found</p>
+                          ) : (
+                            clientCampaigns.map((campaign) => (
+                              <label key={campaign.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  className="rounded border-gray-300"
+                                  checked={Array.isArray(slackPositiveReplyCampaigns) && slackPositiveReplyCampaigns.includes(campaign.id)}
+                                  onChange={(e) => {
+                                    const current = Array.isArray(slackPositiveReplyCampaigns) ? slackPositiveReplyCampaigns : [];
+                                    const updated = e.target.checked
+                                      ? [...current, campaign.id]
+                                      : current.filter((id) => id !== campaign.id);
+                                    saveSlackCampaignFilter(updated);
+                                  }}
+                                />
+                                <span className="truncate">{campaign.name}</span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Slack Stats Reports */}
+                  <div className="space-y-2 pt-2 border-t">
+                    <Label htmlFor="slackStatsInterval">Slack Stats Reports</Label>
+                    <Select
+                      value={slackStatsInterval}
+                      onValueChange={saveSlackStatsInterval}
+                    >
+                      <SelectTrigger id="slackStatsInterval" className="w-full">
+                        <SelectValue placeholder="Select frequency" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="disabled">Disabled</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="quarterly">Quarterly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Stats reports will be sent to Slack independently of email reports.
+                    </p>
+                  </div>
+                </>
               )}
             </>
           )}

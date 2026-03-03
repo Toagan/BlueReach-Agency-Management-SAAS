@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { sendPositiveReplyNotification } from "@/lib/email";
 import { fetchEmailsForLead } from "@/lib/instantly/emails";
 import { syncLeadToHubSpot, getEmailThreadForLead } from "@/lib/hubspot";
+import { sendSlackPositiveReply } from "@/lib/slack";
 
 function getSupabase() {
   return createClient(
@@ -663,6 +664,40 @@ export async function POST(request: Request, { params }: RouteParams) {
       } catch (notifyError) {
         // Don't fail the webhook if notification fails
         console.error("[Webhook] Error sending notification:", notifyError);
+      }
+
+      // Send Slack notification
+      try {
+        const { data: slackLeadDetails } = await supabase
+          .from("leads")
+          .select("first_name, last_name, company_name")
+          .eq("campaign_id", campaignId)
+          .eq("email", leadEmail)
+          .maybeSingle();
+
+        const slackLeadName = slackLeadDetails
+          ? [slackLeadDetails.first_name, slackLeadDetails.last_name].filter(Boolean).join(" ") || undefined
+          : undefined;
+
+        const slackReplySnippet = payload.reply_text_snippet ||
+          (payload.reply_text ? payload.reply_text.substring(0, 150) : undefined);
+
+        const slackResult = await sendSlackPositiveReply({
+          leadEmail,
+          leadName: slackLeadName,
+          companyName: slackLeadDetails?.company_name || undefined,
+          campaignName: campaign.name,
+          campaignId,
+          clientId,
+          clientName,
+          replySnippet: slackReplySnippet,
+        });
+
+        if (slackResult.success && !slackResult.skipped) {
+          console.log(`[Webhook] Slack notification sent for ${leadEmail}`);
+        }
+      } catch (slackError) {
+        console.error("[Webhook] Error sending Slack notification:", slackError);
       }
 
       // Sync positive reply to HubSpot CRM
