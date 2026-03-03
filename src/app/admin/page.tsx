@@ -299,36 +299,9 @@ export default function AdminCommandCenter() {
           {/* Filters and Actions */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCustomerFilter("active")}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                  customerFilter === "active"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-accent"
-                }`}
-              >
+              <span className="px-3 py-1.5 text-sm rounded-lg bg-primary text-primary-foreground">
                 Active Customers ({customers.filter((c) => c.is_active !== false && !c.is_demo).length})
-              </button>
-              <button
-                onClick={() => setCustomerFilter("archived")}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                  customerFilter === "archived"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-accent"
-                }`}
-              >
-                Archived ({customers.filter((c) => c.is_active === false && !c.is_demo).length})
-              </button>
-              <button
-                onClick={() => setCustomerFilter("demo")}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                  customerFilter === "demo"
-                    ? "bg-purple-600 text-white"
-                    : "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50"
-                }`}
-              >
-                Demo ({customers.filter((c) => c.is_demo === true).length})
-              </button>
+              </span>
             </div>
 
             <div className="flex items-center gap-2">
