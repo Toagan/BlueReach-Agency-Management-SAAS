@@ -223,14 +223,77 @@ export async function sendSlackStatsReport(
 }
 
 export async function sendSlackTestMessage(
-  webhookUrl: string
+  webhookUrl: string,
+  clientName?: string
 ): Promise<{ success: boolean; error?: string }> {
-  const blocks: SlackBlock[] = [
+  const name = clientName || "Your Company";
+
+  // Sample positive reply
+  const positiveReplyBlocks: SlackBlock[] = [
+    {
+      type: "header",
+      text: { type: "plain_text", text: `New Positive Reply — ${name}`, emoji: true },
+    },
+    {
+      type: "context",
+      elements: [{ type: "mrkdwn", text: "This is a sample notification — no real lead data" }],
+    },
     {
       type: "section",
-      text: { type: "mrkdwn", text: "*BlueReach Slack Integration*\nThis is a test message. Your webhook is working correctly!" },
+      fields: [
+        { type: "mrkdwn", text: "*Lead:*\nSarah Chen (s.chen@acme-corp.com)" },
+        { type: "mrkdwn", text: "*Company:*\nAcme Corp" },
+        { type: "mrkdwn", text: "*Campaign:*\nQ1 Outbound — Decision Makers" },
+      ],
+    },
+    {
+      type: "section",
+      text: { type: "mrkdwn", text: "*Reply:*\n> Hi, thanks for reaching out! This is actually quite relevant for us right now. We've been looking at solutions in this space. Could you send over some more details? Happy to set up a call next week." },
+    },
+    { type: "divider" } as SlackBlock,
+    {
+      type: "context",
+      elements: [{ type: "mrkdwn", text: "Sample test message from BlueReach" }],
     },
   ];
 
-  return postToSlack(webhookUrl, blocks, "BlueReach test message - webhook is working!");
+  const result1 = await postToSlack(webhookUrl, positiveReplyBlocks, `[TEST] New Positive Reply — ${name}: Sarah Chen`);
+  if (!result1.success) return result1;
+
+  // Sample stats report
+  const today = new Date();
+  const weekAgo = new Date(today);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const formatDate = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const periodRange = `${formatDate(weekAgo)} – ${formatDate(today)}, ${today.getFullYear()}`;
+
+  const statsBlocks: SlackBlock[] = [
+    {
+      type: "header",
+      text: { type: "plain_text", text: `Weekly Stats — ${name}`, emoji: true },
+    },
+    {
+      type: "context",
+      elements: [
+        { type: "mrkdwn", text: periodRange },
+        { type: "mrkdwn", text: "  |  Sample test message — not real data" },
+      ],
+    },
+    {
+      type: "section",
+      fields: [
+        { type: "mrkdwn", text: "*Emails Sent:*\n3,842 (+14%)" },
+        { type: "mrkdwn", text: "*Total Replies:*\n47 (+8%)" },
+        { type: "mrkdwn", text: "*Positive Replies:*\n12 (+20%)" },
+        { type: "mrkdwn", text: "*Reply Rate:*\n1.2%" },
+      ],
+    },
+    { type: "divider" } as SlackBlock,
+    {
+      type: "context",
+      elements: [{ type: "mrkdwn", text: "Sample test message from BlueReach" }],
+    },
+  ];
+
+  return postToSlack(webhookUrl, statsBlocks, `[TEST] Weekly Stats — ${name}`);
 }

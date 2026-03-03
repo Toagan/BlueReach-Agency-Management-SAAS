@@ -90,12 +90,18 @@ export async function POST(
         return NextResponse.json({ error: "No webhook URL configured" }, { status: 400 });
       }
 
-      const result = await sendSlackTestMessage(webhookSetting.value);
+      const { data: client } = await adminSupabase
+        .from("clients")
+        .select("name")
+        .eq("id", clientId)
+        .single();
+
+      const result = await sendSlackTestMessage(webhookSetting.value, client?.name);
       if (!result.success) {
         return NextResponse.json({ error: result.error || "Test message failed" }, { status: 400 });
       }
 
-      return NextResponse.json({ success: true, message: "Test message sent to Slack" });
+      return NextResponse.json({ success: true, message: "Sample notifications sent to Slack" });
     }
 
     // Action: send setup email
