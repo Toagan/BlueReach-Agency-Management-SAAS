@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { HubSpotClient } from "@/lib/hubspot";
 import { requireClientAccess } from "@/lib/auth";
+import { sendHubSpotSetupEmail } from "@/lib/email/send";
 
 function getSupabaseAdmin() {
   return createClient(
@@ -86,6 +87,13 @@ export async function GET(
       }
     }
 
+    // Get setup email sent timestamp
+    const { data: setupEmailSetting } = await adminSupabase
+      .from("settings")
+      .select("value")
+      .eq("key", `client_${clientId}_hubspot_setup_email_sent`)
+      .single();
+
     return NextResponse.json({
       enabled: enabledSetting?.value === "true",
       hasAccessToken: !!tokenSetting?.value,
@@ -96,6 +104,7 @@ export async function GET(
       dealPipeline: pipelineSetting?.value || "default",
       dealStage: stageSetting?.value || "appointmentscheduled",
       contactPropertyMappings,
+      setupEmailSent: setupEmailSetting?.value || null,
     });
   } catch (error) {
     console.error("Error fetching HubSpot settings:", error);
@@ -130,6 +139,43 @@ export async function POST(
     };
 
     const adminSupabase = getSupabaseAdmin();
+
+    // Handle sendSetupEmail action
+    if (action === "sendSetupEmail") {
+      const { recipientEmail } = body as { recipientEmail?: string };
+      if (!recipientEmail) {
+        return NextResponse.json({ error: "Recipient email is required" }, { status: 400 });
+      }
+
+      // Get client name
+      const { data: client } = await adminSupabase
+        .from("clients")
+        .select("name")
+        .eq("id", clientId)
+        .single();
+
+      const result = await sendHubSpotSetupEmail({
+        to: recipientEmail,
+        recipientName: recipientEmail.split("@")[0],
+        clientName: client?.name || "Your Company",
+        clientId,
+      });
+
+      if (!result.success) {
+        return NextResponse.json({ error: result.error || "Failed to send email" }, { status: 500 });
+      }
+
+      // Record when setup email was sent
+      await adminSupabase
+        .from("settings")
+        .upsert({
+          key: `client_${clientId}_hubspot_setup_email_sent`,
+          value: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "key" });
+
+      return NextResponse.json({ success: true, message: `Setup instructions sent to ${recipientEmail}` });
+    }
 
     // Handle fetchPipelines action
     if (action === "fetchPipelines") {
@@ -330,6 +376,7 @@ export async function DELETE(
       `client_${clientId}_hubspot_deal_pipeline`,
       `client_${clientId}_hubspot_deal_stage`,
       `client_${clientId}_hubspot_contact_properties`,
+      `client_${clientId}_hubspot_setup_email_sent`,
     ];
 
     for (const key of keysToDelete) {

@@ -14,6 +14,10 @@ import {
   SlackWebhookSetup,
   generateSlackSetupPlainText,
 } from "./templates/SlackWebhookSetup";
+import {
+  HubSpotSetup,
+  generateHubSpotSetupPlainText,
+} from "./templates/HubSpotSetup";
 
 function getSupabase() {
   return createClient(
@@ -692,6 +696,64 @@ export async function sendSlackSetupEmail(
     return { success: true, emailId: data?.id };
   } catch (err) {
     console.error("[Email] Error sending Slack setup email:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to send email",
+    };
+  }
+}
+
+export interface SendHubSpotSetupEmailParams {
+  to: string;
+  recipientName: string;
+  clientName: string;
+  clientId: string;
+}
+
+export async function sendHubSpotSetupEmail(
+  params: SendHubSpotSetupEmailParams
+): Promise<{ success: boolean; error?: string; emailId?: string }> {
+  const resend = await getResendClient();
+
+  if (!resend) {
+    return { success: false, error: "Email service not configured" };
+  }
+
+  const branding = await getBrandingSettings();
+
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bluereach-agency-management-saas-production.up.railway.app";
+  const dashboardUrl = `${baseUrl}/admin/clients/${params.clientId}/settings`;
+
+  const templateProps = {
+    recipientName: params.recipientName,
+    clientName: params.clientName,
+    agencyName: branding.agencyName,
+    dashboardUrl,
+  };
+
+  const emailHtml = await render(HubSpotSetup(templateProps));
+  const emailText = generateHubSpotSetupPlainText(templateProps);
+
+  try {
+    console.log(`[Email] Sending HubSpot setup instructions to ${params.to} for client "${params.clientName}"`);
+
+    const { data, error } = await resend.emails.send({
+      from: `${branding.senderName} <${branding.senderEmail}>`,
+      to: params.to,
+      subject: `Connect HubSpot CRM for ${params.clientName}`,
+      html: emailHtml,
+      text: emailText,
+    });
+
+    if (error) {
+      console.error("[Email] Failed to send HubSpot setup email:", error);
+      return { success: false, error: error.message };
+    }
+
+    console.log(`[Email] Successfully sent HubSpot setup email (ID: ${data?.id})`);
+    return { success: true, emailId: data?.id };
+  } catch (err) {
+    console.error("[Email] Error sending HubSpot setup email:", err);
     return {
       success: false,
       error: err instanceof Error ? err.message : "Failed to send email",

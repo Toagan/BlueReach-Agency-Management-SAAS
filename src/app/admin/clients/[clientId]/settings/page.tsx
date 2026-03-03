@@ -141,6 +141,11 @@ export default function ClientSettingsPage() {
   } | null>(null);
   const [loadingBackfillPreview, setLoadingBackfillPreview] = useState(false);
 
+  // HubSpot setup email
+  const [hubspotSetupEmail, setHubspotSetupEmail] = useState("");
+  const [sendingHubspotSetupEmail, setSendingHubspotSetupEmail] = useState(false);
+  const [hubspotSetupEmailSent, setHubspotSetupEmailSent] = useState<string | null>(null);
+
   // Slack notification settings
   const [slackWebhookUrl, setSlackWebhookUrl] = useState("");
   const [slackHasWebhook, setSlackHasWebhook] = useState(false);
@@ -271,6 +276,7 @@ export default function ClientSettingsPage() {
         if (data.contactPropertyMappings) {
           setHubspotContactPropertyMappings(data.contactPropertyMappings);
         }
+        setHubspotSetupEmailSent(data.setupEmailSent || null);
 
         // Auto-fetch pipelines and contact properties if connected and enabled
         if (data.hasAccessToken && data.enabled) {
@@ -405,6 +411,7 @@ export default function ClientSettingsPage() {
         setHubspotSyncCount(0);
         setHubspotContactProperties([]);
         setHubspotContactPropertyMappings({});
+        setHubspotSetupEmailSent(null);
         setSuccess("HubSpot disconnected");
         setTimeout(() => setSuccess(null), 3000);
       } else {
@@ -619,6 +626,33 @@ export default function ClientSettingsPage() {
       setError("Failed to send setup email");
     } finally {
       setSendingSlackSetupEmail(false);
+      setTimeout(() => { setSuccess(null); setError(null); }, 5000);
+    }
+  };
+
+  const sendHubspotSetupInstructions = async () => {
+    if (!hubspotSetupEmail.trim()) return;
+    setSendingHubspotSetupEmail(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/hubspot-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sendSetupEmail", recipientEmail: hubspotSetupEmail.trim() }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess(data.message || "Setup instructions sent!");
+        setHubspotSetupEmail("");
+        setHubspotSetupEmailSent(new Date().toISOString());
+      } else {
+        setError(data.error || "Failed to send setup email");
+      }
+    } catch (error) {
+      console.error("Error sending HubSpot setup email:", error);
+      setError("Failed to send setup email");
+    } finally {
+      setSendingHubspotSetupEmail(false);
       setTimeout(() => { setSuccess(null); setError(null); }, 5000);
     }
   };
@@ -2113,6 +2147,39 @@ export default function ClientSettingsPage() {
                   </Button>
                 </div>
               )}
+
+              {/* Send Setup Instructions */}
+              <div className="space-y-2 pt-2 border-t">
+                <Label htmlFor="hubspotSetupEmail">Send Setup Instructions</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="hubspotSetupEmail"
+                    type="email"
+                    value={hubspotSetupEmail}
+                    onChange={(e) => setHubspotSetupEmail(e.target.value)}
+                    placeholder="client@example.com"
+                    className="flex-1"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={sendHubspotSetupInstructions}
+                    disabled={sendingHubspotSetupEmail || !hubspotSetupEmail.trim()}
+                  >
+                    {sendingHubspotSetupEmail ? (
+                      <RefreshCw className="h-4 w-4 animate-spin mr-1" />
+                    ) : (
+                      <Mail className="h-4 w-4 mr-1" />
+                    )}
+                    Send
+                  </Button>
+                </div>
+                {hubspotSetupEmailSent && (
+                  <p className="text-xs text-muted-foreground">
+                    Last sent: {new Date(hubspotSetupEmailSent).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                )}
+              </div>
             </>
           )}
         </CardContent>
