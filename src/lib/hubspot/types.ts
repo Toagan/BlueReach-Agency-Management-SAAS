@@ -103,6 +103,37 @@ export interface HubSpotProperty {
   options: HubSpotPropertyOption[];
 }
 
+export interface HubSpotDeal {
+  id: string;
+  properties: {
+    dealname: string;
+    amount?: string;
+    pipeline?: string;
+    dealstage?: string;
+    [key: string]: string | undefined;
+  };
+  createdAt: string;
+  updatedAt: string;
+  archived: boolean;
+}
+
+export interface HubSpotDealInput {
+  properties: {
+    dealname: string;
+    amount?: string;
+    pipeline?: string;
+    dealstage?: string;
+    [key: string]: string | undefined;
+  };
+  associations?: Array<{
+    to: { id: string };
+    types: Array<{
+      associationCategory: string;
+      associationTypeId: number;
+    }>;
+  }>;
+}
+
 export interface HubSpotError {
   status: string;
   message: string;

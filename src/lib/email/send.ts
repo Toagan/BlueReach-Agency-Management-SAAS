@@ -761,4 +761,22 @@ export async function sendHubSpotSetupEmail(
   }
 }
 
+// Alias for backward compatibility (lowercase 's' variant)
+export interface SendHubspotSetupEmailParams {
+  to: string;
+  clientName: string;
+  recipientName?: string;
+}
+
+export async function sendHubspotSetupEmail(
+  params: SendHubspotSetupEmailParams
+): Promise<{ success: boolean; error?: string; emailId?: string }> {
+  return sendHubSpotSetupEmail({
+    to: params.to,
+    clientName: params.clientName,
+    recipientName: params.recipientName || params.to.split("@")[0],
+    clientId: "", // No clientId available in this variant
+  });
+}
+
 export { getBrandingSettings, buildReplyBody, getReplySubject };

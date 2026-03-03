@@ -5,6 +5,7 @@ import {
   Head,
   Heading,
   Html,
+  Link,
   Preview,
   Section,
   Text,
@@ -39,7 +40,7 @@ export const HubSpotSetup = ({
           {/* Header */}
           <Section style={header}>
             <Text style={headerBrand}>
-              <span style={headerWave}>🌊</span> {agencyName}
+              <span style={headerWave}>&#127754;</span> {agencyName}
             </Text>
           </Section>
 
@@ -92,10 +93,10 @@ export const HubSpotSetup = ({
           {/* Footer */}
           <Section style={footer}>
             <Text style={footerBrand}>
-              <span style={footerWave}>🌊</span> {agencyName}
+              <span style={footerWave}>&#127754;</span> {agencyName}
             </Text>
             <Text style={copyright}>
-              © {new Date().getFullYear()} {agencyName}
+              &copy; {new Date().getFullYear()} {agencyName}
             </Text>
           </Section>
         </Container>
@@ -137,7 +138,7 @@ Go to Dashboard Settings: ${props.dashboardUrl}
 
 Once connected, positive replies will automatically create contacts and deals in your HubSpot CRM.
 
-© ${new Date().getFullYear()} ${props.agencyName}
+\u00a9 ${new Date().getFullYear()} ${props.agencyName}
   `.trim();
 }
 

@@ -4,6 +4,8 @@
 import type {
   HubSpotContact,
   HubSpotContactInput,
+  HubSpotDeal,
+  HubSpotDealInput,
   HubSpotNote,
   HubSpotNoteInput,
   HubSpotPipeline,
@@ -285,7 +287,17 @@ export class HubSpotClient {
   }
 
   /**
-   * Create a deal and associate it with a contact
+   * Create a deal
+   */
+  async createDeal(input: HubSpotDealInput): Promise<HubSpotDeal> {
+    return this.request<HubSpotDeal>("/crm/v3/objects/deals", {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  /**
+   * Create a deal associated with a contact, and attach a note to both
    */
   async createDealForContact(
     contactId: string,
@@ -329,6 +341,7 @@ export class HubSpotClient {
     if (noteBody) {
       try {
         // Create note associated with the deal (associationTypeId 214 = Note to Deal)
+        // and to the contact (associationTypeId 202 = Note to Contact)
         const note = await this.request<HubSpotNote>("/crm/v3/objects/notes", {
           method: "POST",
           body: {
@@ -346,12 +359,22 @@ export class HubSpotClient {
                   },
                 ],
               },
+              {
+                to: { id: contactId },
+                types: [
+                  {
+                    associationCategory: "HUBSPOT_DEFINED",
+                    associationTypeId: 202,
+                  },
+                ],
+              },
             ],
           },
         });
         noteId = note.id;
       } catch {
-        // Note creation is best-effort
+        // Note creation is best-effort (scope may not be available)
+        console.log(`[HubSpot] Note creation on deal skipped (scope not available)`);
       }
     }
 

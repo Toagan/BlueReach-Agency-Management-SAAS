@@ -3,6 +3,7 @@ export {
   sendPositiveReplyNotification,
   sendStatsReport,
   sendSlackSetupEmail,
+  sendHubspotSetupEmail,
   getBrandingSettings,
 } from "./send";
 export type {
@@ -10,4 +11,5 @@ export type {
   SendPositiveReplyNotificationParams,
   SendStatsReportParams,
   SendSlackSetupEmailParams,
+  SendHubspotSetupEmailParams,
 } from "./send";

@@ -121,6 +121,13 @@ export default function ClientSettingsPage() {
   const [savingHubspot, setSavingHubspot] = useState(false);
   const [disconnectingHubspot, setDisconnectingHubspot] = useState(false);
   const [testingHubspot, setTestingHubspot] = useState(false);
+  const [hubspotCreateContacts, setHubspotCreateContacts] = useState(true);
+  const [hubspotCreateDeals, setHubspotCreateDeals] = useState(false);
+  const [hubspotDealValue, setHubspotDealValue] = useState("");
+  const [savingDealValue, setSavingDealValue] = useState(false);
+  const [hubspotSetupEmailSent, setHubspotSetupEmailSent] = useState<string | null>(null);
+  const [hubspotSetupEmailTo, setHubspotSetupEmailTo] = useState("");
+  const [sendingSetupEmail, setSendingSetupEmail] = useState(false);
 
   // HubSpot deal pipeline/stage
   const [hubspotDealPipeline, setHubspotDealPipeline] = useState("default");
@@ -141,10 +148,9 @@ export default function ClientSettingsPage() {
   } | null>(null);
   const [loadingBackfillPreview, setLoadingBackfillPreview] = useState(false);
 
-  // HubSpot setup email
+  // HubSpot setup email (from theirs branch)
   const [hubspotSetupEmail, setHubspotSetupEmail] = useState("");
   const [sendingHubspotSetupEmail, setSendingHubspotSetupEmail] = useState(false);
-  const [hubspotSetupEmailSent, setHubspotSetupEmailSent] = useState<string | null>(null);
 
   // Slack notification settings
   const [slackWebhookUrl, setSlackWebhookUrl] = useState("");
@@ -276,6 +282,9 @@ export default function ClientSettingsPage() {
         if (data.contactPropertyMappings) {
           setHubspotContactPropertyMappings(data.contactPropertyMappings);
         }
+        setHubspotCreateContacts(data.createContacts !== false);
+        setHubspotCreateDeals(data.createDeals || false);
+        setHubspotDealValue(data.dealValue || "");
         setHubspotSetupEmailSent(data.setupEmailSent || null);
 
         // Auto-fetch pipelines and contact properties if connected and enabled
@@ -697,6 +706,7 @@ export default function ClientSettingsPage() {
     fetchSlackSettings();
     fetchClientCampaigns();
 
+    // Check if current user is admin
     const checkRole = async () => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -1825,8 +1835,100 @@ export default function ClientSettingsPage() {
                       </div>
                     )}
                     <p className="text-xs text-muted-foreground pt-2">
-                      Positive replies are automatically synced to HubSpot as contacts with the email thread attached.
+                      Positive replies are automatically synced to HubSpot with the email thread attached.
                     </p>
+                  </div>
+
+                  {/* Sync Options */}
+                  <div className="pt-4 border-t space-y-3">
+                    <p className="text-sm font-medium">Sync Options</p>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm">Create Contacts</p>
+                        <p className="text-xs text-muted-foreground">Sync positive replies as HubSpot contacts</p>
+                      </div>
+                      <Switch
+                        checked={hubspotCreateContacts}
+                        onCheckedChange={async (checked) => {
+                          setHubspotCreateContacts(checked);
+                          try {
+                            await fetch(`/api/clients/${clientId}/hubspot-settings`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ createContacts: checked }),
+                            });
+                          } catch (e) {
+                            console.error(e);
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm">Create Deals</p>
+                        <p className="text-xs text-muted-foreground">Also create a deal for each positive reply</p>
+                      </div>
+                      <Switch
+                        checked={hubspotCreateDeals}
+                        onCheckedChange={async (checked) => {
+                          setHubspotCreateDeals(checked);
+                          try {
+                            await fetch(`/api/clients/${clientId}/hubspot-settings`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ createDeals: checked }),
+                            });
+                          } catch (e) {
+                            console.error(e);
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {/* Deal Value Input */}
+                    {hubspotCreateDeals && (
+                      <div className="flex items-end gap-2 pl-1">
+                        <div className="flex-1 space-y-1">
+                          <Label htmlFor="dealValue" className="text-xs">Default Deal Value</Label>
+                          <Input
+                            id="dealValue"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={hubspotDealValue}
+                            onChange={(e) => setHubspotDealValue(e.target.value)}
+                            placeholder="e.g. 5000"
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          disabled={savingDealValue}
+                          onClick={async () => {
+                            setSavingDealValue(true);
+                            try {
+                              const res = await fetch(`/api/clients/${clientId}/hubspot-settings`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ dealValue: hubspotDealValue }),
+                              });
+                              if (res.ok) {
+                                setSuccess("Deal value saved");
+                                setTimeout(() => setSuccess(null), 3000);
+                              }
+                            } catch (e) {
+                              console.error(e);
+                            } finally {
+                              setSavingDealValue(false);
+                            }
+                          }}
+                        >
+                          {savingDealValue ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Deal Pipeline & Stage */}
@@ -2019,11 +2121,12 @@ export default function ClientSettingsPage() {
                     </div>
                   )}
 
+                  {/* Test Sync */}
                   <div className="flex items-center justify-between pt-2 border-t">
                     <div>
                       <p className="text-sm font-medium">Test Sync</p>
                       <p className="text-xs text-muted-foreground">
-                        Send a test contact to HubSpot to verify the integration
+                        Send a test contact{hubspotCreateDeals ? " + deal" : ""} to HubSpot
                       </p>
                     </div>
                     <Button
@@ -2040,6 +2143,73 @@ export default function ClientSettingsPage() {
                       Test Now
                     </Button>
                   </div>
+
+                  {/* Send Setup Instructions (admin only) */}
+                  {isAdmin && (
+                    <div className="pt-4 border-t space-y-3">
+                      <div>
+                        <p className="text-sm font-medium">Send Setup Instructions</p>
+                        <p className="text-xs text-muted-foreground">
+                          Email HubSpot setup guide to a client contact
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          type="email"
+                          value={hubspotSetupEmailTo}
+                          onChange={(e) => setHubspotSetupEmailTo(e.target.value)}
+                          placeholder="client@example.com"
+                          className="h-8 text-sm"
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 shrink-0"
+                          disabled={sendingSetupEmail || !hubspotSetupEmailTo}
+                          onClick={async () => {
+                            setSendingSetupEmail(true);
+                            setError(null);
+                            try {
+                              const res = await fetch(`/api/clients/${clientId}/hubspot-settings`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  action: "sendSetupEmail",
+                                  setupEmailTo: hubspotSetupEmailTo,
+                                }),
+                              });
+                              const data = await res.json();
+                              if (res.ok) {
+                                setSuccess(data.message || "Setup email sent");
+                                setHubspotSetupEmailTo("");
+                                fetchHubspotSettings();
+                                setTimeout(() => setSuccess(null), 5000);
+                              } else {
+                                setError(data.error || "Failed to send setup email");
+                              }
+                            } catch (e) {
+                              console.error(e);
+                              setError("Failed to send setup email");
+                            } finally {
+                              setSendingSetupEmail(false);
+                            }
+                          }}
+                        >
+                          {sendingSetupEmail ? (
+                            <RefreshCw className="h-3 w-3 animate-spin mr-1" />
+                          ) : (
+                            <Mail className="h-3 w-3 mr-1" />
+                          )}
+                          Send
+                        </Button>
+                      </div>
+                      {hubspotSetupEmailSent && (
+                        <p className="text-xs text-muted-foreground">
+                          Last sent: {new Date(hubspotSetupEmailSent).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Backfill Section */}
                   <div className="pt-4 border-t space-y-3">
@@ -2131,7 +2301,7 @@ export default function ClientSettingsPage() {
                       placeholder="pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Create a Private App in HubSpot with scopes: <code className="bg-muted px-1 rounded">crm.objects.contacts.read</code>, <code className="bg-muted px-1 rounded">crm.objects.contacts.write</code>, <code className="bg-muted px-1 rounded">crm.objects.notes.write</code>
+                      Create a Private App in HubSpot with scopes: <code className="bg-muted px-1 rounded">crm.objects.contacts.read</code>, <code className="bg-muted px-1 rounded">crm.objects.contacts.write</code>, <code className="bg-muted px-1 rounded">crm.objects.deals.read</code>, <code className="bg-muted px-1 rounded">crm.objects.deals.write</code>
                     </p>
                   </div>
                   <Button

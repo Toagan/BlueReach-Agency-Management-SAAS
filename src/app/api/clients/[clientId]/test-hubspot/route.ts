@@ -82,15 +82,23 @@ Test Company Inc.`,
       ],
     });
 
+    const syncedItems = [
+      result.contactId ? "contact" : null,
+      result.dealId ? "deal" : null,
+    ].filter(Boolean).join(" + ");
+
     return NextResponse.json({
       success: result.success,
       testEmail,
       contactId: result.contactId,
       noteId: result.noteId,
+      dealId: result.dealId,
       error: result.error,
       skipped: result.skipped,
       message: result.success
-        ? `Test contact "${testEmail}" synced to HubSpot! Check your HubSpot contacts.`
+        ? syncedItems
+          ? `Test ${syncedItems} synced to HubSpot! Check your HubSpot CRM.`
+          : `Sync completed (no objects created — check your sync toggles).`
         : `Sync failed: ${result.error}`,
     });
   } catch (error) {

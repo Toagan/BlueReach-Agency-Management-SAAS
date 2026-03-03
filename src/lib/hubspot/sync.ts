@@ -107,6 +107,30 @@ export async function syncLeadToHubSpot(
       }
     }
 
+    // Read sync toggles and deal value
+    const { data: createContactsSetting } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", `client_${clientId}_hubspot_create_contacts`)
+      .single();
+
+    const { data: createDealsSetting } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", `client_${clientId}_hubspot_create_deals`)
+      .single();
+
+    const { data: dealValueSetting } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", `client_${clientId}_hubspot_deal_value`)
+      .single();
+
+    // Defaults: contacts on, deals off
+    const shouldCreateContacts = createContactsSetting?.value !== "false";
+    const shouldCreateDeals = createDealsSetting?.value === "true";
+    const dealValue = dealValueSetting?.value || undefined;
+
     // Build email thread content for the contact description
     let emailThreadContent = `POSITIVE REPLY - BlueReach Campaign\n`;
     emailThreadContent += `Client: ${clientName}\n`;
@@ -141,75 +165,84 @@ export async function syncLeadToHubSpot(
 
     emailThreadContent += `\nSynced from BlueReach at ${new Date().toISOString()}`;
 
-    // Build contact data with email thread in description/notes field
-    const contactInput: HubSpotContactInput = {
-      properties: {
-        email: leadEmail,
-        firstname: leadFirstName || undefined,
-        lastname: leadLastName || undefined,
-        phone: leadPhone || undefined,
-        company: companyName || undefined,
-        // Configurable contact property mappings (replaces hardcoded hs_lead_status)
-        ...contactPropertyMappings,
-        // Vertical/Industry - set per campaign
-        industry: vertical || undefined,
-        // Campaign name for tracking
-        campaign_name: campaignName || undefined,
-        // Store email thread in HubSpot's built-in notes/description field
-        hs_content_membership_notes: emailThreadContent,
-        // Also try message field as backup
-        message: emailThreadContent.substring(0, 65000), // HubSpot field limit
-      },
-    };
-
-    // Upsert contact (create or update)
-    console.log(`[HubSpot] Upserting contact: ${leadEmail}`);
-    const contact = await hubspot.upsertContact(contactInput);
-    console.log(`[HubSpot] Contact upserted: ${contact.id}`);
-
-    // Try to create a note if the scope is available (will fail gracefully if not)
+    let contactId: string | undefined;
     let noteId: string | undefined;
-    try {
-      const note = await hubspot.createNote(contact.id, emailThreadContent);
-      noteId = note.id;
-      console.log(`[HubSpot] Note created: ${note.id}`);
-    } catch (noteError) {
-      // Note creation failed (likely scope not available), but contact was created
-      console.log(`[HubSpot] Note creation skipped (scope not available), contact created successfully`);
+    let dealId: string | undefined;
+
+    // Conditionally create/update contact
+    if (shouldCreateContacts) {
+      // Build contact data with email thread in description/notes field
+      const contactInput: HubSpotContactInput = {
+        properties: {
+          email: leadEmail,
+          firstname: leadFirstName || undefined,
+          lastname: leadLastName || undefined,
+          phone: leadPhone || undefined,
+          company: companyName || undefined,
+          // Configurable contact property mappings (replaces hardcoded hs_lead_status)
+          ...contactPropertyMappings,
+          // Vertical/Industry - set per campaign
+          industry: vertical || undefined,
+          // Campaign name for tracking
+          campaign_name: campaignName || undefined,
+          // Store email thread in HubSpot's built-in notes/description field
+          hs_content_membership_notes: emailThreadContent,
+          // Also try message field as backup
+          message: emailThreadContent.substring(0, 65000), // HubSpot field limit
+        },
+      };
+
+      // Upsert contact (create or update)
+      console.log(`[HubSpot] Upserting contact: ${leadEmail}`);
+      const contact = await hubspot.upsertContact(contactInput);
+      contactId = contact.id;
+      console.log(`[HubSpot] Contact upserted: ${contact.id}`);
+
+      // Try to create a note on the contact
+      try {
+        const note = await hubspot.createNote(contact.id, emailThreadContent);
+        noteId = note.id;
+        console.log(`[HubSpot] Note created: ${note.id}`);
+      } catch (noteError) {
+        console.log(`[HubSpot] Note creation skipped (scope not available), contact created successfully`);
+      }
     }
 
-    // Create a deal if deals are enabled
-    let dealId: string | undefined;
-    try {
-      const { data: pipelineSetting } = await supabase
-        .from("settings")
-        .select("value")
-        .eq("key", `client_${clientId}_hubspot_deal_pipeline`)
-        .single();
+    // Conditionally create deal (requires a contact to associate with)
+    if (shouldCreateDeals && contactId) {
+      try {
+        // Load deal pipeline/stage settings
+        const { data: pipelineSetting } = await supabase
+          .from("settings")
+          .select("value")
+          .eq("key", `client_${clientId}_hubspot_deal_pipeline`)
+          .single();
 
-      const { data: stageSetting } = await supabase
-        .from("settings")
-        .select("value")
-        .eq("key", `client_${clientId}_hubspot_deal_stage`)
-        .single();
+        const { data: stageSetting } = await supabase
+          .from("settings")
+          .select("value")
+          .eq("key", `client_${clientId}_hubspot_deal_stage`)
+          .single();
 
-      const pipeline = pipelineSetting?.value || "default";
-      const dealstage = stageSetting?.value || "appointmentscheduled";
+        const pipeline = pipelineSetting?.value || "default";
+        const dealstage = stageSetting?.value || "appointmentscheduled";
 
-      const dealName = `${leadFirstName || ""} ${leadLastName || ""}`.trim() || leadEmail;
-      const result = await hubspot.createDealForContact(
-        contact.id,
-        `${dealName} - ${campaignName}`,
-        undefined,
-        emailThreadContent,
-        pipeline,
-        dealstage,
-      );
-      dealId = result.dealId;
-      console.log(`[HubSpot] Deal created: ${dealId}`);
-    } catch (dealError) {
-      // Deal creation failed (likely scope not available), but contact was created
-      console.log(`[HubSpot] Deal creation skipped:`, dealError instanceof Error ? dealError.message : "unknown error");
+        const dealName = `${companyName || leadEmail} - ${campaignName}`;
+        console.log(`[HubSpot] Creating deal: ${dealName}`);
+        const dealResult = await hubspot.createDealForContact(
+          contactId,
+          dealName,
+          dealValue,
+          emailThreadContent,
+          pipeline,
+          dealstage,
+        );
+        dealId = dealResult.dealId;
+        console.log(`[HubSpot] Deal created: ${dealId}`);
+      } catch (dealError) {
+        console.error(`[HubSpot] Deal creation failed:`, dealError);
+        // Don't break the sync if deal creation fails
+      }
     }
 
     // Update sync stats
@@ -243,7 +276,7 @@ export async function syncLeadToHubSpot(
 
     return {
       success: true,
-      contactId: contact.id,
+      contactId,
       noteId,
       dealId,
     };

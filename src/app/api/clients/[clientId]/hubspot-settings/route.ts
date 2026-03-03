@@ -87,6 +87,25 @@ export async function GET(
       }
     }
 
+    // Get deal/contact toggle settings
+    const { data: createContactsSetting } = await adminSupabase
+      .from("settings")
+      .select("value")
+      .eq("key", `client_${clientId}_hubspot_create_contacts`)
+      .single();
+
+    const { data: createDealsSetting } = await adminSupabase
+      .from("settings")
+      .select("value")
+      .eq("key", `client_${clientId}_hubspot_create_deals`)
+      .single();
+
+    const { data: dealValueSetting } = await adminSupabase
+      .from("settings")
+      .select("value")
+      .eq("key", `client_${clientId}_hubspot_deal_value`)
+      .single();
+
     // Get setup email sent timestamp
     const { data: setupEmailSetting } = await adminSupabase
       .from("settings")
@@ -104,6 +123,9 @@ export async function GET(
       dealPipeline: pipelineSetting?.value || "default",
       dealStage: stageSetting?.value || "appointmentscheduled",
       contactPropertyMappings,
+      createContacts: createContactsSetting?.value !== "false", // default true
+      createDeals: createDealsSetting?.value === "true", // default false
+      dealValue: dealValueSetting?.value || "",
       setupEmailSent: setupEmailSetting?.value || null,
     });
   } catch (error) {
@@ -129,13 +151,17 @@ export async function POST(
     if (auth.error) return auth.error;
 
     const body = await request.json();
-    const { enabled, accessToken, action, dealPipeline, dealStage, contactPropertyMappings } = body as {
+    const { enabled, accessToken, action, dealPipeline, dealStage, contactPropertyMappings, createContacts, createDeals, dealValue, setupEmailTo } = body as {
       enabled?: boolean;
       accessToken?: string;
       action?: string;
       dealPipeline?: string;
       dealStage?: string;
       contactPropertyMappings?: Record<string, string>;
+      createContacts?: boolean;
+      createDeals?: boolean;
+      dealValue?: string;
+      setupEmailTo?: string;
     };
 
     const adminSupabase = getSupabaseAdmin();
@@ -143,7 +169,8 @@ export async function POST(
     // Handle sendSetupEmail action
     if (action === "sendSetupEmail") {
       const { recipientEmail } = body as { recipientEmail?: string };
-      if (!recipientEmail) {
+      const emailTo = recipientEmail || setupEmailTo;
+      if (!emailTo) {
         return NextResponse.json({ error: "Recipient email is required" }, { status: 400 });
       }
 
@@ -155,8 +182,8 @@ export async function POST(
         .single();
 
       const result = await sendHubSpotSetupEmail({
-        to: recipientEmail,
-        recipientName: recipientEmail.split("@")[0],
+        to: emailTo,
+        recipientName: emailTo.split("@")[0],
         clientName: client?.name || "Your Company",
         clientId,
       });
@@ -174,7 +201,7 @@ export async function POST(
           updated_at: new Date().toISOString(),
         }, { onConflict: "key" });
 
-      return NextResponse.json({ success: true, message: `Setup instructions sent to ${recipientEmail}` });
+      return NextResponse.json({ success: true, message: `Setup instructions sent to ${emailTo}` });
     }
 
     // Handle fetchPipelines action
@@ -229,6 +256,40 @@ export async function POST(
           { status: 500 }
         );
       }
+    }
+
+    // Save contact/deal toggles and deal value
+    if (typeof createContacts === "boolean") {
+      await adminSupabase.from("settings").upsert(
+        {
+          key: `client_${clientId}_hubspot_create_contacts`,
+          value: createContacts ? "true" : "false",
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "key" }
+      );
+    }
+
+    if (typeof createDeals === "boolean") {
+      await adminSupabase.from("settings").upsert(
+        {
+          key: `client_${clientId}_hubspot_create_deals`,
+          value: createDeals ? "true" : "false",
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "key" }
+      );
+    }
+
+    if (dealValue !== undefined) {
+      await adminSupabase.from("settings").upsert(
+        {
+          key: `client_${clientId}_hubspot_deal_value`,
+          value: dealValue,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "key" }
+      );
     }
 
     // If access token is provided, validate it first
@@ -376,6 +437,9 @@ export async function DELETE(
       `client_${clientId}_hubspot_deal_pipeline`,
       `client_${clientId}_hubspot_deal_stage`,
       `client_${clientId}_hubspot_contact_properties`,
+      `client_${clientId}_hubspot_create_contacts`,
+      `client_${clientId}_hubspot_create_deals`,
+      `client_${clientId}_hubspot_deal_value`,
       `client_${clientId}_hubspot_setup_email_sent`,
     ];
 
