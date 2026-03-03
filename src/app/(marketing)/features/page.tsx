@@ -1,4 +1,20 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Features — Client Portals, Real-Time Analytics & Lead Pipeline",
+  description:
+    "Explore Blue Reach features: white-label client portals, real-time campaign analytics from Instantly & Smartlead, visual lead pipeline, Slack notifications, custom workflows, and more.",
+  alternates: {
+    canonical: "/features",
+  },
+  openGraph: {
+    title: "Blue Reach Features — Everything Your Outbound Agency Needs",
+    description:
+      "White-label client portals, real-time analytics synced from Instantly & Smartlead, visual lead pipeline, Slack integration, custom workflows, and team collaboration.",
+    url: "/features",
+  },
+};
 
 export default function FeaturesPage() {
   return (

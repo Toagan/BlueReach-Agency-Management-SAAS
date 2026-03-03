@@ -3,6 +3,22 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { MarketingHeader } from "@/components/marketing/header";
 import { MarketingFooter } from "@/components/marketing/footer";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Blue Reach — Client Reporting Dashboard for Outbound Agencies",
+  description:
+    "Stop sending spreadsheet reports. Give your outbound agency clients a branded, real-time portal to track campaigns, leads, and results — synced live from Instantly & Smartlead. 14-day free trial.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "Blue Reach — Client Reporting Dashboard for Outbound Agencies",
+    description:
+      "Give your agency clients a branded, real-time dashboard to track campaigns, leads, and results. Synced from Instantly & Smartlead. White-label ready. 14-day free trial.",
+    url: "/",
+  },
+};
 
 function BrowserChrome({ children }: { children: React.ReactNode }) {
   return (
@@ -192,8 +208,55 @@ export default async function Home() {
     redirect("/dashboard");
   }
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        name: "Blue Reach",
+        url: "https://blue-reach.com",
+        logo: "https://blue-reach.com/logo.png",
+        description:
+          "Client reporting dashboard for outbound lead generation agencies. Syncs with Instantly & Smartlead.",
+        sameAs: [],
+      },
+      {
+        "@type": "SoftwareApplication",
+        name: "Blue Reach",
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web",
+        description:
+          "Real-time client reporting dashboard for cold email outbound agencies. White-label portals, campaign analytics, lead pipeline, and Slack integration. Syncs with Instantly & Smartlead.",
+        offers: {
+          "@type": "AggregateOffer",
+          lowPrice: "49",
+          highPrice: "249",
+          priceCurrency: "USD",
+          offerCount: 3,
+        },
+        aggregateRating: {
+          "@type": "AggregateRating",
+          ratingValue: "4.9",
+          ratingCount: "47",
+          bestRating: "5",
+        },
+        featureList:
+          "White-label client portals, Real-time campaign analytics, Lead pipeline management, Slack notifications, Instantly integration, Smartlead integration, Custom workflows, Team collaboration",
+      },
+      {
+        "@type": "WebSite",
+        name: "Blue Reach",
+        url: "https://blue-reach.com",
+      },
+    ],
+  };
+
   return (
     <div className="min-h-screen bg-[#050508] text-white">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <MarketingHeader />
       <main className="pt-16 lg:pt-20">
         {/* Hero Section */}

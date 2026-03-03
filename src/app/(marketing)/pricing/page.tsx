@@ -1,4 +1,20 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Pricing — Plans from $49/mo for Outbound Agencies",
+  description:
+    "Blue Reach pricing starts at $49/month for up to 3 clients. Growth plan at $99/mo includes white-label portals and Smartlead. Agency plan at $249/mo with unlimited clients. 14-day free trial, no credit card required.",
+  alternates: {
+    canonical: "/pricing",
+  },
+  openGraph: {
+    title: "Blue Reach Pricing — Plans That Scale With Your Agency",
+    description:
+      "From $49/mo for small agencies to $249/mo for unlimited clients. White-label portals, Instantly & Smartlead integration, real-time analytics. 14-day free trial.",
+    url: "/pricing",
+  },
+};
 
 export default function PricingPage() {
   const plans = [
@@ -81,8 +97,25 @@ export default function PricingPage() {
     },
   ];
 
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqs.map((faq) => ({
+      "@type": "Question",
+      name: faq.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: faq.answer,
+      },
+    })),
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
       {/* Hero Section */}
       <section className="relative overflow-hidden py-20 lg:py-28">
         <div className="absolute inset-0 bg-gradient-to-br from-[#050508] via-[#0a1628] to-[#050508]" />
