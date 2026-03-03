@@ -389,15 +389,15 @@ export default function ClientDashboardPage() {
     }
   };
 
-  const buildLeadReplyUrl = useCallback((lead: Lead) => {
-    const emails = leadEmails[lead.id] || [];
+  const [replyingLeadId, setReplyingLeadId] = useState<string | null>(null);
+
+  const buildReplyUrlFromEmails = useCallback((lead: Lead, emails: LeadEmail[]) => {
     const lastOutbound = [...emails].reverse().find((e) => e.direction === "outbound");
     const originalSubject = lastOutbound?.subject || emails.find((e) => e.subject)?.subject || "";
     const replySubject = originalSubject
       ? `Re: ${originalSubject.replace(/^(Re:\s*)+/i, "")}`
       : "Following up";
 
-    // Build quoted thread body for the compose window
     let body = "\n\n";
     if (emails.length > 0) {
       const reversed = [...emails].reverse();
@@ -410,7 +410,6 @@ export default function ClientDashboardPage() {
         body += `---\nOn ${date}, ${email.from_email} wrote:\n${emailBody}\n\n`;
       }
     }
-    // Truncate to keep URL safe
     if (body.length > 1500) body = body.slice(0, 1500) + "\n[Thread truncated]";
 
     const gmailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(lead.email)}&su=${encodeURIComponent(replySubject)}&body=${encodeURIComponent(body)}`;
@@ -418,7 +417,27 @@ export default function ClientDashboardPage() {
 
     const base = typeof window !== "undefined" ? window.location.origin : "";
     return `${base}/reply?to=${encodeURIComponent(lead.email)}&gmail=${encodeURIComponent(gmailUrl)}&outlook=${encodeURIComponent(outlookUrl)}`;
-  }, [leadEmails]);
+  }, []);
+
+  const handleReplyToLead = useCallback(async (lead: Lead) => {
+    setReplyingLeadId(lead.id);
+    try {
+      // Fetch emails if not already loaded
+      let emails = leadEmails[lead.id];
+      if (!emails || emails.length === 0) {
+        const res = await fetch(`/api/leads/${lead.id}/emails`);
+        if (res.ok) {
+          const data = await res.json();
+          emails = data.emails || [];
+          setLeadEmails((prev) => ({ ...prev, [lead.id]: emails! }));
+        }
+      }
+      const url = buildReplyUrlFromEmails(lead, emails || []);
+      window.open(url, "_blank");
+    } finally {
+      setReplyingLeadId(null);
+    }
+  }, [leadEmails, buildReplyUrlFromEmails]);
 
   const handleDeleteCampaign = async (campaignId: string, campaignName: string) => {
     if (!confirm(`Are you sure you want to unlink "${campaignName}"?\n\nThis will remove the campaign from this dashboard. Leads will be preserved.`)) {
@@ -1283,9 +1302,14 @@ export default function ClientDashboardPage() {
                       size="sm"
                       variant="default"
                       className="w-full mb-2 bg-green-600 hover:bg-green-700 text-white"
-                      onClick={() => window.open(buildLeadReplyUrl(lead), "_blank")}
+                      onClick={() => handleReplyToLead(lead)}
+                      disabled={replyingLeadId === lead.id}
                     >
-                      <Reply className="h-4 w-4 mr-2" />
+                      {replyingLeadId === lead.id ? (
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Reply className="h-4 w-4 mr-2" />
+                      )}
                       Reply in Gmail / Outlook
                     </Button>
 
