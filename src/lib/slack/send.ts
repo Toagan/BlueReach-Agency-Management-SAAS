@@ -98,14 +98,14 @@ export async function sendSlackPositiveReply(
   const blocks: SlackBlock[] = [
     {
       type: "header",
-      text: { type: "plain_text", text: `New Positive Reply — ${params.clientName}`, emoji: true },
+      text: { type: "plain_text", text: `🔥 New Positive Reply — ${params.clientName}`, emoji: true },
     },
     {
       type: "section",
       fields: [
-        { type: "mrkdwn", text: `*Lead:*\n${params.leadName || "—"} (${params.leadEmail})` },
-        { type: "mrkdwn", text: `*Company:*\n${params.companyName || "—"}` },
-        { type: "mrkdwn", text: `*Campaign:*\n${params.campaignName}` },
+        { type: "mrkdwn", text: `*👤 Lead:*\n${params.leadName || "—"} (${params.leadEmail})` },
+        { type: "mrkdwn", text: `*🏢 Company:*\n${params.companyName || "—"}` },
+        { type: "mrkdwn", text: `*📧 Campaign:*\n${params.campaignName}` },
       ],
     },
   ];
@@ -113,7 +113,7 @@ export async function sendSlackPositiveReply(
   if (replyText) {
     blocks.push({
       type: "section",
-      text: { type: "mrkdwn", text: `*Reply:*\n> ${replyText.replace(/\n/g, "\n> ")}` },
+      text: { type: "mrkdwn", text: `*💬 Reply:*\n> ${replyText.replace(/\n/g, "\n> ")}` },
     });
   }
 
@@ -121,7 +121,7 @@ export async function sendSlackPositiveReply(
     { type: "divider" } as SlackBlock,
     {
       type: "section",
-      text: { type: "mrkdwn", text: `<${dashboardUrl}|View in Dashboard>` },
+      text: { type: "mrkdwn", text: `👉 <${dashboardUrl}|View in Dashboard>` },
     }
   );
 
@@ -196,25 +196,25 @@ export async function sendSlackStatsReport(
   const blocks: SlackBlock[] = [
     {
       type: "header",
-      text: { type: "plain_text", text: `${params.periodLabel} Stats — ${params.clientName}`, emoji: true },
+      text: { type: "plain_text", text: `📊 ${params.periodLabel} Stats — ${params.clientName}`, emoji: true },
     },
     {
       type: "context",
-      elements: [{ type: "mrkdwn", text: params.periodRange }],
+      elements: [{ type: "mrkdwn", text: `🗓️ ${params.periodRange}` }],
     },
     {
       type: "section",
       fields: [
-        { type: "mrkdwn", text: `*Emails Sent:*\n${params.stats.emailsSent.toLocaleString()}${sentTrend}` },
-        { type: "mrkdwn", text: `*Total Replies:*\n${params.stats.replies.toLocaleString()}${repTrend}` },
-        { type: "mrkdwn", text: `*Positive Replies:*\n${params.stats.positiveReplies.toLocaleString()}${posTrend}` },
-        { type: "mrkdwn", text: `*Reply Rate:*\n${params.stats.replyRate.toFixed(1)}%` },
+        { type: "mrkdwn", text: `*📤 Emails Sent:*\n${params.stats.emailsSent.toLocaleString()}${sentTrend}` },
+        { type: "mrkdwn", text: `*💬 Total Replies:*\n${params.stats.replies.toLocaleString()}${repTrend}` },
+        { type: "mrkdwn", text: `*🔥 Positive Replies:*\n${params.stats.positiveReplies.toLocaleString()}${posTrend}` },
+        { type: "mrkdwn", text: `*📈 Reply Rate:*\n${params.stats.replyRate.toFixed(1)}%` },
       ],
     },
     { type: "divider" } as SlackBlock,
     {
       type: "section",
-      text: { type: "mrkdwn", text: `<${dashboardUrl}|View Dashboard>` },
+      text: { type: "mrkdwn", text: `👉 <${dashboardUrl}|View Dashboard>` },
     },
   ];
 
@@ -240,28 +240,28 @@ export async function sendSlackTestPositiveReply(
   const blocks: SlackBlock[] = [
     {
       type: "header",
-      text: { type: "plain_text", text: `New Positive Reply — ${name}`, emoji: true },
+      text: { type: "plain_text", text: `🔥 New Positive Reply — ${name}`, emoji: true },
     },
     {
       type: "context",
-      elements: [{ type: "mrkdwn", text: "This is a sample notification — no real lead data" }],
+      elements: [{ type: "mrkdwn", text: "🧪 This is a sample notification — no real lead data" }],
     },
     {
       type: "section",
       fields: [
-        { type: "mrkdwn", text: "*Lead:*\nSarah Chen (s.chen@acme-corp.com)" },
-        { type: "mrkdwn", text: "*Company:*\nAcme Corp" },
-        { type: "mrkdwn", text: "*Campaign:*\nQ1 Outbound — Decision Makers" },
+        { type: "mrkdwn", text: "*👤 Lead:*\nSarah Chen (s.chen@acme-corp.com)" },
+        { type: "mrkdwn", text: "*🏢 Company:*\nAcme Corp" },
+        { type: "mrkdwn", text: "*📧 Campaign:*\nQ1 Outbound — Decision Makers" },
       ],
     },
     {
       type: "section",
-      text: { type: "mrkdwn", text: "*Reply:*\n> Hi, thanks for reaching out! This is actually quite relevant for us right now. We've been looking at solutions in this space. Could you send over some more details? Happy to set up a call next week." },
+      text: { type: "mrkdwn", text: "*💬 Reply:*\n> Hi, thanks for reaching out! This is actually quite relevant for us right now. We've been looking at solutions in this space. Could you send over some more details? Happy to set up a call next week." },
     },
     { type: "divider" } as SlackBlock,
     {
       type: "context",
-      elements: [{ type: "mrkdwn", text: "Sample test message from BlueReach" }],
+      elements: [{ type: "mrkdwn", text: "🧪 Sample test message from BlueReach" }],
     },
   ];
 
@@ -283,28 +283,28 @@ export async function sendSlackTestStats(
   const blocks: SlackBlock[] = [
     {
       type: "header",
-      text: { type: "plain_text", text: `Weekly Stats — ${name}`, emoji: true },
+      text: { type: "plain_text", text: `📊 Weekly Stats — ${name}`, emoji: true },
     },
     {
       type: "context",
       elements: [
-        { type: "mrkdwn", text: periodRange },
-        { type: "mrkdwn", text: "  |  Sample test message — not real data" },
+        { type: "mrkdwn", text: `🗓️ ${periodRange}` },
+        { type: "mrkdwn", text: "  |  🧪 Sample test message — not real data" },
       ],
     },
     {
       type: "section",
       fields: [
-        { type: "mrkdwn", text: "*Emails Sent:*\n3,842 (+14%)" },
-        { type: "mrkdwn", text: "*Total Replies:*\n47 (+8%)" },
-        { type: "mrkdwn", text: "*Positive Replies:*\n12 (+20%)" },
-        { type: "mrkdwn", text: "*Reply Rate:*\n1.2%" },
+        { type: "mrkdwn", text: "*📤 Emails Sent:*\n3,842 (+14%)" },
+        { type: "mrkdwn", text: "*💬 Total Replies:*\n47 (+8%)" },
+        { type: "mrkdwn", text: "*🔥 Positive Replies:*\n12 (+20%)" },
+        { type: "mrkdwn", text: "*📈 Reply Rate:*\n1.2%" },
       ],
     },
     { type: "divider" } as SlackBlock,
     {
       type: "context",
-      elements: [{ type: "mrkdwn", text: "Sample test message from BlueReach" }],
+      elements: [{ type: "mrkdwn", text: "🧪 Sample test message from BlueReach" }],
     },
   ];
 
