@@ -1,7 +1,7 @@
 export {
   sendSlackPositiveReply,
   sendSlackStatsReport,
-  sendSlackTestMessage,
+  sendSlackTestPositiveReply,
   sendSlackTestStats,
 } from "./send";
 export type {

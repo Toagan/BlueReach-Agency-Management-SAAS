@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireClientAccess } from "@/lib/auth";
-import { sendSlackTestMessage, sendSlackTestStats } from "@/lib/slack";
+import { sendSlackTestPositiveReply, sendSlackTestStats } from "@/lib/slack";
 import { sendSlackSetupEmail } from "@/lib/email";
 
 function getSupabaseAdmin() {
@@ -96,12 +96,12 @@ export async function POST(
         .eq("id", clientId)
         .single();
 
-      const result = await sendSlackTestMessage(webhookSetting.value, client?.name);
+      const result = await sendSlackTestPositiveReply(webhookSetting.value, client?.name);
       if (!result.success) {
         return NextResponse.json({ error: result.error || "Test message failed" }, { status: 400 });
       }
 
-      return NextResponse.json({ success: true, message: "Sample notifications sent to Slack" });
+      return NextResponse.json({ success: true, message: "Sample positive reply sent to Slack" });
     }
 
     // Action: test stats only
