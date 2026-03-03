@@ -924,14 +924,12 @@ export default function ClientDashboardPage() {
                       <span className="font-medium">${client.tcv.toLocaleString()}</span>
                     </div>
                   )}
-                  {isAdmin && (
-                    <Link href={`/admin/clients/${clientId}/settings`} className="ml-auto">
-                      <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                        <Settings className="h-4 w-4 mr-1" />
-                        Edit
-                      </Button>
-                    </Link>
-                  )}
+                  <Link href={`/admin/clients/${clientId}/settings`} className="ml-auto">
+                    <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                      <Settings className="h-4 w-4 mr-1" />
+                      Settings
+                    </Button>
+                  </Link>
                 </div>
                 {client?.notes && (
                   <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
