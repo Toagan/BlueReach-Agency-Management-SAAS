@@ -76,6 +76,18 @@ export interface HubSpotBatchResponse<T> {
   results: T[];
 }
 
+export interface HubSpotPipelineStage {
+  id: string;
+  label: string;
+  displayOrder: number;
+}
+
+export interface HubSpotPipeline {
+  id: string;
+  label: string;
+  stages: HubSpotPipelineStage[];
+}
+
 export interface HubSpotError {
   status: string;
   message: string;

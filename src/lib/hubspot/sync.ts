@@ -36,6 +36,7 @@ interface SyncResult {
   success: boolean;
   contactId?: string;
   noteId?: string;
+  dealId?: string;
   error?: string;
   skipped?: boolean;
 }
@@ -159,6 +160,40 @@ export async function syncLeadToHubSpot(
       console.log(`[HubSpot] Note creation skipped (scope not available), contact created successfully`);
     }
 
+    // Create a deal if deals are enabled
+    let dealId: string | undefined;
+    try {
+      const { data: pipelineSetting } = await supabase
+        .from("settings")
+        .select("value")
+        .eq("key", `client_${clientId}_hubspot_deal_pipeline`)
+        .single();
+
+      const { data: stageSetting } = await supabase
+        .from("settings")
+        .select("value")
+        .eq("key", `client_${clientId}_hubspot_deal_stage`)
+        .single();
+
+      const pipeline = pipelineSetting?.value || "default";
+      const dealstage = stageSetting?.value || "appointmentscheduled";
+
+      const dealName = `${leadFirstName || ""} ${leadLastName || ""}`.trim() || leadEmail;
+      const result = await hubspot.createDealForContact(
+        contact.id,
+        `${dealName} - ${campaignName}`,
+        undefined,
+        emailThreadContent,
+        pipeline,
+        dealstage,
+      );
+      dealId = result.dealId;
+      console.log(`[HubSpot] Deal created: ${dealId}`);
+    } catch (dealError) {
+      // Deal creation failed (likely scope not available), but contact was created
+      console.log(`[HubSpot] Deal creation skipped:`, dealError instanceof Error ? dealError.message : "unknown error");
+    }
+
     // Update sync stats
     const syncCountKey = `client_${clientId}_hubspot_sync_count`;
     const { data: currentCount } = await supabase
@@ -192,6 +227,7 @@ export async function syncLeadToHubSpot(
       success: true,
       contactId: contact.id,
       noteId,
+      dealId,
     };
   } catch (error) {
     console.error("[HubSpot] Sync error:", error);

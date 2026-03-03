@@ -55,6 +55,19 @@ export async function GET(
       .eq("key", syncCountKey)
       .single();
 
+    // Get deal pipeline/stage settings
+    const { data: pipelineSetting } = await adminSupabase
+      .from("settings")
+      .select("value")
+      .eq("key", `client_${clientId}_hubspot_deal_pipeline`)
+      .single();
+
+    const { data: stageSetting } = await adminSupabase
+      .from("settings")
+      .select("value")
+      .eq("key", `client_${clientId}_hubspot_deal_stage`)
+      .single();
+
     return NextResponse.json({
       enabled: enabledSetting?.value === "true",
       hasAccessToken: !!tokenSetting?.value,
@@ -62,6 +75,8 @@ export async function GET(
       syncCount: syncCountSetting?.value
         ? parseInt(syncCountSetting.value, 10)
         : 0,
+      dealPipeline: pipelineSetting?.value || "default",
+      dealStage: stageSetting?.value || "appointmentscheduled",
     });
   } catch (error) {
     console.error("Error fetching HubSpot settings:", error);
@@ -86,12 +101,42 @@ export async function POST(
     if (auth.error) return auth.error;
 
     const body = await request.json();
-    const { enabled, accessToken } = body as {
+    const { enabled, accessToken, action, dealPipeline, dealStage } = body as {
       enabled?: boolean;
       accessToken?: string;
+      action?: string;
+      dealPipeline?: string;
+      dealStage?: string;
     };
 
     const adminSupabase = getSupabaseAdmin();
+
+    // Handle fetchPipelines action
+    if (action === "fetchPipelines") {
+      const { data: tokenSetting } = await adminSupabase
+        .from("settings")
+        .select("value")
+        .eq("key", `client_${clientId}_hubspot_access_token`)
+        .single();
+
+      if (!tokenSetting?.value) {
+        return NextResponse.json(
+          { error: "No HubSpot access token configured" },
+          { status: 400 }
+        );
+      }
+
+      try {
+        const hubspotClient = new HubSpotClient(tokenSetting.value);
+        const pipelines = await hubspotClient.getPipelines();
+        return NextResponse.json({ pipelines });
+      } catch (error) {
+        return NextResponse.json(
+          { error: error instanceof Error ? error.message : "Failed to fetch pipelines" },
+          { status: 500 }
+        );
+      }
+    }
 
     // If access token is provided, validate it first
     if (accessToken) {
@@ -163,6 +208,30 @@ export async function POST(
       }
     }
 
+    // Save deal pipeline if provided
+    if (dealPipeline !== undefined) {
+      await adminSupabase.from("settings").upsert(
+        {
+          key: `client_${clientId}_hubspot_deal_pipeline`,
+          value: dealPipeline,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "key" }
+      );
+    }
+
+    // Save deal stage if provided
+    if (dealStage !== undefined) {
+      await adminSupabase.from("settings").upsert(
+        {
+          key: `client_${clientId}_hubspot_deal_stage`,
+          value: dealStage,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "key" }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       message: accessToken
@@ -199,6 +268,8 @@ export async function DELETE(
       `client_${clientId}_hubspot_access_token`,
       `client_${clientId}_hubspot_last_sync`,
       `client_${clientId}_hubspot_sync_count`,
+      `client_${clientId}_hubspot_deal_pipeline`,
+      `client_${clientId}_hubspot_deal_stage`,
     ];
 
     for (const key of keysToDelete) {

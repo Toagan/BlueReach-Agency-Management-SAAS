@@ -122,6 +122,11 @@ export default function ClientSettingsPage() {
   const [disconnectingHubspot, setDisconnectingHubspot] = useState(false);
   const [testingHubspot, setTestingHubspot] = useState(false);
 
+  // HubSpot deal pipeline/stage
+  const [hubspotDealPipeline, setHubspotDealPipeline] = useState("default");
+  const [hubspotDealStage, setHubspotDealStage] = useState("appointmentscheduled");
+  const [hubspotPipelines, setHubspotPipelines] = useState<Array<{ id: string; label: string; stages: Array<{ id: string; label: string; displayOrder: number }> }>>([]);
+  const [loadingPipelines, setLoadingPipelines] = useState(false);
 
   // HubSpot backfill state
   const [runningBackfill, setRunningBackfill] = useState(false);
@@ -255,6 +260,13 @@ export default function ClientSettingsPage() {
         setHubspotHasToken(data.hasAccessToken || false);
         setHubspotLastSync(data.lastSync || null);
         setHubspotSyncCount(data.syncCount || 0);
+        if (data.dealPipeline) setHubspotDealPipeline(data.dealPipeline);
+        if (data.dealStage) setHubspotDealStage(data.dealStage);
+
+        // Auto-fetch pipelines if connected and enabled
+        if (data.hasAccessToken && data.enabled) {
+          fetchPipelines();
+        }
       }
     } catch (error) {
       console.error("Error fetching HubSpot settings:", error);
@@ -291,6 +303,37 @@ export default function ClientSettingsPage() {
       setError("Failed to save HubSpot settings");
     } finally {
       setSavingHubspot(false);
+    }
+  };
+
+  const fetchPipelines = async () => {
+    setLoadingPipelines(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/hubspot-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "fetchPipelines" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHubspotPipelines(data.pipelines || []);
+      }
+    } catch (error) {
+      console.error("Error fetching pipelines:", error);
+    } finally {
+      setLoadingPipelines(false);
+    }
+  };
+
+  const saveDealPipelineStage = async (pipeline: string, stage: string) => {
+    try {
+      await fetch(`/api/clients/${clientId}/hubspot-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dealPipeline: pipeline, dealStage: stage }),
+      });
+    } catch (error) {
+      console.error("Error saving deal pipeline/stage:", error);
     }
   };
 
@@ -1647,6 +1690,9 @@ export default function ClientSettingsPage() {
                           if (res.ok) {
                             setSuccess(checked ? "HubSpot sync enabled" : "HubSpot sync disabled");
                             setTimeout(() => setSuccess(null), 3000);
+                            if (checked && hubspotPipelines.length === 0) {
+                              fetchPipelines();
+                            }
                           }
                         } catch (e) {
                           console.error(e);
@@ -1693,6 +1739,86 @@ export default function ClientSettingsPage() {
                       Positive replies are automatically synced to HubSpot as contacts with the email thread attached.
                     </p>
                   </div>
+
+                  {/* Deal Pipeline & Stage */}
+                  {hubspotEnabled && (
+                    <div className="space-y-3 pt-2 border-t">
+                      <p className="text-sm font-medium">Deal Pipeline & Stage</p>
+                      <p className="text-xs text-muted-foreground">
+                        Choose which pipeline and stage new deals are created in.
+                      </p>
+                      {loadingPipelines ? (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                          Loading pipelines...
+                        </div>
+                      ) : hubspotPipelines.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Pipeline</Label>
+                            <Select
+                              value={hubspotDealPipeline}
+                              onValueChange={(value) => {
+                                setHubspotDealPipeline(value);
+                                // Reset stage to first stage of new pipeline
+                                const pipeline = hubspotPipelines.find(p => p.id === value);
+                                const sortedStages = pipeline?.stages?.slice().sort((a, b) => a.displayOrder - b.displayOrder) || [];
+                                const firstStage = sortedStages[0]?.id || "";
+                                setHubspotDealStage(firstStage);
+                                saveDealPipelineStage(value, firstStage);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select pipeline" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {hubspotPipelines.map((p) => (
+                                  <SelectItem key={p.id} value={p.id}>
+                                    {p.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Deal Stage</Label>
+                            <Select
+                              value={hubspotDealStage}
+                              onValueChange={(value) => {
+                                setHubspotDealStage(value);
+                                saveDealPipelineStage(hubspotDealPipeline, value);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select stage" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(hubspotPipelines.find(p => p.id === hubspotDealPipeline)?.stages || [])
+                                  .slice()
+                                  .sort((a, b) => a.displayOrder - b.displayOrder)
+                                  .map((s) => (
+                                    <SelectItem key={s.id} value={s.id}>
+                                      {s.label}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={fetchPipelines}
+                          disabled={loadingPipelines}
+                        >
+                          <RefreshCw className="h-3 w-3 mr-2" />
+                          Load Pipelines
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between pt-2 border-t">
                     <div>
                       <p className="text-sm font-medium">Test Sync</p>

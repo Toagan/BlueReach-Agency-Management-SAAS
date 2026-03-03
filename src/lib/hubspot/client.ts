@@ -6,6 +6,7 @@ import type {
   HubSpotContactInput,
   HubSpotNote,
   HubSpotNoteInput,
+  HubSpotPipeline,
   HubSpotSearchRequest,
   HubSpotSearchResponse,
   HubSpotError as HubSpotErrorResponse,
@@ -254,6 +255,94 @@ export class HubSpotClient {
       method: "POST",
       body: noteInput,
     });
+  }
+
+  // ============================================
+  // DEALS API
+  // ============================================
+
+  /**
+   * Get all deal pipelines with their stages
+   */
+  async getPipelines(): Promise<HubSpotPipeline[]> {
+    const response = await this.request<{ results: HubSpotPipeline[] }>(
+      "/crm/v3/pipelines/deals"
+    );
+    return response.results;
+  }
+
+  /**
+   * Create a deal and associate it with a contact
+   */
+  async createDealForContact(
+    contactId: string,
+    dealName: string,
+    amount: string | undefined,
+    noteBody: string,
+    pipeline?: string,
+    dealstage?: string,
+  ): Promise<{ dealId: string; noteId?: string }> {
+    const properties: Record<string, string> = {
+      dealname: dealName,
+      pipeline: pipeline || "default",
+      dealstage: dealstage || "appointmentscheduled",
+    };
+    if (amount) {
+      properties.amount = amount;
+    }
+
+    const deal = await this.request<{ id: string }>(
+      "/crm/v3/objects/deals",
+      {
+        method: "POST",
+        body: {
+          properties,
+          associations: [
+            {
+              to: { id: contactId },
+              types: [
+                {
+                  associationCategory: "HUBSPOT_DEFINED",
+                  associationTypeId: 3, // Deal to Contact
+                },
+              ],
+            },
+          ],
+        },
+      }
+    );
+
+    let noteId: string | undefined;
+    if (noteBody) {
+      try {
+        // Create note associated with the deal (associationTypeId 214 = Note to Deal)
+        const note = await this.request<HubSpotNote>("/crm/v3/objects/notes", {
+          method: "POST",
+          body: {
+            properties: {
+              hs_note_body: noteBody,
+              hs_timestamp: new Date().toISOString(),
+            },
+            associations: [
+              {
+                to: { id: deal.id },
+                types: [
+                  {
+                    associationCategory: "HUBSPOT_DEFINED",
+                    associationTypeId: 214,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+        noteId = note.id;
+      } catch {
+        // Note creation is best-effort
+      }
+    }
+
+    return { dealId: deal.id, noteId };
   }
 
   // ============================================
