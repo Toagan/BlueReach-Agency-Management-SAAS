@@ -324,9 +324,12 @@ export default function ClientSettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "fetchPipelines" }),
       });
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
         setHubspotPipelines(data.pipelines || []);
+      } else {
+        console.error("Error fetching pipelines:", data.error);
+        setError(data.error || "Failed to fetch pipelines from HubSpot");
       }
     } catch (error) {
       console.error("Error fetching pipelines:", error);
