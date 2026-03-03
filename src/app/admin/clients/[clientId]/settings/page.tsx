@@ -1245,7 +1245,7 @@ export default function ClientSettingsPage() {
       </Card>
 
       {/* Notification Preferences */}
-      <Card>
+      {isAdmin && <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Bell className="h-5 w-5" />
@@ -1301,10 +1301,10 @@ export default function ClientSettingsPage() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Stats Report Settings */}
-      <Card>
+      {isAdmin && <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
@@ -1372,7 +1372,7 @@ export default function ClientSettingsPage() {
             </>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Slack Notifications */}
       <Card>
