@@ -40,6 +40,7 @@ export interface SendSlackPositiveReplyParams {
   leadEmail: string;
   leadName?: string;
   companyName?: string;
+  companyDomain?: string;
   campaignName: string;
   campaignId: string;
   clientId: string;
@@ -95,6 +96,13 @@ export async function sendSlackPositiveReply(
 
   const fallbackText = `New Positive Reply - ${params.clientName}: ${params.leadName || params.leadEmail}`;
 
+  const companyUrl = params.companyDomain
+    ? (params.companyDomain.startsWith("http") ? params.companyDomain : `https://${params.companyDomain}`)
+    : null;
+  const companyText = params.companyName
+    ? (companyUrl ? `<${companyUrl}|${params.companyName}>` : params.companyName)
+    : "—";
+
   const blocks: SlackBlock[] = [
     {
       type: "header",
@@ -104,7 +112,7 @@ export async function sendSlackPositiveReply(
       type: "section",
       fields: [
         { type: "mrkdwn", text: `*👤 Lead:*\n${params.leadName || "—"} (${params.leadEmail})` },
-        { type: "mrkdwn", text: `*🏢 Company:*\n${params.companyName || "—"}` },
+        { type: "mrkdwn", text: `*🏢 Company:*\n${companyText}` },
         { type: "mrkdwn", text: `*📧 Campaign:*\n${params.campaignName}` },
       ],
     },
@@ -250,7 +258,7 @@ export async function sendSlackTestPositiveReply(
       type: "section",
       fields: [
         { type: "mrkdwn", text: "*👤 Lead:*\nSarah Chen (s.chen@acme-corp.com)" },
-        { type: "mrkdwn", text: "*🏢 Company:*\nAcme Corp" },
+        { type: "mrkdwn", text: "*🏢 Company:*\n<https://acme-corp.com|Acme Corp>" },
         { type: "mrkdwn", text: "*📧 Campaign:*\nQ1 Outbound — Decision Makers" },
       ],
     },

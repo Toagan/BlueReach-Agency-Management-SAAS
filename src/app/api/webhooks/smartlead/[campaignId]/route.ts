@@ -569,6 +569,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           leadEmail,
           leadName: slackLeadName,
           companyName: existingLead?.company_name || undefined,
+          companyDomain: existingLead?.company_domain || undefined,
           campaignName: campaign.name,
           campaignId,
           clientId,
