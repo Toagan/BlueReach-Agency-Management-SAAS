@@ -222,6 +222,51 @@ function getMessageBody(email: EmailThreadMessage): string {
     || (email.body_html ? stripHtmlToPlainText(email.body_html) : "");
 }
 
+/**
+ * Extract only the "new content" from an email body, stripping any
+ * quoted reply text that the sender's email client appended.
+ *
+ * Looks for common quote markers:
+ * - "On ... wrote:" (Gmail)
+ * - "________________________________" (Outlook separator)
+ * - Lines starting with ">" (plain text quoting)
+ * - "From: " header blocks (Outlook)
+ */
+function extractOwnContent(email: EmailThreadMessage): string {
+  // For HTML: strip everything from gmail_quote / blockquote onward
+  if (email.body_html && !email.body_text) {
+    let html = email.body_html;
+    // Remove Gmail quoted blocks
+    const gmailQuoteIdx = html.indexOf('<div class="gmail_quote"');
+    if (gmailQuoteIdx > 0) html = html.substring(0, gmailQuoteIdx);
+    // Remove generic blockquotes
+    const blockquoteIdx = html.indexOf("<blockquote");
+    if (blockquoteIdx > 0) html = html.substring(0, blockquoteIdx);
+    return stripHtmlToPlainText(html);
+  }
+
+  const body = getMessageBody(email);
+  const lines = body.split("\n");
+
+  // Find the first line that looks like a quote attribution or separator
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    // Gmail: "On ... wrote:"
+    if (/^On .+ wrote:$/.test(line)) {
+      return lines.slice(0, i).join("\n").replace(/\n{2,}$/g, "").trim();
+    }
+    // Outlook separator
+    if (/^_{5,}$/.test(line)) {
+      return lines.slice(0, i).join("\n").replace(/\n{2,}$/g, "").trim();
+    }
+    // Block of > quoted lines (at least 2 consecutive)
+    if (line.startsWith(">") && i + 1 < lines.length && lines[i + 1].trim().startsWith(">")) {
+      return lines.slice(0, i).join("\n").replace(/\n{2,}$/g, "").trim();
+    }
+  }
+  return body.trim();
+}
+
 function truncateBody(body: string, max = 1500): string {
   if (body.length <= max) return body;
   return body.substring(0, max) + "\n\n[Thread truncated]";
@@ -249,11 +294,19 @@ function getSenderName(email: EmailThreadMessage, leadName?: string): string {
 /**
  * Gmail compose URL — opens Gmail web/app on mobile.
  *
- * Only quotes the most recent email (its body already contains the full
- * nested conversation). Uses Gmail's native attribution format:
+ * Builds the thread with proper `>` nesting per Gmail convention:
+ * - Most recent message: `>` prefix
+ * - Second most recent: `>>` prefix (nested inside)
+ * - And so on...
  *
- *   On Mon, 2 Mar 2026 at 23:16, Name <email> wrote:
- *   [body with nested quotes already inside]
+ * Each message's "own content" is extracted (quoted reply text stripped)
+ * to avoid duplication when nesting.
+ *
+ *   On Tue, 3 Mar 2026 at 18:57, Name <email> wrote:
+ *   > Their reply text
+ *   >
+ *   > On Sat, 28 Feb 2026 at 14:01, Other <email> wrote:
+ *   >> Original text
  */
 function buildGmailComposeUrl(params: ComposeUrlParams): string {
   const subject = getReplySubject(params);
@@ -261,13 +314,32 @@ function buildGmailComposeUrl(params: ComposeUrlParams): string {
 
   let body = "\n\n";
   if (thread && thread.length > 0) {
-    const lastEmail = thread[thread.length - 1];
-    const d = new Date(lastEmail.sent_at);
-    const name = getSenderName(lastEmail, params.leadName);
-    const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    // Build from earliest (deepest nesting) to most recent (shallowest).
+    // depth 1 = most recent (>), depth N = earliest (> repeated N times)
+    let quoted = "";
+    for (let i = 0; i < thread.length; i++) {
+      const email = thread[i];
+      const d = new Date(email.sent_at);
+      const name = getSenderName(email, params.leadName);
+      const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
-    const attribution = `On ${DAY_SHORT[d.getDay()]}, ${d.getDate()} ${MONTH_SHORT[d.getMonth()]} ${d.getFullYear()} at ${time}, ${name} <${lastEmail.from_email}> wrote:`;
-    body += `${attribution}\n${getMessageBody(lastEmail)}\n`;
+      const attribution = `On ${DAY_SHORT[d.getDay()]}, ${d.getDate()} ${MONTH_SHORT[d.getMonth()]} ${d.getFullYear()} at ${time}, ${name} <${email.from_email}> wrote:`;
+      const ownContent = extractOwnContent(email);
+
+      const depth = thread.length - i;
+      const prefix = "> ".repeat(depth);
+      const attrPrefix = depth > 1 ? "> ".repeat(depth - 1) : "";
+
+      const quotedLines = ownContent.split("\n").map(line => `${prefix}${line}`).join("\n");
+
+      if (i === 0) {
+        quoted = `${attrPrefix}${attribution}\n${quotedLines}`;
+      } else {
+        quoted = `${attrPrefix}${attribution}\n${quotedLines}\n${attrPrefix}>\n${quoted}`;
+      }
+    }
+
+    body += quoted + "\n";
   }
 
   body = truncateBody(body);

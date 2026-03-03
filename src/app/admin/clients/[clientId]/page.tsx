@@ -403,11 +403,41 @@ export default function ClientDashboardPage() {
       .replace(/&gt;/g, ">")
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
-      .replace(/[ \t]+\n/g, "\n")       // trailing whitespace on lines
-      .replace(/\n[ \t]+\n/g, "\n\n")   // lines with only whitespace
-      .replace(/\n{3,}/g, "\n\n")       // collapse 3+ newlines to 2
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n[ \t]+\n/g, "\n\n")
+      .replace(/\n{3,}/g, "\n\n")
       .trim();
   }, []);
+
+  // Extract only the "new content" from an email, stripping quoted reply text
+  const extractOwnContent = useCallback((email: LeadEmail) => {
+    // For HTML: strip from gmail_quote / blockquote onward
+    if (email.body_html && !email.body_text) {
+      let html = email.body_html;
+      const gmailQuoteIdx = html.indexOf('<div class="gmail_quote"');
+      if (gmailQuoteIdx > 0) html = html.substring(0, gmailQuoteIdx);
+      const blockquoteIdx = html.indexOf("<blockquote");
+      if (blockquoteIdx > 0) html = html.substring(0, blockquoteIdx);
+      return stripHtml(html);
+    }
+
+    const body = email.body_text || (email.body_html ? stripHtml(email.body_html) : "");
+    const lines = body.split("\n");
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (/^On .+ wrote:$/.test(line)) {
+        return lines.slice(0, i).join("\n").replace(/\n{2,}$/g, "").trim();
+      }
+      if (/^_{5,}$/.test(line)) {
+        return lines.slice(0, i).join("\n").replace(/\n{2,}$/g, "").trim();
+      }
+      if (line.startsWith(">") && i + 1 < lines.length && lines[i + 1].trim().startsWith(">")) {
+        return lines.slice(0, i).join("\n").replace(/\n{2,}$/g, "").trim();
+      }
+    }
+    return body.trim();
+  }, [stripHtml]);
 
   const buildReplyUrlFromEmails = useCallback((lead: Lead, emails: LeadEmail[]) => {
     const lastOutbound = [...emails].reverse().find((e) => e.direction === "outbound");
@@ -416,33 +446,48 @@ export default function ClientDashboardPage() {
       ? `Re: ${originalSubject.replace(/^(Re:\s*)+/i, "")}`
       : "Following up";
 
-    // Only quote the most recent email — its body already contains
-    // the full conversation history nested inside (like a real reply).
-    const lastEmail = emails.length > 0 ? emails[emails.length - 1] : null;
-    const emailBody = lastEmail
-      ? (lastEmail.body_text || (lastEmail.body_html ? stripHtml(lastEmail.body_html) : ""))
-      : "";
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const monthsShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthsFull = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-    // Gmail format: "On Mon, 2 Mar 2026 at 23:16, Name <email> wrote:"
+    // Gmail: build with proper > nesting (deeper = more > prefixes)
     let gmailBody = "\n\n";
-    if (lastEmail) {
-      const d = new Date(lastEmail.sent_at || "");
-      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-      const senderName = lastEmail.from_email.split("@")[0];
-      gmailBody += `On ${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} at ${time}, ${senderName} <${lastEmail.from_email}> wrote:\n${emailBody}\n`;
+    if (emails.length > 0) {
+      let quoted = "";
+      for (let i = 0; i < emails.length; i++) {
+        const email = emails[i];
+        const d = new Date(email.sent_at || "");
+        const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+        const name = email.from_email.split("@")[0];
+
+        const attribution = `On ${days[d.getDay()]}, ${d.getDate()} ${monthsShort[d.getMonth()]} ${d.getFullYear()} at ${time}, ${name} <${email.from_email}> wrote:`;
+        const ownContent = extractOwnContent(email);
+
+        const depth = emails.length - i;
+        const prefix = "> ".repeat(depth);
+        const attrPrefix = depth > 1 ? "> ".repeat(depth - 1) : "";
+
+        const quotedLines = ownContent.split("\n").map((line: string) => `${prefix}${line}`).join("\n");
+
+        if (i === 0) {
+          quoted = `${attrPrefix}${attribution}\n${quotedLines}`;
+        } else {
+          quoted = `${attrPrefix}${attribution}\n${quotedLines}\n${attrPrefix}>\n${quoted}`;
+        }
+      }
+      gmailBody += quoted + "\n";
     }
     if (gmailBody.length > 1500) gmailBody = gmailBody.slice(0, 1500) + "\n[Thread truncated]";
 
-    // Outlook format: "________\nFrom: Name <email>\nSent: DD Month YYYY HH:MM\n..."
+    // Outlook: use last email (body already has nested history)
     let outlookBody = "\n\n";
-    if (lastEmail) {
+    if (emails.length > 0) {
+      const lastEmail = emails[emails.length - 1];
       const d = new Date(lastEmail.sent_at || "");
-      const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
       const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-      const senderName = lastEmail.from_email.split("@")[0];
-      outlookBody += `________________________________________\nFrom: ${senderName} <${lastEmail.from_email}>\nSent: ${String(d.getDate()).padStart(2, "0")} ${months[d.getMonth()]} ${d.getFullYear()} ${time}\nTo: ${lead.email}\nSubject: ${replySubject}\n\n${emailBody}\n`;
+      const name = lastEmail.from_email.split("@")[0];
+      const fullBody = lastEmail.body_text || (lastEmail.body_html ? stripHtml(lastEmail.body_html) : "");
+      outlookBody += `________________________________________\nFrom: ${name} <${lastEmail.from_email}>\nSent: ${String(d.getDate()).padStart(2, "0")} ${monthsFull[d.getMonth()]} ${d.getFullYear()} ${time}\nTo: ${lead.email}\nSubject: ${replySubject}\n\n${fullBody}\n`;
     }
     if (outlookBody.length > 1500) outlookBody = outlookBody.slice(0, 1500) + "\n[Thread truncated]";
 
@@ -451,7 +496,7 @@ export default function ClientDashboardPage() {
 
     const base = typeof window !== "undefined" ? window.location.origin : "";
     return `${base}/reply?to=${encodeURIComponent(lead.email)}&gmail=${encodeURIComponent(gmailUrl)}&outlook=${encodeURIComponent(outlookUrl)}`;
-  }, [stripHtml]);
+  }, [stripHtml, extractOwnContent]);
 
   const handleReplyToLead = useCallback(async (lead: Lead) => {
     setReplyingLeadId(lead.id);
