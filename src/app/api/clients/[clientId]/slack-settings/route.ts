@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireClientAccess } from "@/lib/auth";
-import { sendSlackTestMessage } from "@/lib/slack";
+import { sendSlackTestMessage, sendSlackTestStats } from "@/lib/slack";
 import { sendSlackSetupEmail } from "@/lib/email";
 
 function getSupabaseAdmin() {
@@ -102,6 +102,32 @@ export async function POST(
       }
 
       return NextResponse.json({ success: true, message: "Sample notifications sent to Slack" });
+    }
+
+    // Action: test stats only
+    if (action === "testStats") {
+      const { data: webhookSetting } = await adminSupabase
+        .from("settings")
+        .select("value")
+        .eq("key", `client_${clientId}_slack_webhook_url`)
+        .single();
+
+      if (!webhookSetting?.value) {
+        return NextResponse.json({ error: "No webhook URL configured" }, { status: 400 });
+      }
+
+      const { data: client } = await adminSupabase
+        .from("clients")
+        .select("name")
+        .eq("id", clientId)
+        .single();
+
+      const result = await sendSlackTestStats(webhookSetting.value, client?.name);
+      if (!result.success) {
+        return NextResponse.json({ error: result.error || "Test stats failed" }, { status: 400 });
+      }
+
+      return NextResponse.json({ success: true, message: "Sample stats report sent to Slack" });
     }
 
     // Action: send setup email

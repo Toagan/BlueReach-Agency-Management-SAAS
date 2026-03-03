@@ -226,10 +226,18 @@ export async function sendSlackTestMessage(
   webhookUrl: string,
   clientName?: string
 ): Promise<{ success: boolean; error?: string }> {
+  const result1 = await sendSlackTestPositiveReply(webhookUrl, clientName);
+  if (!result1.success) return result1;
+  return sendSlackTestStats(webhookUrl, clientName);
+}
+
+export async function sendSlackTestPositiveReply(
+  webhookUrl: string,
+  clientName?: string
+): Promise<{ success: boolean; error?: string }> {
   const name = clientName || "Your Company";
 
-  // Sample positive reply
-  const positiveReplyBlocks: SlackBlock[] = [
+  const blocks: SlackBlock[] = [
     {
       type: "header",
       text: { type: "plain_text", text: `New Positive Reply — ${name}`, emoji: true },
@@ -257,17 +265,22 @@ export async function sendSlackTestMessage(
     },
   ];
 
-  const result1 = await postToSlack(webhookUrl, positiveReplyBlocks, `[TEST] New Positive Reply — ${name}: Sarah Chen`);
-  if (!result1.success) return result1;
+  return postToSlack(webhookUrl, blocks, `[TEST] New Positive Reply — ${name}: Sarah Chen`);
+}
 
-  // Sample stats report
+export async function sendSlackTestStats(
+  webhookUrl: string,
+  clientName?: string
+): Promise<{ success: boolean; error?: string }> {
+  const name = clientName || "Your Company";
+
   const today = new Date();
   const weekAgo = new Date(today);
   weekAgo.setDate(weekAgo.getDate() - 7);
   const formatDate = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const periodRange = `${formatDate(weekAgo)} – ${formatDate(today)}, ${today.getFullYear()}`;
 
-  const statsBlocks: SlackBlock[] = [
+  const blocks: SlackBlock[] = [
     {
       type: "header",
       text: { type: "plain_text", text: `Weekly Stats — ${name}`, emoji: true },
@@ -295,5 +308,5 @@ export async function sendSlackTestMessage(
     },
   ];
 
-  return postToSlack(webhookUrl, statsBlocks, `[TEST] Weekly Stats — ${name}`);
+  return postToSlack(webhookUrl, blocks, `[TEST] Weekly Stats — ${name}`);
 }

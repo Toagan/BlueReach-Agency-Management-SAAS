@@ -140,6 +140,7 @@ export default function ClientSettingsPage() {
   const [loadingSlackSettings, setLoadingSlackSettings] = useState(true);
   const [savingSlackSettings, setSavingSlackSettings] = useState(false);
   const [testingSlackWebhook, setTestingSlackWebhook] = useState(false);
+  const [testingSlackStats, setTestingSlackStats] = useState(false);
   const [slackSetupEmail, setSlackSetupEmail] = useState("");
   const [sendingSlackSetupEmail, setSendingSlackSetupEmail] = useState(false);
   const [clientCampaigns, setClientCampaigns] = useState<Array<{ id: string; name: string }>>([]);
@@ -472,6 +473,30 @@ export default function ClientSettingsPage() {
       setError("Failed to send test message");
     } finally {
       setTestingSlackWebhook(false);
+      setTimeout(() => { setSuccess(null); setError(null); }, 5000);
+    }
+  };
+
+  const testSlackStats = async () => {
+    setTestingSlackStats(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/slack-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "testStats" }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess("Sample stats report sent to Slack!");
+      } else {
+        setError(data.error || "Failed to send test stats");
+      }
+    } catch (error) {
+      console.error("Error testing Slack stats:", error);
+      setError("Failed to send test stats");
+    } finally {
+      setTestingSlackStats(false);
       setTimeout(() => { setSuccess(null); setError(null); }, 5000);
     }
   };
@@ -1063,7 +1088,7 @@ export default function ClientSettingsPage() {
             Team Access
           </CardTitle>
           <CardDescription>
-            Invite client owners to access their dashboard
+            Add your colleagues or team members
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -1523,7 +1548,22 @@ export default function ClientSettingsPage() {
 
                   {/* Slack Stats Reports */}
                   <div className="space-y-2 pt-2 border-t">
-                    <Label htmlFor="slackStatsInterval">Slack Stats Reports</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="slackStatsInterval">Slack Stats Reports</Label>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={testSlackStats}
+                        disabled={testingSlackStats}
+                      >
+                        {testingSlackStats ? (
+                          <RefreshCw className="h-4 w-4 animate-spin mr-1" />
+                        ) : (
+                          <Send className="h-4 w-4 mr-1" />
+                        )}
+                        Test Stats
+                      </Button>
+                    </div>
                     <Select
                       value={slackStatsInterval}
                       onValueChange={saveSlackStatsInterval}
