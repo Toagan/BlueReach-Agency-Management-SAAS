@@ -389,6 +389,37 @@ export default function ClientDashboardPage() {
     }
   };
 
+  const buildLeadReplyUrl = useCallback((lead: Lead) => {
+    const emails = leadEmails[lead.id] || [];
+    const lastOutbound = [...emails].reverse().find((e) => e.direction === "outbound");
+    const originalSubject = lastOutbound?.subject || emails.find((e) => e.subject)?.subject || "";
+    const replySubject = originalSubject
+      ? `Re: ${originalSubject.replace(/^(Re:\s*)+/i, "")}`
+      : "Following up";
+
+    // Build quoted thread body for the compose window
+    let body = "\n\n";
+    if (emails.length > 0) {
+      const reversed = [...emails].reverse();
+      for (const email of reversed) {
+        const emailBody = email.body_text || "(No content)";
+        const date = email.sent_at ? new Date(email.sent_at).toLocaleString("en-US", {
+          weekday: "short", month: "short", day: "numeric", year: "numeric",
+          hour: "numeric", minute: "2-digit", hour12: true,
+        }) : "";
+        body += `---\nOn ${date}, ${email.from_email} wrote:\n${emailBody}\n\n`;
+      }
+    }
+    // Truncate to keep URL safe
+    if (body.length > 1500) body = body.slice(0, 1500) + "\n[Thread truncated]";
+
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(lead.email)}&su=${encodeURIComponent(replySubject)}&body=${encodeURIComponent(body)}`;
+    const outlookUrl = `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(lead.email)}&subject=${encodeURIComponent(replySubject)}&body=${encodeURIComponent(body)}`;
+
+    const base = typeof window !== "undefined" ? window.location.origin : "";
+    return `${base}/reply?to=${encodeURIComponent(lead.email)}&gmail=${encodeURIComponent(gmailUrl)}&outlook=${encodeURIComponent(outlookUrl)}`;
+  }, [leadEmails]);
+
   const handleDeleteCampaign = async (campaignId: string, campaignName: string) => {
     if (!confirm(`Are you sure you want to unlink "${campaignName}"?\n\nThis will remove the campaign from this dashboard. Leads will be preserved.`)) {
       return;
@@ -1246,6 +1277,17 @@ export default function ClientDashboardPage() {
                         </Button>
                       )}
                     </div>
+
+                    {/* Reply to Lead Button */}
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="w-full mb-2 bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => window.open(buildLeadReplyUrl(lead), "_blank")}
+                    >
+                      <Reply className="h-4 w-4 mr-2" />
+                      Reply in Gmail / Outlook
+                    </Button>
 
                     {/* View Emails Button - Primary Action */}
                     <Button

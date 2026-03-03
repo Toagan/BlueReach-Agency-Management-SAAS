@@ -193,7 +193,7 @@ export const PositiveReplyNotification = ({
                   {replyUrl && (
                     <td style={{ paddingRight: "12px" }}>
                       <Button style={ctaButton} href={replyUrl}>
-                        Reply to Lead
+                        Reply in Gmail / Outlook
                       </Button>
                     </td>
                   )}
@@ -267,7 +267,7 @@ ${threadText}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Reply directly to ${props.leadName || props.leadEmail}: ${props.leadEmail}
+Reply in Gmail / Outlook to ${props.leadName || props.leadEmail}: ${props.leadEmail}
 
 View in Dashboard: ${props.dashboardUrl}
 
