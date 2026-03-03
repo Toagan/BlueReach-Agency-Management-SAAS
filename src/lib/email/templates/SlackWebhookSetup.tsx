@@ -55,58 +55,27 @@ export const SlackWebhookSetup = ({
             </Text>
 
             {/* Steps */}
-            <div style={stepsContainer}>
-              <div style={step}>
-                <div style={stepNumber}>1</div>
-                <div style={stepContent}>
-                  <Text style={stepTitle}>Create a Slack App</Text>
-                  <Text style={stepDescription}>
-                    Go to <strong>api.slack.com/apps</strong> and click &quot;Create New App&quot; → &quot;From scratch&quot;.
-                    Name it something like &quot;{agencyName} Notifications&quot; and select your workspace.
-                  </Text>
-                </div>
-              </div>
-
-              <div style={step}>
-                <div style={stepNumber}>2</div>
-                <div style={stepContent}>
-                  <Text style={stepTitle}>Enable Incoming Webhooks</Text>
-                  <Text style={stepDescription}>
-                    In your app settings, go to &quot;Incoming Webhooks&quot; in the sidebar and toggle it <strong>On</strong>.
-                  </Text>
-                </div>
-              </div>
-
-              <div style={step}>
-                <div style={stepNumber}>3</div>
-                <div style={stepContent}>
-                  <Text style={stepTitle}>Add to Channel</Text>
-                  <Text style={stepDescription}>
-                    Click &quot;Add New Webhook to Workspace&quot; and select the channel where you want to receive notifications.
-                  </Text>
-                </div>
-              </div>
-
-              <div style={step}>
-                <div style={stepNumber}>4</div>
-                <div style={stepContent}>
-                  <Text style={stepTitle}>Copy the Webhook URL</Text>
-                  <Text style={stepDescription}>
-                    Copy the webhook URL that starts with <strong>https://hooks.slack.com/services/...</strong>
-                  </Text>
-                </div>
-              </div>
-
-              <div style={step}>
-                <div style={stepNumber}>5</div>
-                <div style={stepContent}>
-                  <Text style={stepTitle}>Paste in Dashboard Settings</Text>
-                  <Text style={stepDescription}>
-                    Go to your dashboard settings and paste the webhook URL in the Slack Notifications section.
-                  </Text>
-                </div>
-              </div>
-            </div>
+            <table cellPadding="0" cellSpacing="0" border={0} style={stepsContainer}>
+              <tbody>
+                {[
+                  { num: "1", title: "Create a Slack App", desc: <>Go to <strong>api.slack.com/apps</strong> and click &quot;Create New App&quot; &rarr; &quot;From scratch&quot;. Name it something like &quot;{agencyName} Notifications&quot; and select your workspace.</> },
+                  { num: "2", title: "Enable Incoming Webhooks", desc: <>In your app settings, go to &quot;Incoming Webhooks&quot; in the sidebar and toggle it <strong>On</strong>.</> },
+                  { num: "3", title: "Add to Channel", desc: <>Click &quot;Add New Webhook to Workspace&quot; and select the channel where you want to receive notifications.</> },
+                  { num: "4", title: "Copy the Webhook URL", desc: <>Copy the webhook URL that starts with <strong>https://hooks.slack.com/services/...</strong></> },
+                  { num: "5", title: "Paste in Dashboard Settings", desc: <>Go to your dashboard settings and paste the webhook URL in the Slack Notifications section.</> },
+                ].map((s) => (
+                  <tr key={s.num}>
+                    <td style={stepNumberCell}>
+                      <div style={stepNumber}>{s.num}</div>
+                    </td>
+                    <td style={stepContentCell}>
+                      <Text style={stepTitle}>{s.title}</Text>
+                      <Text style={stepDescription}>{s.desc}</Text>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
 
             {/* CTA */}
             <Section style={ctaSection}>
@@ -238,12 +207,14 @@ const subtext = {
 };
 
 const stepsContainer = {
+  width: "100%" as const,
   marginBottom: "24px",
 };
 
-const step = {
-  display: "flex" as const,
-  marginBottom: "16px",
+const stepNumberCell = {
+  width: "40px",
+  verticalAlign: "top" as const,
+  paddingBottom: "16px",
 };
 
 const stepNumber = {
@@ -253,15 +224,14 @@ const stepNumber = {
   backgroundColor: colors.blue,
   color: colors.white,
   fontSize: "14px",
-  fontWeight: "700",
+  fontWeight: "700" as const,
   textAlign: "center" as const,
   lineHeight: "28px",
-  flexShrink: 0,
-  marginRight: "12px",
 };
 
-const stepContent = {
-  flex: "1" as const,
+const stepContentCell = {
+  verticalAlign: "top" as const,
+  paddingBottom: "16px",
 };
 
 const stepTitle = {
