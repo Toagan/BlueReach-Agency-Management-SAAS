@@ -17,6 +17,7 @@ A white-label SaaS platform for lead generation agencies to manage clients, camp
 - [Cron Jobs](#cron-jobs)
 - [Infrastructure Health Monitoring](#infrastructure-health-monitoring)
 - [Email Notifications](#email-notifications)
+- [SEO](#seo-1)
 - [Deployment](#deployment)
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
@@ -149,9 +150,19 @@ BlueReach is a multi-tenant agency management platform designed for cold email o
 
 ### Marketing Pages
 
-- **Landing Page** (`/`): Hero, features, testimonials, CTA
-- **Features Page** (`/features`): Detailed feature breakdown
-- **Pricing Page** (`/pricing`): Plan comparison
+- **Landing Page** (`/`): Hero with CSS dashboard mockup, stats bar (4+ hrs saved, 87% retention, etc.), problem/solution cards with mini visuals, "See it in Action" showcase (client dashboard, lead pipeline, Slack notifications), 7-feature grid (including Slack), 6 testimonials with avatar initials, and CTA
+- **Features Page** (`/features`): Detailed breakdown of client portals, analytics, and lead management with mock UI visuals
+- **Pricing Page** (`/pricing`): 3-tier plan comparison (Starter $49, Growth $99, Agency $249), feature comparison table, FAQ section
+
+### SEO
+
+- **Root metadata** (`layout.tsx`): OpenGraph tags, Twitter cards, keyword targeting, robots directives
+- **Page-specific metadata**: Unique title/description for homepage, features, and pricing pages
+- **Sitemap** (`/sitemap.xml`): Auto-generated from `sitemap.ts` with all public routes
+- **Robots** (`/robots.txt`): Auto-generated from `robots.ts` — allows marketing pages, blocks `/admin`, `/dashboard`, `/api`, `/auth`
+- **JSON-LD structured data**:
+  - Homepage: `Organization`, `SoftwareApplication` (with pricing and rating), `WebSite` schemas
+  - Pricing: `FAQPage` schema for Google rich snippet eligibility
 
 ---
 
@@ -1022,6 +1033,55 @@ Built with [React Email](https://react.email) and sent via [Resend](https://rese
 
 ---
 
+## SEO
+
+Blue Reach includes comprehensive SEO out of the box for all marketing pages.
+
+### Metadata
+
+Every marketing page exports its own `metadata` object with:
+- Unique, keyword-targeted `title` and `description`
+- OpenGraph tags (title, description, image, URL)
+- Twitter card tags (summary_large_image)
+- Canonical URLs via `alternates.canonical`
+
+The root layout (`layout.tsx`) defines:
+- `metadataBase` for resolving relative URLs
+- `title.template` (`%s | Blue Reach`) for consistent page titles
+- 12 long-tail keywords targeting outbound agency search terms
+- Robots directives allowing Google to index with max image/snippet previews
+
+### Sitemap & Robots
+
+| File | Route | Purpose |
+|------|-------|---------|
+| `src/app/sitemap.ts` | `/sitemap.xml` | Lists all public pages with priorities and change frequencies |
+| `src/app/robots.ts` | `/robots.txt` | Allows `/`, blocks `/admin/`, `/dashboard/`, `/api/`, `/auth/` |
+
+### JSON-LD Structured Data
+
+**Homepage** includes a `@graph` with three schemas:
+- `Organization` — name, logo, description
+- `SoftwareApplication` — category, feature list, aggregate pricing ($49–$249), aggregate rating
+- `WebSite` — enables sitelinks search box eligibility
+
+**Pricing page** includes:
+- `FAQPage` schema generated from the FAQ section — eligible for Google rich snippet FAQ accordion
+
+### Target Keywords
+
+Primary terms the pages are optimized for:
+- "client reporting dashboard"
+- "outbound agency software"
+- "instantly dashboard" / "smartlead dashboard"
+- "white-label client portal"
+- "agency reporting tool"
+- "cold email reporting"
+- "campaign analytics dashboard"
+- "lead generation agency software"
+
+---
+
 ## Deployment
 
 ### Docker Deployment
@@ -1194,8 +1254,10 @@ src/
 │   │   ├── page.tsx
 │   │   └── login-client.tsx
 │   ├── access-denied/page.tsx          # Access denied page
-│   ├── page.tsx                        # Landing page
-│   ├── layout.tsx                      # Root layout
+│   ├── page.tsx                        # Landing page (CSS dashboard mockups, stats, testimonials)
+│   ├── layout.tsx                      # Root layout (SEO metadata, OG tags, Twitter cards)
+│   ├── sitemap.ts                      # Auto-generated /sitemap.xml
+│   ├── robots.ts                       # Auto-generated /robots.txt
 │   └── globals.css                     # Global styles
 │
 ├── components/
