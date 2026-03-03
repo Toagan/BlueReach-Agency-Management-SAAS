@@ -1,6 +1,6 @@
 # BlueReach Agency Management Dashboard
 
-A comprehensive client portal and lead management system for agencies using [Instantly.ai](https://instantly.ai) for cold email outreach. Built with Next.js 15, Supabase, and TypeScript.
+A white-label SaaS platform for lead generation agencies to manage clients, campaigns, leads, and email infrastructure. Integrates with [Instantly.ai](https://instantly.ai), [Smartlead](https://smartlead.ai), and [HubSpot](https://hubspot.com). Built with Next.js, Supabase, and TypeScript.
 
 ## Table of Contents
 
@@ -12,20 +12,27 @@ A comprehensive client portal and lead management system for agencies using [Ins
 - [Environment Variables](#environment-variables)
 - [Database Schema](#database-schema)
 - [API Reference](#api-reference)
-- [Instantly Integration](#instantly-integration)
+- [Provider Integrations](#provider-integrations)
+- [Webhooks](#webhooks)
+- [Cron Jobs](#cron-jobs)
+- [Infrastructure Health Monitoring](#infrastructure-health-monitoring)
+- [Email Notifications](#email-notifications)
 - [Deployment](#deployment)
 - [Project Structure](#project-structure)
+- [Contributing](#contributing)
 
 ---
 
 ## Overview
 
-BlueReach Agency Management Dashboard is a white-label SaaS platform designed for lead generation agencies. It provides:
+BlueReach is a multi-tenant agency management platform designed for cold email outreach agencies. It provides:
 
-- **Admin Portal**: Full control over clients, campaigns, leads, and analytics
-- **Client Portal**: Read-only dashboard for clients to view their campaign performance
-- **Instantly Integration**: Bidirectional sync with Instantly.ai for campaign and lead management
-- **Real-time Analytics**: Track emails sent, opens, replies, and positive responses
+- **Admin Portal**: Full control over clients, campaigns, leads, analytics, infrastructure, and settings
+- **Client Portal**: Role-restricted dashboard for clients to view campaigns, manage lead workflows, and track results
+- **Multi-Provider Integration**: Bidirectional sync with Instantly.ai and Smartlead for campaigns and leads, plus HubSpot CRM sync
+- **Infrastructure Monitoring**: Email account health tracking, DNS validation (SPF/DKIM/DMARC), and warmup monitoring
+- **Real-time Updates**: Webhook-driven data sync from email providers with auto-refreshing dashboards
+- **Email Notifications**: Automated alerts for positive replies and weekly stats reports via Resend
 
 ---
 
@@ -34,161 +41,229 @@ BlueReach Agency Management Dashboard is a white-label SaaS platform designed fo
 ### Admin Dashboard (`/admin`)
 
 #### Command Center
-- **Real-time Analytics**: View key metrics filtered by time period (this week, this month, this quarter)
-  - Leads contacted
-  - Emails sent
-  - Replies received
-  - Positive replies (opportunities)
-  - Bounced emails (cumulative)
-  - Meetings held (cumulative)
-  - Deals closed (cumulative)
-- **Clickable Stats**: Click any metric to drill down into the detailed leads view
+- Real-time analytics filtered by time period (this week, this month, this quarter)
+  - Leads contacted, emails sent, replies received, positive replies (opportunities)
+  - Bounced emails, meetings held, deals closed (cumulative)
+- Clickable stats that drill down into the detailed leads view
+- Auto-refresh every 30 seconds
 
 #### Client Management (`/admin/clients`)
 - Create, edit, and delete clients
-- Generate unique access codes for client portal login
-- View all campaigns per client
-- Track client-specific metrics
+- Configure client details: name, website, logo, notes, product/service, ACV/TCV, target verticals, TAM, daily email targets
+- Invite client users via email (OAuth-based access with Google/Microsoft)
+- Assign roles to client users: owner, manager, member, viewer
+- View all campaigns and metrics per client
 
 #### Campaign Management (`/admin/clients/[clientId]`)
-- Link Instantly campaigns to clients
-- View campaign performance:
-  - Total leads in campaign
-  - Leads contacted vs total (progress bar)
-  - Emails sent
-  - Replies received
-  - Positive replies
-- Click campaigns to view detailed analytics
+- Link campaigns from Instantly or Smartlead to clients
+- View campaign performance: total leads, leads contacted (progress bar), emails sent, replies, positive replies
+- Sync campaigns and leads from providers
+- View campaign email copy/sequences
+- Click campaigns to view detailed analytics with variant breakdown
+- Export campaign leads to CSV
 - Delete campaigns (with confirmation)
 
 #### Campaign Details (`/admin/clients/[clientId]/campaigns/[campaignId]`)
-- Detailed campaign statistics
+- Detailed campaign statistics with variant-level analytics
 - List of positive replies with contact info
-- Recent leads table
+- Email thread viewer per lead
+- Campaign sequence viewer (multi-step, A/B/C variants)
 - Campaign progress visualization
+- Campaign diagnostics
 
 #### Lead Management (`/admin/leads`)
 - View all leads across all clients (48,000+ supported)
-- **Server-side Filtering**:
-  - Filter by client
-  - Filter by status (contacted, opened, clicked, replied, booked, won, lost, not_interested)
-  - Filter by positive replies only
-- **Pagination**: 100 leads per page with navigation
-- **CSV Export Options**:
-  - Current filter results
-  - Positive replies only
-  - All replies
-  - No response (contacted but didn't reply)
-  - All leads
-- Click any lead to view/edit details in slide-out panel
+- Server-side filtering by client, status, and positive reply flag
+- Lead statuses: `contacted`, `opened`, `clicked`, `replied`, `booked`, `won`, `lost`, `not_interested`
+- Pagination: 100 leads per page with navigation
+- CSV export options: current filter, positive replies, all replies, no response, all leads
+- Click any lead to view/edit details in a slide-out panel
 
 #### Lead Detail Panel
-- View complete lead information
-- Update lead status
+- View complete lead information (email, phone, company, LinkedIn, domain)
+- Update lead status through the workflow
 - Add/edit notes
-- View contact details (email, phone, company)
+- View email thread history (outbound and inbound messages)
+- Track email engagement: open count, click count, reply count
 
 #### Lead Workflow (`/admin/clients/[clientId]`)
-- **Track Lead Progress**: Follow positive replies through the sales funnel
-- **Workflow States**:
-  - Responded - Lead has been contacted/followed up
-  - Meeting Scheduled - Meeting date and time set
-  - Closed Won - Deal successfully closed
-  - Closed Lost - Deal did not close
-- **Collapsible UI**: Shows summary stats (responded, meetings, won, lost) in header
-- **Quick Actions**: One-click status updates with date/time selection for meetings
+- Track positive replies through the sales funnel
+- Workflow states: Responded, Meeting Scheduled, Closed Won, Closed Lost
+- Collapsible UI with summary stats in header
+- Quick one-click status updates with date/time selection for meetings
+- Notes per workflow stage
 
-#### Client Settings (`/admin/clients/[clientId]/settings`)
-- **Client Logo**: Upload custom logo for each client
-- **Client Details**: Name, website, notes
-- **Internal Notes**: Track target market, TCV, services, and other important info
+#### Lead Database (`/admin/lead-database`)
+- Centralized lead database across all clients and campaigns
+
+#### Notes (`/admin/notes`)
+- Internal note-taking system for agency operations
+
+#### Subscriptions (`/admin/subscriptions`)
+- Track API credits and subscription status across providers
+- Live sync of remaining credits
+
+#### AI Campaigns (`/admin/ai-campaigns`)
+- AI-assisted campaign creation and management
+
+#### Scraping (`/admin/scraping`)
+- Lead scraping and enrichment tools
+
+#### Infrastructure Health (`/admin/infrastructure`)
+- Monitor email account health across Instantly and Smartlead
+- DNS validation: SPF, DKIM, and DMARC record checking
+- Warmup tracking: reputation scores, emails sent/received
+- Daily health snapshots for trend analysis
+- Client-to-account assignment
+- Filter by provider, status, or client
+- Auto-refresh every 30 seconds
 
 #### Agency Settings (`/admin/settings`)
-- **Agency Logo**: Upload your agency branding logo
-- **Instantly API Key**: Securely store and manage API credentials
-- **Webhook Configuration**: Set up Instantly webhook secrets
+- Agency logo upload
+- API key management (Instantly, Smartlead)
+- Webhook configuration
+- Notification preferences
 
-#### Instantly Integration (`/admin/instantly`)
-- **Connection Status**: View API connection health
-- **Campaign Sync**: Import campaigns from Instantly
-- **Lead Sync**: Sync leads bidirectionally
-- **Account Management**: View email accounts and warmup status
-- **Analytics**: View Instantly-specific metrics
+#### Instantly Integration Page (`/admin/instantly`)
+- Connection status and API health
+- Campaign sync and management
+- Lead sync (bidirectional)
+- Email account management with warmup status
+- Provider-specific analytics
 
-#### Settings (`/admin/settings`)
-- Configure webhook endpoints
-- Manage sync settings
-- View system configuration
+### Client Portal (`/admin/clients/[clientId]` with client role)
 
-### Client Portal (`/dashboard/[clientId]`)
-
-- **Login via Access Code**: Clients use a unique code to access their dashboard
-- **Campaign Overview**: View all campaigns assigned to them
-- **Lead Statistics**: See leads, replies, and positive responses
-- **Lead Table**: Browse their leads with filtering
-- **Read-only Access**: Clients cannot modify data
+- OAuth login via Google or Microsoft
+- View all campaigns assigned to their account
+- Lead statistics: contacted, replied, positive replies, meetings, deals
+- Lead workflow management (respond, schedule meetings, close deals)
+- Add notes to leads
+- Cannot link/delete campaigns or access other admin routes
 
 ### Authentication
 
-- **Admin Access**: Full authentication via Supabase Auth
-- **Client Access**: Simple access code system (no email/password required)
-- **Middleware Protection**: Routes protected based on user role
+- **OAuth**: Google and Microsoft sign-in via Supabase Auth
+- **Role-Based Access**: Admin (full access) and Client (restricted to linked clients)
+- **Client Invitations**: Admin invites client users by email; auto-linked on first login
+- **Middleware Protection**: All `/admin/*` routes protected; client users restricted to their linked client pages
+
+### Marketing Pages
+
+- **Landing Page** (`/`): Hero, features, testimonials, CTA
+- **Features Page** (`/features`): Detailed feature breakdown
+- **Pricing Page** (`/pricing`): Plan comparison
 
 ---
 
 ## Tech Stack
 
-| Technology | Purpose |
-|------------|---------|
-| **Next.js 15** | React framework with App Router |
-| **TypeScript** | Type-safe development |
-| **Supabase** | PostgreSQL database + Auth + Real-time |
-| **Tailwind CSS** | Utility-first styling |
-| **shadcn/ui** | UI component library |
-| **Instantly API v2** | Cold email platform integration |
-| **Docker** | Containerized deployment |
-| **Caddy** | Reverse proxy with auto HTTPS |
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **Next.js** | 16.x | App Router, Server Components, API Routes |
+| **React** | 19.x | UI framework |
+| **TypeScript** | 5.x | Type-safe development |
+| **Supabase** | Latest | PostgreSQL database, Auth (OAuth), Row Level Security |
+| **Tailwind CSS** | 4.x | Utility-first styling |
+| **shadcn/ui** | Latest | UI component library (Radix UI primitives) |
+| **Lucide React** | Latest | Icon library |
+| **Resend** | Latest | Transactional email delivery |
+| **React Email** | Latest | Email template rendering |
+| **DOMPurify** | Latest | HTML sanitization for email content |
+| **Docker** | Latest | Containerized deployment |
+| **Caddy** | 2.x | Reverse proxy with automatic HTTPS |
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Client Browser                          │
-└─────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     Next.js Application                         │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
-│  │   Admin Pages   │  │  Client Pages   │  │   API Routes    │ │
-│  │   /admin/*      │  │  /dashboard/*   │  │   /api/*        │ │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
-                    │                               │
-                    ▼                               ▼
-┌───────────────────────────────┐   ┌─────────────────────────────┐
-│         Supabase              │   │      Instantly API          │
-│  ┌─────────────────────────┐  │   │  ┌───────────────────────┐  │
-│  │  PostgreSQL Database    │  │   │  │  Campaigns            │  │
-│  │  - clients              │  │   │  │  Leads                │  │
-│  │  - campaigns            │  │   │  │  Analytics            │  │
-│  │  - leads                │  │   │  │  Accounts             │  │
-│  │  - users                │  │   │  └───────────────────────┘  │
-│  └─────────────────────────┘  │   └─────────────────────────────┘
-│  ┌─────────────────────────┐  │
-│  │  Authentication         │  │
-│  └─────────────────────────┘  │
-└───────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                          Client Browser                             │
+│  ┌──────────────┐  ┌───────────────┐  ┌──────────────────────────┐  │
+│  │ Admin Portal │  │ Client Portal │  │   Marketing Pages        │  │
+│  │  /admin/*    │  │ /admin/clients│  │   /, /features, /pricing │  │
+│  └──────────────┘  └───────────────┘  └──────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     Next.js Application                             │
+│  ┌──────────────┐  ┌───────────────┐  ┌──────────────────────────┐  │
+│  │ Server       │  │  API Routes   │  │  Webhook Handlers        │  │
+│  │ Components   │  │  /api/*       │  │  /api/webhooks/*         │  │
+│  └──────────────┘  └───────────────┘  └──────────────────────────┘  │
+│  ┌──────────────┐  ┌───────────────┐  ┌──────────────────────────┐  │
+│  │ Middleware   │  │  Auth         │  │  Cron Endpoints          │  │
+│  │ (RLS check) │  │  (OAuth)      │  │  /api/cron/*             │  │
+│  └──────────────┘  └───────────────┘  └──────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+          │                    │                       │
+          ▼                    ▼                       ▼
+┌──────────────────┐  ┌────────────────┐  ┌──────────────────────────┐
+│    Supabase      │  │  Email         │  │   External Providers     │
+│  ┌────────────┐  │  │  Providers     │  │  ┌────────────────────┐  │
+│  │ PostgreSQL │  │  │  ┌──────────┐  │  │  │   Instantly API    │  │
+│  │ + RLS      │  │  │  │  Resend  │  │  │  │   Smartlead API   │  │
+│  ├────────────┤  │  │  └──────────┘  │  │  │   HubSpot API     │  │
+│  │ Auth       │  │  └────────────────┘  │  └────────────────────┘  │
+│  │ (OAuth)    │  │                      │  ┌────────────────────┐  │
+│  ├────────────┤  │                      │  │  Google DoH (DNS)  │  │
+│  │ Storage    │  │                      │  └────────────────────┘  │
+│  └────────────┘  │                      └──────────────────────────┘
+└──────────────────┘
+```
+
+### Authentication Flow
+
+```
+User clicks "Sign in with Google/Microsoft"
+    ↓
+Supabase OAuth redirect
+    ↓
+/auth/callback
+    ↓
+Check profiles table for role
+    ↓
+├── role = 'admin'  → Redirect to /admin (Command Center)
+└── role = 'client' → Redirect to /admin/clients/[clientId] (restricted view)
+```
+
+### Client Invitation Flow
+
+```
+Admin creates invitation (email)
+    ↓
+Invitation stored in client_invitations table
+    ↓
+Invited user signs in via OAuth
+    ↓
+/auth/callback checks for pending invitation matching email
+    ↓
+Auto-links user to client via client_users table
+    ↓
+Invitation marked as accepted
 ```
 
 ### Data Flow
 
-1. **Instantly → Supabase**: Campaigns and leads sync via API or webhooks
-2. **Supabase → Next.js**: Server components fetch data directly
-3. **Next.js → Browser**: React renders the UI
-4. **Browser → API Routes**: Client-side actions (status updates, exports)
+1. **Instantly/Smartlead → Supabase**: Campaigns and leads sync via API calls or real-time webhooks
+2. **Supabase → Next.js**: Server components fetch data directly with RLS enforcement
+3. **Next.js → Browser**: React renders the UI with auto-refresh every 30 seconds
+4. **Browser → API Routes**: Client-side actions (status updates, workflow changes, exports)
+5. **Webhooks → Supabase**: Real-time lead status updates from email providers
+6. **Cron → API Routes**: Scheduled analytics snapshots and stats reports
+
+### Role-Based Access Control
+
+| Feature | Admin | Client (Owner/Manager) | Client (Member/Viewer) |
+|---------|-------|----------------------|----------------------|
+| View client dashboard | All clients | Linked clients only | Linked clients only |
+| Manage lead workflow | Yes | Yes | View only |
+| Link/delete campaigns | Yes | No | No |
+| Access other admin routes | Yes | No | No |
+| Invite client users | Yes | No | No |
+| Manage settings | Yes | No | No |
+| Infrastructure monitoring | Yes | No | No |
 
 ---
 
@@ -198,8 +273,10 @@ BlueReach Agency Management Dashboard is a white-label SaaS platform designed fo
 
 - Node.js 18+
 - npm or yarn
-- Supabase account
-- Instantly.ai account with API access
+- Supabase account (with Google and/or Microsoft OAuth configured)
+- Instantly.ai account with API access (optional)
+- Smartlead account with API access (optional)
+- Resend account for email notifications (optional)
 
 ### Installation
 
@@ -213,105 +290,165 @@ npm install
 
 # Set up environment variables
 cp .env.example .env.local
-# Edit .env.local with your credentials
+# Edit .env.local with your credentials (see Environment Variables section)
 
-# Run database migrations
-# Execute the SQL files in Supabase SQL Editor:
-# 1. supabase-schema.sql
-# 2. supabase-schema-v2.sql
-# 3. supabase-settings.sql
-# 4. supabase-preserve-leads.sql
+# Run database migrations in Supabase SQL Editor (in order):
+# 1. supabase-schema.sql       — Core tables: clients, campaigns, leads
+# 2. supabase-schema-v2.sql    — Denormalized fields, multi-provider support
+# 3. supabase-settings.sql     — Settings table
+# 4. supabase-preserve-leads.sql — Triggers to preserve lead data on deletion
+# 5. supabase-analytics.sql    — Analytics views, snapshots, and functions
+# 6. supabase-add-icp.sql      — ICP (Ideal Customer Profile) fields
 
 # Start development server
 npm run dev
 ```
 
-### Development
+### Development Commands
 
 ```bash
-# Run development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-
-# Type checking
-npm run type-check
-
-# Linting
-npm run lint
+npm run dev        # Start development server (http://localhost:3000)
+npm run build      # Build for production
+npm start          # Start production server
+npm run lint       # Run ESLint
 ```
 
 ---
 
 ## Environment Variables
 
-Create a `.env.local` file with the following variables:
+Create a `.env.local` file in the project root:
 
 ```env
-# Supabase Configuration
+# Supabase (Required)
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-# Instantly API
-INSTANTLY_API_KEY=your-instantly-api-key
+# App URL (Required)
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-# Webhook Security
+# Email Notifications (Required for notifications)
+RESEND_API_KEY=re_your-resend-api-key
+
+# Instantly API (Optional — can be configured via Admin Settings UI)
+INSTANTLY_API_KEY=your-instantly-api-key
 INSTANTLY_WEBHOOK_SECRET=your-webhook-secret
+
+# Smartlead API (Optional — can be configured via Admin Settings UI)
+SMARTLEAD_API_KEY=your-smartlead-api-key
 ```
 
-### Variable Descriptions
+### Variable Reference
 
-| Variable | Description |
-|----------|-------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous/public key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-side only) |
-| `INSTANTLY_API_KEY` | Instantly API key (found in Instantly settings) |
-| `INSTANTLY_WEBHOOK_SECRET` | Secret for validating Instantly webhooks |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Your Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anonymous/public key (client-side) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key (server-side only, bypasses RLS) |
+| `NEXT_PUBLIC_APP_URL` | Yes | Your app's public URL (used for links in emails, webhooks) |
+| `RESEND_API_KEY` | No | Resend API key for sending email notifications |
+| `INSTANTLY_API_KEY` | No | Instantly API key (Settings → Integrations → API) |
+| `INSTANTLY_WEBHOOK_SECRET` | No | Secret for validating Instantly webhook payloads |
+| `SMARTLEAD_API_KEY` | No | Smartlead API key for campaign and account sync |
 
 ---
 
 ## Database Schema
 
-### Tables
+### Core Tables
+
+#### `profiles`
+User profiles linked to Supabase Auth.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key (references `auth.users`) |
+| `email` | text | User email |
+| `role` | text | `'admin'` or `'client'` |
+| `full_name` | text | Display name |
 
 #### `clients`
-Stores agency clients.
+Agency clients (companies being served).
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | uuid | Primary key |
-| `name` | text | Client name |
-| `email` | text | Client email |
-| `access_code` | text | Unique login code for client portal |
-| `created_at` | timestamp | Creation timestamp |
-| `updated_at` | timestamp | Last update timestamp |
+| `name` | text | Client company name |
+| `logo_url` | text | Client logo URL |
+| `website` | text | Client website |
+| `notes` | text | Internal notes |
+| `product_service` | text | What the client sells |
+| `acv` | numeric | Average Contract Value |
+| `tcv` | numeric | Total Contract Value |
+| `verticals` | text[] | Target industries |
+| `tam` | integer | Total Addressable Market (lead count) |
+| `target_daily_emails` | integer | Daily sending target |
+| `is_active` | boolean | Active flag |
+| `created_at` | timestamptz | Creation timestamp |
+
+#### `client_users`
+Links users to clients with role-based access.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `client_id` | uuid | FK → `clients(id)` |
+| `user_id` | uuid | FK → `auth.users(id)` |
+| `role` | text | `'owner'`, `'manager'`, `'member'`, or `'viewer'` |
+
+Primary key: `(client_id, user_id)`
+
+#### `client_invitations`
+Pending invitations for client users.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `client_id` | uuid | FK → `clients(id)` |
+| `email` | text | Invited user's email |
+| `invited_by` | uuid | Admin who sent the invite |
+| `created_at` | timestamptz | When the invite was created |
+| `accepted_at` | timestamptz | When accepted (NULL if pending) |
 
 #### `campaigns`
-Links Instantly campaigns to clients.
+Email campaigns linked to external providers.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | uuid | Primary key |
-| `client_id` | uuid | Foreign key to clients |
-| `instantly_campaign_id` | text | Instantly campaign ID |
-| `name` | text | Campaign name |
-| `status` | text | Campaign status |
-| `created_at` | timestamp | Creation timestamp |
-| `last_synced_at` | timestamp | Last sync with Instantly |
+| `client_id` | uuid | FK → `clients(id)` |
+| `instantly_campaign_id` | text | Legacy Instantly campaign ID |
+| `provider_type` | text | `'instantly'`, `'smartlead'`, etc. |
+| `provider_campaign_id` | text | Provider-specific campaign ID |
+| `name` | text | Campaign display name |
+| `original_name` | text | Original name from provider |
+| `copy_body` | text | Email template/copy |
+| `is_active` | boolean | Active flag |
+| `last_synced_at` | timestamptz | Last sync timestamp |
+
+#### `campaign_sequences`
+Email sequence steps with A/B/C variants.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `campaign_id` | uuid | FK → `campaigns(id)` |
+| `sequence_index` | integer | Position in sequence |
+| `step_number` | integer | Step number |
+| `variant` | text | `'A'`, `'B'`, or `'C'` |
+| `subject` | text | Email subject line |
+| `body_text` | text | Plain text body |
+| `body_html` | text | HTML body |
+| `delay_days` | integer | Days to wait before sending |
+| `delay_hours` | integer | Hours to wait before sending |
 
 #### `leads`
-Stores all leads from campaigns.
+All leads with denormalized data for preservation.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | uuid | Primary key |
-| `campaign_id` | uuid | Foreign key to campaigns |
+| `campaign_id` | uuid | FK → `campaigns(id)` |
 | `client_id` | uuid | Denormalized client ID |
 | `client_name` | text | Denormalized client name |
 | `campaign_name` | text | Denormalized campaign name |
@@ -319,43 +456,192 @@ Stores all leads from campaigns.
 | `first_name` | text | Lead first name |
 | `last_name` | text | Lead last name |
 | `company_name` | text | Lead company |
+| `company_domain` | text | Lead company domain |
 | `phone` | text | Lead phone number |
-| `status` | enum | Lead status (see below) |
+| `linkedin_url` | text | Lead LinkedIn profile |
+| `status` | text | See lead statuses below |
 | `is_positive_reply` | boolean | Whether reply was positive |
-| `notes` | text | Admin notes |
-| `responded_at` | timestamp | When lead was marked as responded |
-| `meeting_at` | timestamp | Scheduled meeting date/time |
-| `closed_at` | timestamp | When deal was closed |
-| `created_at` | timestamp | Creation timestamp |
-| `updated_at` | timestamp | Last update timestamp |
+| `has_replied` | boolean | Whether lead has replied |
+| `responded_at` | timestamptz | When marked as responded |
+| `meeting_at` | timestamptz | Scheduled meeting date/time |
+| `closed_at` | timestamptz | When deal was closed |
+| `deal_value` | numeric | Value of the deal |
+| `notes` | text | Admin/workflow notes |
+| `instantly_lead_id` | text | Instantly lead ID |
+| `email_open_count` | integer | Number of email opens |
+| `email_click_count` | integer | Number of link clicks |
+| `email_reply_count` | integer | Number of replies |
+| `metadata` | jsonb | Additional provider-specific data |
+| `created_at` | timestamptz | Creation timestamp |
+| `updated_at` | timestamptz | Last update timestamp |
 
 **Lead Status Values:**
-- `contacted` - Initial outreach sent
-- `opened` - Email was opened
-- `clicked` - Link in email was clicked
-- `replied` - Lead replied to email
-- `booked` - Meeting was booked
-- `won` - Deal was closed (won)
-- `lost` - Deal was closed (lost)
-- `not_interested` - Lead declined
+
+| Status | Description |
+|--------|-------------|
+| `contacted` | Initial outreach sent |
+| `opened` | Email was opened |
+| `clicked` | Link in email was clicked |
+| `replied` | Lead replied to email |
+| `booked` | Meeting was booked |
+| `won` | Deal closed (won) |
+| `lost` | Deal closed (lost) |
+| `not_interested` | Lead declined |
+
+#### `lead_emails`
+Email thread for each lead (outbound and inbound messages).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `lead_id` | uuid | FK → `leads(id)` |
+| `campaign_id` | uuid | FK → `campaigns(id)` |
+| `provider_email_id` | text | Provider-specific email ID |
+| `provider_thread_id` | text | Provider-specific thread ID |
+| `direction` | text | `'outbound'` or `'inbound'` |
+| `from_email` | text | Sender email |
+| `to_email` | text | Recipient email |
+| `subject` | text | Email subject |
+| `body_text` | text | Plain text body |
+| `body_html` | text | HTML body |
+| `sequence_step` | integer | Which sequence step this is |
+| `sent_at` | timestamptz | When the email was sent |
+| `opened_at` | timestamptz | When the email was opened |
+| `replied_at` | timestamptz | When a reply was received |
+| `created_at` | timestamptz | Record creation timestamp |
+
+#### `activities`
+Activity log for leads.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `lead_id` | uuid | FK → `leads(id)` |
+| `user_id` | uuid | User who created the activity |
+| `type` | text | `'call'`, `'meeting'`, `'email'`, `'note'`, `'status_change'` |
+| `title` | text | Activity title |
+| `description` | text | Activity description |
+| `scheduled_at` | timestamptz | Scheduled time (if applicable) |
+| `completed_at` | timestamptz | Completion time |
+
+#### `email_events`
+Tracking events from email providers.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `lead_id` | uuid | FK → `leads(id)` |
+| `campaign_id` | uuid | FK → `campaigns(id)` |
+| `event_type` | text | `'sent'`, `'opened'`, `'clicked'`, `'replied'`, `'bounced'` |
+| `instantly_event_id` | text | Provider event ID |
+| `timestamp` | timestamptz | When the event occurred |
+
+### Provider Tables
+
+#### `api_providers`
+Multi-provider API key storage (per-client or global).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `client_id` | uuid | FK → `clients(id)` (NULL for global) |
+| `provider_type` | text | `'instantly'`, `'smartlead'`, `'lemlist'`, `'apollo'` |
+| `api_key` | text | Encrypted API key |
+| `workspace_id` | text | Provider workspace/account ID |
+| `is_active` | boolean | Active flag |
+| `label` | text | Display label |
+
+### Infrastructure Health Tables
+
+#### `email_accounts`
+Central registry of email accounts from Instantly and Smartlead.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `provider_type` | text | `'instantly'` or `'smartlead'` |
+| `provider_account_id` | text | Provider-specific account ID |
+| `email` | text | Email address |
+| `client_id` | uuid | FK → `clients(id)` (manual assignment) |
+| `domain` | text | Generated from email address |
+| `status` | text | `'active'`, `'error'`, `'disconnected'`, `'paused'` |
+| `warmup_enabled` | boolean | Whether warmup is active |
+| `warmup_reputation` | integer | Reputation score (0–100) |
+| `warmup_emails_sent` | integer | Warmup emails sent |
+| `warmup_emails_received` | integer | Warmup emails received |
+| `daily_limit` | integer | Daily sending limit |
+| `last_synced_at` | timestamptz | Last sync timestamp |
+
+Unique constraint: `(provider_type, email)`
+
+#### `email_account_health_history`
+Daily snapshots for trend analysis.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `email_account_id` | uuid | FK → `email_accounts(id)` |
+| `snapshot_date` | date | Snapshot date |
+| `status` | text | Account status at snapshot time |
+| `warmup_reputation` | integer | Reputation at snapshot time |
+| `warmup_emails_sent` | integer | Warmup sent count |
+| `warmup_emails_received` | integer | Warmup received count |
+| `emails_sent_today` | integer | Emails sent that day |
+
+Unique constraint: `(email_account_id, snapshot_date)`
+
+#### `domain_health`
+DNS validation cache for SPF/DKIM/DMARC.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `domain` | text | Domain name (unique) |
+| `has_spf` | boolean | SPF record exists |
+| `spf_record` | text | Raw SPF record |
+| `spf_valid` | boolean | SPF record is valid |
+| `has_dkim` | boolean | DKIM record found |
+| `dkim_selector` | text | DKIM selector used |
+| `dkim_record` | text | Raw DKIM record |
+| `dkim_valid` | boolean | DKIM record is valid |
+| `has_dmarc` | boolean | DMARC record exists |
+| `dmarc_record` | text | Raw DMARC record |
+| `dmarc_policy` | text | `'none'`, `'quarantine'`, or `'reject'` |
+| `dmarc_valid` | boolean | DMARC record is valid |
+| `health_score` | integer | Generated score (0–100) based on DNS records |
+| `last_checked_at` | timestamptz | Last check timestamp |
+
+### Settings Table
 
 #### `settings`
-Application settings (singleton table).
+Application settings (singleton, `id` always = 1).
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | integer | Always 1 |
 | `webhook_url` | text | Instantly webhook URL |
 | `sync_interval` | integer | Auto-sync interval (minutes) |
-| `updated_at` | timestamp | Last update timestamp |
+| `updated_at` | timestamptz | Last update timestamp |
+
+### Row Level Security (RLS)
+
+All tables have RLS enabled:
+- **Admin users** can access all data
+- **Client users** can only access data for clients linked via `client_users`
+- **Service role key** bypasses RLS for webhook handlers and cron jobs
 
 ### SQL Migration Files
 
-1. **`supabase-schema.sql`** - Initial schema with clients, campaigns, leads
-2. **`supabase-schema-v2.sql`** - Adds denormalized fields for data preservation
-3. **`supabase-settings.sql`** - Settings table
-4. **`supabase-preserve-leads.sql`** - Triggers to preserve lead data on client/campaign deletion
-5. **`supabase-analytics.sql`** - Analytics views and functions
+Run these in order in the Supabase SQL Editor:
+
+| File | Purpose |
+|------|---------|
+| `supabase-schema.sql` | Core tables: clients, campaigns, leads, profiles |
+| `supabase-schema-v2.sql` | Denormalized fields, multi-provider support, lead_emails, client_users, client_invitations |
+| `supabase-settings.sql` | Settings table |
+| `supabase-preserve-leads.sql` | Triggers to preserve lead data when clients/campaigns are deleted |
+| `supabase-analytics.sql` | Analytics views, snapshot tables, and aggregation functions |
+| `supabase-add-icp.sql` | ICP fields on clients (product_service, acv, tcv, verticals, tam) |
 
 ---
 
@@ -365,17 +651,17 @@ Application settings (singleton table).
 
 #### Settings
 ```
-GET  /api/admin/settings           # Get all settings (masked values)
-POST /api/admin/settings           # Update a setting
-DELETE /api/admin/settings?key=x   # Clear a setting
-POST /api/admin/settings/logo      # Upload agency logo
+GET    /api/admin/settings              # Get all settings (sensitive values masked)
+POST   /api/admin/settings              # Update a setting
+DELETE /api/admin/settings?key=x        # Clear a setting
+POST   /api/admin/settings/logo         # Upload agency logo
 ```
 
 #### Analytics
 ```
-GET /api/admin/analytics?period=this_week
+GET    /api/admin/analytics?period=this_week
+POST   /api/admin/analytics/sync        # Trigger analytics sync from providers
 ```
-Returns aggregated analytics from Instantly.
 
 **Query Parameters:**
 - `period`: `this_week` | `this_month` | `this_quarter`
@@ -396,32 +682,76 @@ Returns aggregated analytics from Instantly.
 
 #### Lead Export
 ```
-GET /api/admin/leads/export?export=positive
+GET    /api/admin/leads/export?export=positive
 ```
-Returns CSV file of leads.
 
-**Query Parameters:**
-- `export`: `current` | `positive` | `replied` | `no_response` | `all`
-- `client`: Client ID (for `current` filter)
-- `status`: Lead status (for `current` filter)
-- `positive`: `true` (for `current` filter)
+**Export Types:**
+- `current` — Current filter results (supports `client`, `status`, `positive` params)
+- `positive` — All positive replies
+- `replied` — All replies
+- `no_response` — Contacted but no reply
+- `all` — All leads
 
 #### Customers (Clients)
 ```
-GET  /api/admin/customers         # List all clients
-POST /api/admin/customers         # Create client
-GET  /api/admin/customers/[id]    # Get client
-PUT  /api/admin/customers/[id]    # Update client
-DELETE /api/admin/customers/[id]  # Delete client
+GET    /api/admin/customers             # List all clients
+POST   /api/admin/customers             # Create client
+GET    /api/admin/customers/[id]        # Get client details
+PUT    /api/admin/customers/[id]        # Update client
+DELETE /api/admin/customers/[id]        # Delete client
+```
+
+#### Invitations
+```
+GET    /api/admin/invitations           # List pending invitations
+POST   /api/admin/invitations           # Create invitation
+DELETE /api/admin/invitations/[id]      # Revoke invitation
+```
+
+#### Lead Database
+```
+GET    /api/admin/lead-database         # Query centralized lead database
+```
+
+#### Notes
+```
+GET    /api/admin/notes                 # List notes
+POST   /api/admin/notes                 # Create note
+```
+
+#### Subscriptions
+```
+GET    /api/admin/subscriptions         # Get subscription/credit status
+```
+
+#### Notification Preferences
+```
+GET    /api/admin/notification-preferences
+POST   /api/admin/notification-preferences
 ```
 
 ### Client APIs
 
 ```
-GET    /api/clients/[clientId]         # Get client details
-PATCH  /api/clients/[clientId]         # Update client (name, website, notes, logo_url)
-GET    /api/clients/[clientId]/leads   # Get leads for client (?positive=true)
-POST   /api/clients/[clientId]/logo    # Upload client logo
+GET    /api/clients/[clientId]                          # Get client details
+PATCH  /api/clients/[clientId]                          # Update client
+GET    /api/clients/[clientId]/campaigns                # List client campaigns
+GET    /api/clients/[clientId]/leads                    # Get leads (?positive=true)
+POST   /api/clients/[clientId]/logo                     # Upload client logo
+GET    /api/clients/[clientId]/invitations              # List invitations
+POST   /api/clients/[clientId]/invitations              # Create invitation
+POST   /api/clients/[clientId]/sync-positive            # Sync positive replies
+GET    /api/clients/[clientId]/stats-settings           # Get stats display settings
+POST   /api/clients/[clientId]/stats-settings           # Update stats display settings
+GET    /api/clients/[clientId]/notification-preferences  # Get notification prefs
+POST   /api/clients/[clientId]/notification-preferences  # Update notification prefs
+GET    /api/clients/[clientId]/tool-links               # Get external tool links
+```
+
+#### HubSpot Integration (per client)
+```
+POST   /api/clients/[clientId]/hubspot                  # Sync leads to HubSpot
+POST   /api/clients/[clientId]/test-hubspot             # Test HubSpot connection
 ```
 
 ### Lead Workflow APIs
@@ -431,44 +761,176 @@ PATCH  /api/leads/[leadId]/workflow    # Update lead workflow status
 ```
 
 **Actions:**
-- `mark_responded` - Mark lead as responded
-- `schedule_meeting` - Set meeting date/time
-- `close_won` - Mark deal as won
-- `close_lost` - Mark deal as lost
-- `update_notes` - Update workflow notes
-- `revert_status` - Revert to previous status
+| Action | Description |
+|--------|-------------|
+| `mark_responded` | Mark lead as responded |
+| `schedule_meeting` | Set meeting date/time |
+| `close_won` | Mark deal as won |
+| `close_lost` | Mark deal as lost |
+| `update_notes` | Update workflow notes |
+| `revert_status` | Revert to previous status |
 
 ### Campaign APIs
 
 ```
-GET    /api/campaigns/[id]/details  # Get campaign details with stats
-GET    /api/campaigns/[id]/leads    # Get leads for campaign
-DELETE /api/campaigns/[id]          # Delete campaign
+GET    /api/campaigns/[id]/details            # Campaign details with stats
+GET    /api/campaigns/[id]/leads              # Campaign leads
+GET    /api/campaigns/[id]/variant-analytics  # A/B/C variant performance
+GET    /api/campaigns/[id]/export-leads       # Export campaign leads
+GET    /api/campaigns/[id]/diagnose           # Campaign diagnostics
+POST   /api/campaigns/[id]/sync-leads         # Sync leads from provider
+POST   /api/campaigns/[id]/sync-emails        # Sync email threads
+POST   /api/campaigns/[id]/recalculate        # Recalculate campaign stats
+POST   /api/campaigns/[id]/generate-skill     # Generate campaign skill report
+DELETE /api/campaigns/[id]                    # Delete campaign
 ```
 
-### Instantly Integration APIs
+### Provider APIs
 
 ```
-GET  /api/instantly/status              # Check API connection
-GET  /api/instantly/campaigns           # List Instantly campaigns
-POST /api/instantly/campaigns           # Sync campaigns to DB
-GET  /api/instantly/campaigns/[id]      # Get campaign details
-POST /api/instantly/campaigns/[id]      # Activate/pause campaign
-GET  /api/instantly/campaigns/analytics # Get campaign analytics
-GET  /api/instantly/leads               # List leads from Instantly
-POST /api/instantly/leads               # Sync leads to DB
-GET  /api/instantly/accounts            # List email accounts
-POST /api/instantly/sync                # Full sync (campaigns + leads)
+GET    /api/providers/[provider]/campaigns     # List campaigns from provider
+POST   /api/providers/[provider]/validate      # Validate provider API key
 ```
 
-### Webhook
+Supported providers: `instantly`, `smartlead`
+
+### Instantly APIs
 
 ```
-POST /api/webhooks/instantly
+GET    /api/instantly/status                   # Check API connection
+GET    /api/instantly/campaigns                # List Instantly campaigns
+POST   /api/instantly/campaigns                # Sync campaigns to DB
+GET    /api/instantly/campaigns/[id]           # Get campaign details
+POST   /api/instantly/campaigns/[id]           # Activate/pause campaign
+GET    /api/instantly/campaigns/analytics      # Get campaign analytics
+GET    /api/instantly/leads                    # List leads from Instantly
+POST   /api/instantly/leads                    # Sync leads to DB
+GET    /api/instantly/accounts                 # List email accounts
+POST   /api/instantly/sync                     # Full sync (campaigns + leads)
+POST   /api/instantly/validate-key             # Validate API key
+POST   /api/instantly/refresh-status           # Refresh campaign statuses
 ```
-Receives real-time updates from Instantly when lead status changes.
 
-**Payload:**
+### Smartlead APIs
+
+```
+GET    /api/smartlead/campaigns                # List Smartlead campaigns
+GET    /api/smartlead/status                   # Check Smartlead API connection
+POST   /api/smartlead/validate-key             # Validate API key
+```
+
+### Infrastructure APIs
+
+```
+GET    /api/admin/infrastructure/stats         # Dashboard statistics
+GET    /api/admin/infrastructure/accounts      # List accounts (with filters)
+PATCH  /api/admin/infrastructure/accounts/[id] # Assign client to account
+POST   /api/admin/infrastructure/sync          # Sync from Instantly/Smartlead
+GET    /api/admin/infrastructure/dns           # Get cached domain health
+POST   /api/admin/infrastructure/dns           # Check specific domains
+PATCH  /api/admin/infrastructure/dns           # Refresh all domain checks
+GET    /api/admin/infrastructure/history       # Historical health snapshots
+POST   /api/admin/infrastructure/history       # Create daily snapshot
+```
+
+---
+
+## Provider Integrations
+
+### Instantly.ai
+
+**Setup:**
+1. Get your API key from Instantly Settings → Integrations → API
+2. Add to `INSTANTLY_API_KEY` in `.env.local` or configure via Admin Settings UI
+3. Configure webhook in Instantly to point to `/api/webhooks/instantly/[campaignId]`
+
+**API Client** (`src/lib/instantly/`):
+| File | Purpose |
+|------|---------|
+| `client.ts` | Base HTTP client with Bearer token auth |
+| `campaigns.ts` | List, activate, pause campaigns |
+| `leads.ts` | List, create, update leads |
+| `emails.ts` | Fetch email threads |
+| `analytics.ts` | Campaign and account analytics |
+| `accounts.ts` | Email account management |
+| `types.ts` | TypeScript type definitions |
+
+**Sync Process:**
+1. Fetch campaigns from Instantly API
+2. Create/update local campaign records in Supabase
+3. Sync leads for each campaign
+4. Sync email threads for leads
+5. Sync analytics (sent, opened, replied counts)
+6. Webhooks handle real-time updates going forward
+
+### Smartlead
+
+**Setup:**
+1. Get your API key from Smartlead Settings
+2. Add to `SMARTLEAD_API_KEY` in `.env.local` or configure via Admin Settings UI
+
+**API Client** (`src/lib/smartlead/`):
+| File | Purpose |
+|------|---------|
+| `client.ts` | Base HTTP client with query parameter auth (`?api_key=...`) |
+| `campaigns.ts` | List and manage campaigns |
+| `accounts.ts` | Fetch email accounts and warmup analytics |
+| `analytics.ts` | Campaign performance data |
+| `types.ts` | SmartleadAccount, SmartleadWarmupStats interfaces |
+
+### HubSpot
+
+**Setup:** Configure HubSpot API key per client via the client settings.
+
+**Client** (`src/lib/hubspot/`):
+| File | Purpose |
+|------|---------|
+| `client.ts` | HubSpot API HTTP client |
+| `sync.ts` | Lead → HubSpot contact sync logic |
+| `types.ts` | HubSpot type definitions |
+
+### Multi-Provider Architecture
+
+The `src/lib/providers/` directory provides a unified interface across providers:
+
+```
+src/lib/providers/
+├── types.ts              # Shared provider interface
+├── index.ts              # Provider factory/registry
+├── instantly/
+│   ├── client.ts         # Instantly adapter
+│   └── index.ts
+└── smartlead/
+    ├── client.ts         # Smartlead adapter
+    └── index.ts
+```
+
+---
+
+## Webhooks
+
+### Instantly Webhooks
+
+**Endpoint:** `POST /api/webhooks/instantly/[campaignId]`
+
+Configure in Instantly to send events to this URL for each campaign.
+
+**Events Handled:**
+
+| Event | Action |
+|-------|--------|
+| `lead_interested` | Set `is_positive_reply = true` |
+| `lead_not_interested` | Set `is_positive_reply = false` |
+| `email_sent` | Increment `emails_sent` counter |
+| `email_opened` | Increment open count |
+| `email_replied` | Update `has_replied`, `replied_at` |
+| `lead_created` | Create new lead record |
+| `link_clicked` | Increment click count |
+| `meeting_booked` | Update lead status to `booked` |
+| `lead_won` | Update lead status to `won` |
+| `lead_lost` | Update lead status to `lost` |
+
+**Payload Example:**
 ```json
 {
   "event_type": "reply_received",
@@ -478,45 +940,85 @@ Receives real-time updates from Instantly when lead status changes.
 }
 ```
 
+**Security:** Webhook payloads are validated using `INSTANTLY_WEBHOOK_SECRET`.
+
+### Smartlead Webhooks
+
+**Endpoint:** `POST /api/webhooks/smartlead/[campaignId]`
+
+Handles similar events from Smartlead campaigns.
+
 ---
 
-## Instantly Integration
+## Cron Jobs
 
-### Setup
+Scheduled endpoints for automated data syncing:
 
-1. Get your API key from Instantly Settings → Integrations → API
-2. Add the key to `INSTANTLY_API_KEY` environment variable
-3. Configure webhook in Instantly to point to `/api/webhooks/instantly`
+| Endpoint | Purpose | Recommended Schedule |
+|----------|---------|---------------------|
+| `POST /api/cron/analytics-snapshot` | Create daily analytics snapshot | `0 6 * * *` (daily 6 AM UTC) |
+| `POST /api/cron/smartlead-weekly` | Weekly Smartlead data sync | `0 6 * * 1` (Monday 6 AM UTC) |
+| `POST /api/cron/stats-report` | Send weekly stats report emails | `0 9 * * 1` (Monday 9 AM UTC) |
+| `POST /api/admin/analytics/sync` | Sync analytics from all providers | `0 6 * * *` (daily 6 AM UTC) |
 
-### Sync Process
+### Setup Options
 
-#### Manual Sync
-1. Go to Admin → Instantly → Overview
-2. Click "Sync Campaigns" to import campaigns
-3. Click "Sync Leads" to import leads from all campaigns
-
-#### Automatic Sync
-Set up a cron job to call the sync endpoint:
-```bash
-# Every 15 minutes
-*/15 * * * * curl -X POST https://your-domain.com/api/instantly/sync
+**Vercel Cron** (recommended for Vercel deployments):
+```json
+// vercel.json
+{
+  "crons": [
+    { "path": "/api/cron/analytics-snapshot", "schedule": "0 6 * * *" },
+    { "path": "/api/cron/stats-report", "schedule": "0 9 * * 1" }
+  ]
+}
 ```
 
-See `CRON_SETUP.md` for detailed instructions.
+**External Cron Services:** Use cron-job.org, EasyCron, or Upstash QStash to call the endpoints on schedule.
 
-### Webhook Events
+**GitHub Actions:** See `CRON_SETUP.md` for a full GitHub Actions workflow example.
 
-The webhook handler processes these Instantly events:
-- `lead_created` - New lead added to campaign
-- `email_sent` - Email sent to lead
-- `email_opened` - Lead opened email
-- `link_clicked` - Lead clicked link
-- `reply_received` - Lead replied
-- `lead_interested` - Lead marked as positive
-- `lead_not_interested` - Lead marked as not interested
-- `meeting_booked` - Meeting was scheduled
-- `lead_won` - Deal closed won
-- `lead_lost` - Deal closed lost
+**Supabase pg_cron:** Available on Supabase Pro plan. See `CRON_SETUP.md` for SQL setup.
+
+---
+
+## Infrastructure Health Monitoring
+
+### Overview
+
+Monitor email account health across all providers with DNS validation. Accessible at `/admin/infrastructure`.
+
+### Features
+
+- **Account Dashboard**: Total accounts, active count, average reputation, domain count
+- **Account Table**: Filterable by provider, status, client assignment
+- **Client Assignment**: Map email accounts to specific clients
+- **DNS Health**: SPF, DKIM, DMARC validation for all sending domains
+- **Health History**: Daily snapshots for tracking reputation trends
+- **Auto-refresh**: Dashboard updates every 30 seconds
+
+### DNS Health Checker (`src/lib/dns/`)
+
+Uses DNS-over-HTTPS (Google DoH API) for server-side DNS lookups:
+
+- **SPF**: Validates `v=spf1` records for sending authorization
+- **DKIM**: Probes common selectors (google, default, selector1, selector2, k1, etc.)
+- **DMARC**: Checks `_dmarc` TXT records and parses policy (`none`, `quarantine`, `reject`)
+- **Health Score**: Generated 0–100 score based on DNS record completeness and validity
+
+---
+
+## Email Notifications
+
+Built with [React Email](https://react.email) and sent via [Resend](https://resend.com).
+
+### Templates (`src/lib/email/templates/`)
+
+| Template | Trigger | Description |
+|----------|---------|-------------|
+| `Invitation.tsx` | Admin invites client user | Welcome email with login link |
+| `PositiveReplyNotification.tsx` | Webhook: positive reply | Alert admin/client about interested lead |
+| `StatsReport.tsx` | Weekly cron job | Summary of campaign performance |
 
 ---
 
@@ -532,7 +1034,10 @@ docker build -t bluereach-dashboard .
 docker-compose up -d
 ```
 
-#### docker-compose.yml
+**docker-compose.yml** includes:
+- `app` service: Next.js application on port 3000
+- `caddy` service: Reverse proxy with automatic HTTPS on ports 80/443
+
 ```yaml
 version: '3.8'
 services:
@@ -546,6 +1051,9 @@ services:
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - INSTANTLY_API_KEY=${INSTANTLY_API_KEY}
       - INSTANTLY_WEBHOOK_SECRET=${INSTANTLY_WEBHOOK_SECRET}
+      - SMARTLEAD_API_KEY=${SMARTLEAD_API_KEY}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
     restart: unless-stopped
 
   caddy:
@@ -565,16 +1073,17 @@ volumes:
 ### Vercel Deployment
 
 1. Connect your GitHub repository to Vercel
-2. Add environment variables in Vercel dashboard
+2. Add all environment variables in the Vercel dashboard
 3. Deploy
+4. Configure cron jobs in `vercel.json` (see [Cron Jobs](#cron-jobs))
 
 ### Environment-Specific Configuration
 
-| Environment | Database | API |
-|-------------|----------|-----|
-| Development | Supabase Dev Project | Instantly Sandbox |
-| Staging | Supabase Staging Project | Instantly Sandbox |
-| Production | Supabase Production Project | Instantly Production |
+| Environment | Database | Providers | Email |
+|-------------|----------|-----------|-------|
+| Development | Supabase Dev Project | Instantly/Smartlead Sandbox | Resend Test |
+| Staging | Supabase Staging Project | Instantly/Smartlead Sandbox | Resend Test |
+| Production | Supabase Production Project | Instantly/Smartlead Production | Resend Production |
 
 ---
 
@@ -583,81 +1092,228 @@ volumes:
 ```
 src/
 ├── app/
-│   ├── admin/                    # Admin portal pages
-│   │   ├── clients/              # Client management
-│   │   │   └── [clientId]/       # Individual client
-│   │   │       └── campaigns/    # Campaign management
-│   │   │           └── [campaignId]/ # Campaign details
-│   │   ├── instantly/            # Instantly integration UI
-│   │   ├── leads/                # Lead management
-│   │   ├── settings/             # App settings
-│   │   ├── layout.tsx            # Admin layout with sidebar
-│   │   └── page.tsx              # Command center dashboard
+│   ├── (marketing)/                    # Marketing pages (grouped route)
+│   │   ├── features/page.tsx           # Features page
+│   │   ├── pricing/page.tsx            # Pricing page
+│   │   └── layout.tsx                  # Marketing layout
 │   │
-│   ├── api/                      # API routes
-│   │   ├── admin/                # Admin APIs
-│   │   │   ├── analytics/        # Analytics endpoints
-│   │   │   ├── customers/        # Client CRUD
-│   │   │   ├── leads/            # Lead export
-│   │   │   └── settings/         # Settings
-│   │   ├── campaigns/            # Campaign APIs
-│   │   ├── clients/              # Client-specific APIs
-│   │   ├── instantly/            # Instantly integration
-│   │   └── webhooks/             # Webhook handlers
+│   ├── admin/                          # Admin portal
+│   │   ├── page.tsx                    # Command center dashboard
+│   │   ├── layout.tsx                  # Admin layout (sidebar, header)
+│   │   ├── clients/                    # Client management
+│   │   │   ├── page.tsx                # Client list
+│   │   │   ├── add-client-dialog.tsx   # New client dialog
+│   │   │   └── [clientId]/             # Individual client
+│   │   │       ├── page.tsx            # Client dashboard + lead workflow
+│   │   │       ├── settings/page.tsx   # Client settings
+│   │   │       └── campaigns/          # Campaign management
+│   │   │           ├── page.tsx        # Campaign list
+│   │   │           ├── add-campaign-dialog.tsx
+│   │   │           ├── sync-button.tsx
+│   │   │           └── [campaignId]/page.tsx  # Campaign details
+│   │   ├── leads/                      # Lead management
+│   │   │   ├── page.tsx
+│   │   │   └── admin-leads-view.tsx
+│   │   ├── lead-database/page.tsx      # Centralized lead database
+│   │   ├── instantly/                  # Instantly integration UI
+│   │   │   ├── page.tsx                # Overview
+│   │   │   ├── accounts/page.tsx       # Email accounts
+│   │   │   ├── campaigns/page.tsx      # Campaign management
+│   │   │   └── analytics/page.tsx      # Provider analytics
+│   │   ├── infrastructure/             # Infrastructure health
+│   │   │   ├── page.tsx
+│   │   │   └── infrastructure-view.tsx
+│   │   ├── ai-campaigns/page.tsx       # AI campaign tools
+│   │   ├── scraping/page.tsx           # Lead scraping
+│   │   ├── notes/page.tsx              # Internal notes
+│   │   ├── subscriptions/page.tsx      # Subscription tracking
+│   │   └── settings/page.tsx           # Agency settings
 │   │
-│   ├── auth/                     # Auth callback
-│   ├── dashboard/                # Client portal
-│   │   └── [clientId]/           # Client-specific dashboard
-│   ├── login/                    # Login page
-│   ├── globals.css               # Global styles
-│   ├── layout.tsx                # Root layout
-│   └── page.tsx                  # Landing page
+│   ├── api/                            # API routes
+│   │   ├── admin/                      # Admin-only endpoints
+│   │   │   ├── analytics/              # Analytics + sync
+│   │   │   ├── customers/              # Client CRUD
+│   │   │   ├── infrastructure/         # Infrastructure health
+│   │   │   ├── invitations/            # Client invitations
+│   │   │   ├── lead-database/          # Lead database queries
+│   │   │   ├── leads/                  # Lead export
+│   │   │   ├── notes/                  # Notes CRUD
+│   │   │   ├── notification-preferences/
+│   │   │   ├── settings/               # App settings + logo
+│   │   │   └── subscriptions/          # Subscription info
+│   │   ├── campaigns/[campaignId]/     # Campaign operations
+│   │   │   ├── details/                # Stats + details
+│   │   │   ├── leads/                  # Campaign leads
+│   │   │   ├── variant-analytics/      # A/B test results
+│   │   │   ├── sync-leads/             # Sync from provider
+│   │   │   ├── sync-emails/            # Sync email threads
+│   │   │   ├── export-leads/           # CSV export
+│   │   │   ├── diagnose/               # Campaign diagnostics
+│   │   │   ├── recalculate/            # Recalculate stats
+│   │   │   └── generate-skill/         # Skill report
+│   │   ├── clients/[clientId]/         # Client-specific endpoints
+│   │   │   ├── campaigns/              # Client campaigns
+│   │   │   ├── leads/                  # Client leads
+│   │   │   ├── invitations/            # Manage invitations
+│   │   │   ├── hubspot/                # HubSpot sync
+│   │   │   ├── logo/                   # Logo upload
+│   │   │   ├── stats-settings/         # Stats display config
+│   │   │   ├── notification-preferences/
+│   │   │   ├── sync-positive/          # Sync positive replies
+│   │   │   └── tool-links/             # External tool links
+│   │   ├── providers/[provider]/       # Multi-provider endpoints
+│   │   │   ├── campaigns/
+│   │   │   └── validate/
+│   │   ├── instantly/                  # Instantly-specific endpoints
+│   │   ├── smartlead/                  # Smartlead-specific endpoints
+│   │   ├── leads/[leadId]/             # Lead operations
+│   │   │   └── workflow/               # Workflow updates
+│   │   ├── webhooks/                   # Webhook handlers
+│   │   │   ├── instantly/[campaignId]/ # Instantly webhooks
+│   │   │   └── smartlead/[campaignId]/ # Smartlead webhooks
+│   │   ├── cron/                       # Scheduled jobs
+│   │   │   ├── analytics-snapshot/
+│   │   │   ├── smartlead-weekly/
+│   │   │   └── stats-report/
+│   │   └── demo/                       # Demo utilities
+│   │
+│   ├── auth/                           # Auth routes
+│   │   ├── callback/                   # OAuth callback handler
+│   │   ├── signout/                    # Sign out
+│   │   └── accept-invite/              # Accept client invitation
+│   │
+│   ├── dashboard/                      # Client portal
+│   │   ├── page.tsx                    # Dashboard landing
+│   │   ├── layout.tsx                  # Dashboard layout
+│   │   └── [clientId]/                 # Client-specific views
+│   │       ├── page.tsx
+│   │       ├── client-leads-view.tsx
+│   │       └── client-info-tooltip.tsx
+│   │
+│   ├── login/                          # Login page
+│   │   ├── page.tsx
+│   │   └── login-client.tsx
+│   ├── access-denied/page.tsx          # Access denied page
+│   ├── page.tsx                        # Landing page
+│   ├── layout.tsx                      # Root layout
+│   └── globals.css                     # Global styles
 │
 ├── components/
-│   ├── layout/                   # Layout components
-│   │   ├── header.tsx            # Top navigation
-│   │   ├── sidebar.tsx           # Admin sidebar
-│   │   └── stats-cards.tsx       # Statistics display
-│   ├── leads/                    # Lead components
-│   │   ├── lead-detail-panel.tsx # Slide-out detail view
-│   │   └── lead-table.tsx        # Lead listing table
-│   └── ui/                       # shadcn/ui components
-│       ├── badge.tsx
-│       ├── button.tsx
-│       ├── card.tsx
-│       ├── dialog.tsx
-│       ├── dropdown-menu.tsx
-│       ├── input.tsx
-│       ├── label.tsx
-│       ├── select.tsx
-│       ├── sheet.tsx
-│       ├── table.tsx
-│       └── textarea.tsx
+│   ├── admin/                          # Admin-specific components
+│   │   ├── add-customer-dialog.tsx
+│   │   └── delete-customer-dialog.tsx
+│   ├── campaigns/
+│   │   └── variant-analytics.tsx       # A/B variant display
+│   ├── layout/
+│   │   ├── header.tsx                  # Top navigation
+│   │   ├── sidebar.tsx                 # Admin sidebar
+│   │   └── stats-cards.tsx             # Statistics display cards
+│   ├── leads/
+│   │   ├── EmailThread.tsx             # Email thread viewer
+│   │   ├── lead-detail-panel.tsx       # Slide-out lead detail panel
+│   │   └── lead-table.tsx              # Lead listing table
+│   ├── marketing/
+│   │   ├── header.tsx                  # Marketing page header
+│   │   └── footer.tsx                  # Marketing page footer
+│   ├── ui/                             # shadcn/ui components
+│   │   ├── badge.tsx
+│   │   ├── button.tsx
+│   │   ├── card.tsx
+│   │   ├── checkbox.tsx
+│   │   ├── dialog.tsx
+│   │   ├── dropdown-menu.tsx
+│   │   ├── info-tooltip.tsx
+│   │   ├── input.tsx
+│   │   ├── label.tsx
+│   │   ├── select.tsx
+│   │   ├── sheet.tsx
+│   │   ├── switch.tsx
+│   │   ├── table.tsx
+│   │   ├── tabs.tsx
+│   │   └── textarea.tsx
+│   └── theme-toggle.tsx                # Dark/light theme toggle
 │
 ├── lib/
-│   ├── instantly/                # Instantly API client
-│   │   ├── accounts.ts           # Account management
-│   │   ├── analytics.ts          # Analytics fetching
-│   │   ├── campaigns.ts          # Campaign operations
-│   │   ├── client.ts             # Base HTTP client
-│   │   ├── index.ts              # Exports
-│   │   ├── leads.ts              # Lead operations
-│   │   └── types.ts              # TypeScript types
-│   ├── queries/                  # Database queries
+│   ├── auth.ts                         # Auth helper utilities
+│   ├── utils.ts                        # General utilities (cn, etc.)
+│   ├── supabase/                       # Supabase clients
+│   │   ├── client.ts                   # Browser client
+│   │   ├── server.ts                   # Server client
+│   │   └── middleware.ts               # Auth middleware
+│   ├── queries/                        # Database query functions
+│   │   ├── analytics.ts
 │   │   ├── campaigns.ts
 │   │   ├── clients.ts
 │   │   ├── leads.ts
 │   │   └── stats.ts
-│   ├── supabase/                 # Supabase clients
-│   │   ├── client.ts             # Browser client
-│   │   ├── middleware.ts         # Auth middleware
-│   │   └── server.ts             # Server client
-│   └── utils.ts                  # Utility functions
+│   ├── instantly/                      # Instantly API client
+│   │   ├── client.ts                   # Base HTTP client (Bearer auth)
+│   │   ├── campaigns.ts               # Campaign operations
+│   │   ├── leads.ts                    # Lead operations
+│   │   ├── emails.ts                   # Email thread fetching
+│   │   ├── analytics.ts               # Analytics queries
+│   │   ├── accounts.ts                # Email account management
+│   │   ├── types.ts                    # Type definitions
+│   │   └── index.ts                    # Module exports
+│   ├── smartlead/                      # Smartlead API client
+│   │   ├── client.ts                   # Base HTTP client (query param auth)
+│   │   ├── campaigns.ts               # Campaign operations
+│   │   ├── accounts.ts                # Account + warmup data
+│   │   ├── analytics.ts               # Analytics queries
+│   │   ├── types.ts                    # Type definitions
+│   │   └── index.ts                    # Module exports
+│   ├── providers/                      # Multi-provider abstraction
+│   │   ├── types.ts                    # Shared provider interface
+│   │   ├── index.ts                    # Provider factory
+│   │   ├── instantly/                  # Instantly adapter
+│   │   └── smartlead/                  # Smartlead adapter
+│   ├── hubspot/                        # HubSpot CRM integration
+│   │   ├── client.ts                   # HubSpot API client
+│   │   ├── sync.ts                     # Lead → contact sync
+│   │   ├── types.ts                    # Type definitions
+│   │   └── index.ts                    # Module exports
+│   ├── dns/                            # DNS health checker
+│   │   ├── checker.ts                  # SPF/DKIM/DMARC validation via Google DoH
+│   │   └── index.ts                    # Module exports
+│   └── email/                          # Email notification service
+│       ├── index.ts                    # Module exports
+│       ├── send.ts                     # Resend send wrapper
+│       └── templates/                  # React Email templates
+│           ├── Invitation.tsx          # Client invitation email
+│           ├── PositiveReplyNotification.tsx  # Positive reply alert
+│           └── StatsReport.tsx         # Weekly stats summary
 │
 ├── types/
-│   └── database.ts               # Database type definitions
+│   └── database.ts                     # TypeScript types for all tables
 │
-└── middleware.ts                 # Next.js middleware
+└── middleware.ts                       # Next.js middleware (auth + role checks)
+```
+
+### Root Files
+
+```
+├── .env.example                # Environment variable template
+├── .gitignore                  # Git exclusions
+├── .dockerignore               # Docker exclusions
+├── Caddyfile                   # Caddy reverse proxy config
+├── CLAUDE.md                   # Claude AI project context
+├── CRON_SETUP.md               # Cron job setup guide
+├── README.md                   # This file
+├── check-positive.mjs          # Utility: check positive replies
+├── check_db.mjs                # Utility: database health check
+├── components.json             # shadcn/ui config
+├── docker-compose.yml          # Docker multi-service config
+├── Dockerfile                  # Container build config
+├── eslint.config.mjs           # ESLint configuration
+├── next.config.ts              # Next.js configuration
+├── package.json                # Dependencies and scripts
+├── supabase-schema.sql         # Migration 1: Core schema
+├── supabase-schema-v2.sql      # Migration 2: Multi-provider + denormalization
+├── supabase-settings.sql       # Migration 3: Settings table
+├── supabase-preserve-leads.sql # Migration 4: Lead preservation triggers
+├── supabase-analytics.sql      # Migration 5: Analytics views + functions
+├── supabase-add-icp.sql        # Migration 6: ICP fields
+└── tsconfig.json               # TypeScript configuration
 ```
 
 ---
