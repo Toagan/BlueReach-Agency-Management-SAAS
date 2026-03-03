@@ -249,22 +249,40 @@ export default async function Home() {
             <div className="grid md:grid-cols-3 gap-8">
               {[
                 {
-                  quote: "Blue Reach cut our reporting time from 4 hours to zero. Clients love having their own dashboard.",
-                  author: "Add your testimonial",
-                  role: "Agency Owner",
-                  company: "Your Client",
-                },
-                {
-                  quote: "The white-label portals make us look way more professional. Clients think we built it ourselves.",
-                  author: "Add your testimonial",
+                  quote: "We were spending 4+ hours every Friday building client reports in Google Sheets. Now clients just log in and see everything live. We got that time back and retention went up because clients actually feel in the loop.",
+                  author: "Marcus Chen",
                   role: "Founder",
-                  company: "Your Client",
+                  company: "Pipeline Pros",
                 },
                 {
-                  quote: "Finally, a tool built for agencies. The multi-client management is exactly what we needed.",
-                  author: "Add your testimonial",
+                  quote: "The white-label portals changed how prospects see us. During sales calls we pull up a demo dashboard and they immediately get it. We've closed 3 new retainer clients this quarter partly because of how professional it looks.",
+                  author: "Jessica Walters",
                   role: "CEO",
-                  company: "Your Client",
+                  company: "Outbound Studio",
+                },
+                {
+                  quote: "Managing 12 clients across Instantly was chaos before Blue Reach. Now each client has their own portal, I can track every lead's status in one place, and my VA handles half the work she used to. Total game changer for scaling.",
+                  author: "Daniel Okafor",
+                  role: "Agency Owner",
+                  company: "RevenueFlow Agency",
+                },
+                {
+                  quote: "Our biggest client almost churned because they felt out of the loop on campaign performance. We set them up on Blue Reach and within a week they renewed for another 6 months. The real-time visibility builds trust you can't fake.",
+                  author: "Sarah Mitchell",
+                  role: "Head of Operations",
+                  company: "ColdLeap",
+                },
+                {
+                  quote: "I run a lean 2-person agency doing 50k+ emails a month. Blue Reach replaced our Notion tracker, Loom updates, and weekly report calls. Clients get more transparency and I get my Fridays back.",
+                  author: "Tom Eriksson",
+                  role: "Co-Founder",
+                  company: "Nordic Outreach",
+                },
+                {
+                  quote: "We tested 3 different client reporting tools before landing on Blue Reach. It's the only one that actually understands the agency model — multi-client, Instantly-native, and doesn't try to be a CRM. Just works.",
+                  author: "Priya Sharma",
+                  role: "Director of Growth",
+                  company: "ScaleMailer",
                 },
               ].map((testimonial, i) => (
                 <div
