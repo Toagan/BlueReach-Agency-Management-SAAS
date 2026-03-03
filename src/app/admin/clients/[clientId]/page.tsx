@@ -439,19 +439,11 @@ export default function ClientDashboardPage() {
     return body.trim();
   }, [stripHtml]);
 
-  const buildReplyUrlFromEmails = useCallback((lead: Lead, emails: LeadEmail[]) => {
-    const lastOutbound = [...emails].reverse().find((e) => e.direction === "outbound");
-    const originalSubject = lastOutbound?.subject || emails.find((e) => e.subject)?.subject || "";
-    const replySubject = originalSubject
-      ? `Re: ${originalSubject.replace(/^(Re:\s*)+/i, "")}`
-      : "Following up";
-
+  const buildReplyBody = useCallback((emails: LeadEmail[]) => {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const monthsShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const monthsFull = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-    // Gmail: build with proper > nesting (deeper = more > prefixes)
-    let gmailBody = "\n\n";
+    let body = "\n\n";
     if (emails.length > 0) {
       let quoted = "";
       for (let i = 0; i < emails.length; i++) {
@@ -475,28 +467,11 @@ export default function ClientDashboardPage() {
           quoted = `${attrPrefix}${attribution}\n${quotedLines}\n${attrPrefix}>\n${quoted}`;
         }
       }
-      gmailBody += quoted + "\n";
+      body += quoted + "\n";
     }
-    if (gmailBody.length > 1500) gmailBody = gmailBody.slice(0, 1500) + "\n[Thread truncated]";
-
-    // Outlook: use last email (body already has nested history)
-    let outlookBody = "\n\n";
-    if (emails.length > 0) {
-      const lastEmail = emails[emails.length - 1];
-      const d = new Date(lastEmail.sent_at || "");
-      const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-      const name = lastEmail.from_email.split("@")[0];
-      const fullBody = lastEmail.body_text || (lastEmail.body_html ? stripHtml(lastEmail.body_html) : "");
-      outlookBody += `________________________________________\nFrom: ${name} <${lastEmail.from_email}>\nSent: ${String(d.getDate()).padStart(2, "0")} ${monthsFull[d.getMonth()]} ${d.getFullYear()} ${time}\nTo: ${lead.email}\nSubject: ${replySubject}\n\n${fullBody}\n`;
-    }
-    if (outlookBody.length > 1500) outlookBody = outlookBody.slice(0, 1500) + "\n[Thread truncated]";
-
-    const gmailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(lead.email)}&su=${encodeURIComponent(replySubject)}&body=${encodeURIComponent(gmailBody)}`;
-    const outlookUrl = `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(lead.email)}&subject=${encodeURIComponent(replySubject)}&body=${encodeURIComponent(outlookBody)}`;
-
-    const base = typeof window !== "undefined" ? window.location.origin : "";
-    return `${base}/reply?to=${encodeURIComponent(lead.email)}&gmail=${encodeURIComponent(gmailUrl)}&outlook=${encodeURIComponent(outlookUrl)}`;
-  }, [stripHtml, extractOwnContent]);
+    if (body.length > 1500) body = body.slice(0, 1500) + "\n[Thread truncated]";
+    return body;
+  }, [extractOwnContent]);
 
   const handleReplyToLead = useCallback(async (lead: Lead) => {
     setReplyingLeadId(lead.id);
@@ -511,12 +486,39 @@ export default function ClientDashboardPage() {
           setLeadEmails((prev) => ({ ...prev, [lead.id]: emails! }));
         }
       }
-      const url = buildReplyUrlFromEmails(lead, emails || []);
-      window.open(url, "_blank");
+
+      // Build subject and body
+      const emailList = emails || [];
+      const lastOutbound = [...emailList].reverse().find((e) => e.direction === "outbound");
+      const originalSubject = lastOutbound?.subject || emailList.find((e) => e.subject)?.subject || "";
+      const subject = originalSubject
+        ? `Re: ${originalSubject.replace(/^(Re:\s*)+/i, "")}`
+        : "Following up";
+      const body = buildReplyBody(emailList);
+
+      // Create token via API
+      const tokenRes = await fetch("/api/reply-tokens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadEmail: lead.email,
+          subject,
+          body,
+          leadId: lead.id,
+        }),
+      });
+
+      if (!tokenRes.ok) {
+        console.error("Failed to create reply token");
+        return;
+      }
+
+      const { token } = await tokenRes.json();
+      window.open(`/reply?token=${token}`, "_blank");
     } finally {
       setReplyingLeadId(null);
     }
-  }, [leadEmails, buildReplyUrlFromEmails]);
+  }, [leadEmails, buildReplyBody]);
 
   const handleDeleteCampaign = async (campaignId: string, campaignName: string) => {
     if (!confirm(`Are you sure you want to unlink "${campaignName}"?\n\nThis will remove the campaign from this dashboard. Leads will be preserved.`)) {

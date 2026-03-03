@@ -274,48 +274,24 @@ function truncateBody(body: string, max = 1500): string {
 
 const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const DAY_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const MONTH_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-function formatTime12h(d: Date): { h12: number; minutes: string; ampm: string } {
-  const hours = d.getHours();
-  return {
-    h12: hours % 12 || 12,
-    minutes: d.getMinutes().toString().padStart(2, "0"),
-    ampm: hours < 12 ? "AM" : "PM",
-  };
-}
-
 function getSenderName(email: EmailThreadMessage, leadName?: string): string {
   if (email.direction === "inbound" && leadName) return leadName;
   return email.from_email.split("@")[0];
 }
 
 /**
- * Gmail compose URL — opens Gmail web/app on mobile.
+ * Build the reply body with proper `>` nesting per Gmail convention.
+ * Used for token-based reply flow — body stored once, compose URLs built client-side.
  *
- * Builds the thread with proper `>` nesting per Gmail convention:
  * - Most recent message: `>` prefix
  * - Second most recent: `>>` prefix (nested inside)
- * - And so on...
- *
- * Each message's "own content" is extracted (quoted reply text stripped)
- * to avoid duplication when nesting.
- *
- *   On Tue, 3 Mar 2026 at 18:57, Name <email> wrote:
- *   > Their reply text
- *   >
- *   > On Sat, 28 Feb 2026 at 14:01, Other <email> wrote:
- *   >> Original text
+ * - Each message's "own content" is extracted (quoted reply text stripped)
  */
-function buildGmailComposeUrl(params: ComposeUrlParams): string {
-  const subject = getReplySubject(params);
+function buildReplyBody(params: ComposeUrlParams): string {
   const thread = params.emailThread;
 
   let body = "\n\n";
   if (thread && thread.length > 0) {
-    // Build from earliest (deepest nesting) to most recent (shallowest).
-    // depth 1 = most recent (>), depth N = earliest (> repeated N times)
     let quoted = "";
     for (let i = 0; i < thread.length; i++) {
       const email = thread[i];
@@ -342,49 +318,7 @@ function buildGmailComposeUrl(params: ComposeUrlParams): string {
     body += quoted + "\n";
   }
 
-  body = truncateBody(body);
-
-  return `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(params.leadEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
-
-/**
- * Outlook compose URL — opens Outlook web/app on mobile.
- *
- * Only quotes the most recent email (its body already contains the full
- * nested conversation). Uses Outlook's native format:
- *
- *   ________________________________________
- *   From: Name <email>
- *   Sent: 03 March 2026 17:51
- *   To: recipient <email>
- *   Subject: Re: ...
- *
- *   [body with nested quotes already inside]
- */
-function buildOutlookComposeUrl(params: ComposeUrlParams): string {
-  const subject = getReplySubject(params);
-  const thread = params.emailThread;
-
-  let body = "\n\n";
-  if (thread && thread.length > 0) {
-    const lastEmail = thread[thread.length - 1];
-    const d = new Date(lastEmail.sent_at);
-    const name = getSenderName(lastEmail, params.leadName);
-    const toEmail = lastEmail.to_email || params.leadEmail;
-    const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-
-    body += "________________________________________\n";
-    body += `From: ${name} <${lastEmail.from_email}>\n`;
-    body += `Sent: ${String(d.getDate()).padStart(2, "0")} ${MONTH_FULL[d.getMonth()]} ${d.getFullYear()} ${time}\n`;
-    body += `To: ${toEmail}\n`;
-    body += `Subject: ${lastEmail.subject || subject}\n\n`;
-    body += getMessageBody(lastEmail);
-    body += "\n";
-  }
-
-  body = truncateBody(body);
-
-  return `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(params.leadEmail)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  return truncateBody(body);
 }
 
 export async function sendPositiveReplyNotification(
@@ -460,16 +394,37 @@ export async function sendPositiveReplyNotification(
     ? `${baseUrl}/admin/clients/${params.clientId}?lead=${params.leadDbId}`
     : `${baseUrl}/admin/clients/${params.clientId}`;
 
-  // Build smart reply URL — redirects to Gmail or Outlook based on user preference
-  const composeParams = {
+  // Build reply token — stores compose data server-side, URL is just /reply?token=UUID
+  const composeParams: ComposeUrlParams = {
     leadEmail: params.leadEmail,
     leadName: params.leadName,
     originalSubject: params.originalSubject,
     emailThread: params.emailThread,
   };
-  const gmailUrl = buildGmailComposeUrl(composeParams);
-  const outlookUrl = buildOutlookComposeUrl(composeParams);
-  const replyUrl = `${baseUrl}/reply?to=${encodeURIComponent(params.leadEmail)}&gmail=${encodeURIComponent(gmailUrl)}&outlook=${encodeURIComponent(outlookUrl)}`;
+  const subject = getReplySubject(composeParams);
+  const body = buildReplyBody(composeParams);
+
+  const { data: token } = await supabase
+    .from("reply_tokens")
+    .insert({
+      lead_email: params.leadEmail,
+      subject,
+      body,
+      lead_id: params.leadDbId || null,
+    })
+    .select("id")
+    .single();
+
+  const replyUrl = token
+    ? `${baseUrl}/reply?token=${token.id}`
+    : undefined;
+
+  // Piggyback cleanup: delete expired tokens (>72h old)
+  supabase
+    .from("reply_tokens")
+    .delete()
+    .lt("created_at", new Date(Date.now() - 72 * 3600 * 1000).toISOString())
+    .then(() => {});
 
   const sentTo: string[] = [];
   const errors: string[] = [];
@@ -681,11 +636,4 @@ export async function sendStatsReport(
   };
 }
 
-/** Build the smart reply redirect URL that auto-detects Gmail vs Outlook */
-function buildReplyUrl(baseUrl: string, params: ComposeUrlParams): string {
-  const gmailUrl = buildGmailComposeUrl(params);
-  const outlookUrl = buildOutlookComposeUrl(params);
-  return `${baseUrl}/reply?to=${encodeURIComponent(params.leadEmail)}&gmail=${encodeURIComponent(gmailUrl)}&outlook=${encodeURIComponent(outlookUrl)}`;
-}
-
-export { getBrandingSettings, buildGmailComposeUrl, buildOutlookComposeUrl, buildReplyUrl };
+export { getBrandingSettings, buildReplyBody, getReplySubject };

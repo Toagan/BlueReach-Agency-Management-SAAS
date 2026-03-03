@@ -1,7 +1,7 @@
 // Demo email trigger endpoint - sends sample email notifications for demo clients
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { sendPositiveReplyNotification, sendStatsReport, buildReplyUrl } from "@/lib/email/send";
+import { sendPositiveReplyNotification, sendStatsReport, buildReplyBody, getReplySubject } from "@/lib/email/send";
 import { requireAdmin } from "@/lib/auth";
 
 function getSupabase() {
@@ -181,6 +181,24 @@ export async function POST(request: NextRequest) {
           emailThread: params.emailThread,
         };
 
+        // Create reply token
+        const subject = getReplySubject(composeParams);
+        const body = buildReplyBody(composeParams);
+        const { data: token } = await supabase
+          .from("reply_tokens")
+          .insert({
+            lead_email: params.leadEmail,
+            subject,
+            body,
+            lead_id: null,
+          })
+          .select("id")
+          .single();
+
+        const replyUrl = token
+          ? `${baseUrl}/reply?token=${token.id}`
+          : undefined;
+
         const templateProps = {
           recipientName: recipientEmail.split("@")[0],
           leadEmail: params.leadEmail,
@@ -192,7 +210,7 @@ export async function POST(request: NextRequest) {
           replySnippet: params.replySnippet,
           emailThread: params.emailThread,
           dashboardUrl,
-          replyUrl: buildReplyUrl(baseUrl, composeParams),
+          replyUrl,
         };
 
         const emailHtml = await render(PositiveReplyNotification(templateProps));
