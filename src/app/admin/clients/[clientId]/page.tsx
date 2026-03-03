@@ -416,26 +416,17 @@ export default function ClientDashboardPage() {
       ? `Re: ${originalSubject.replace(/^(Re:\s*)+/i, "")}`
       : "Following up";
 
-    // Deduplicate emails by from_email + sent_at
-    const seen = new Set<string>();
-    const uniqueEmails = emails.filter((e) => {
-      const key = `${e.from_email}|${e.sent_at}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
+    // Only quote the most recent email — its body already contains
+    // the full conversation history nested inside (like a real reply).
     let body = "\n\n";
-    if (uniqueEmails.length > 0) {
-      const reversed = [...uniqueEmails].reverse();
-      for (const email of reversed) {
-        const emailBody = email.body_text || (email.body_html ? stripHtml(email.body_html) : "(No content)");
-        const date = email.sent_at ? new Date(email.sent_at).toLocaleString("en-US", {
-          weekday: "short", month: "short", day: "numeric", year: "numeric",
-          hour: "numeric", minute: "2-digit", hour12: true,
-        }) : "";
-        body += `---\nOn ${date}, ${email.from_email} wrote:\n${emailBody}\n\n`;
-      }
+    if (emails.length > 0) {
+      const lastEmail = emails[emails.length - 1];
+      const emailBody = lastEmail.body_text || (lastEmail.body_html ? stripHtml(lastEmail.body_html) : "(No content)");
+      const date = lastEmail.sent_at ? new Date(lastEmail.sent_at).toLocaleString("en-US", {
+        weekday: "short", month: "short", day: "numeric", year: "numeric",
+        hour: "numeric", minute: "2-digit", hour12: true,
+      }) : "";
+      body += `On ${date}, ${lastEmail.from_email} wrote:\n${emailBody}\n`;
     }
     if (body.length > 1500) body = body.slice(0, 1500) + "\n[Thread truncated]";
 
