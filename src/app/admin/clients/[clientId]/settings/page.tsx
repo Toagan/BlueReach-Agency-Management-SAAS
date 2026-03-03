@@ -128,6 +128,11 @@ export default function ClientSettingsPage() {
   const [hubspotPipelines, setHubspotPipelines] = useState<Array<{ id: string; label: string; stages: Array<{ id: string; label: string; displayOrder: number }> }>>([]);
   const [loadingPipelines, setLoadingPipelines] = useState(false);
 
+  // HubSpot contact property mappings
+  const [hubspotContactProperties, setHubspotContactProperties] = useState<Array<{ name: string; label: string; options: Array<{ label: string; value: string }> }>>([]);
+  const [hubspotContactPropertyMappings, setHubspotContactPropertyMappings] = useState<Record<string, string>>({});
+  const [loadingContactProperties, setLoadingContactProperties] = useState(false);
+
   // HubSpot backfill state
   const [runningBackfill, setRunningBackfill] = useState(false);
   const [backfillPreview, setBackfillPreview] = useState<{
@@ -263,9 +268,14 @@ export default function ClientSettingsPage() {
         if (data.dealPipeline) setHubspotDealPipeline(data.dealPipeline);
         if (data.dealStage) setHubspotDealStage(data.dealStage);
 
-        // Auto-fetch pipelines if connected and enabled
+        if (data.contactPropertyMappings) {
+          setHubspotContactPropertyMappings(data.contactPropertyMappings);
+        }
+
+        // Auto-fetch pipelines and contact properties if connected and enabled
         if (data.hasAccessToken && data.enabled) {
           fetchPipelines();
+          fetchContactProperties();
         }
       }
     } catch (error) {
@@ -337,6 +347,43 @@ export default function ClientSettingsPage() {
     }
   };
 
+  const fetchContactProperties = async () => {
+    setLoadingContactProperties(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/hubspot-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "fetchContactProperties" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHubspotContactProperties(
+          (data.contactProperties || []).map((p: { name: string; label: string; options: Array<{ label: string; value: string; hidden: boolean }> }) => ({
+            name: p.name,
+            label: p.label,
+            options: (p.options || []).filter((o: { hidden: boolean }) => !o.hidden),
+          }))
+        );
+      }
+    } catch (error) {
+      console.error("Error fetching contact properties:", error);
+    } finally {
+      setLoadingContactProperties(false);
+    }
+  };
+
+  const saveContactPropertyMappings = async (mappings: Record<string, string>) => {
+    try {
+      await fetch(`/api/clients/${clientId}/hubspot-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactPropertyMappings: mappings }),
+      });
+    } catch (error) {
+      console.error("Error saving contact property mappings:", error);
+    }
+  };
+
   const disconnectHubspot = async () => {
     if (!confirm("Are you sure you want to disconnect HubSpot? This will stop syncing positive replies.")) {
       return;
@@ -353,6 +400,8 @@ export default function ClientSettingsPage() {
         setHubspotHasToken(false);
         setHubspotLastSync(null);
         setHubspotSyncCount(0);
+        setHubspotContactProperties([]);
+        setHubspotContactPropertyMappings({});
         setSuccess("HubSpot disconnected");
         setTimeout(() => setSuccess(null), 3000);
       } else {
@@ -1693,6 +1742,9 @@ export default function ClientSettingsPage() {
                             if (checked && hubspotPipelines.length === 0) {
                               fetchPipelines();
                             }
+                            if (checked && hubspotContactProperties.length === 0) {
+                              fetchContactProperties();
+                            }
                           }
                         } catch (e) {
                           console.error(e);
@@ -1814,6 +1866,117 @@ export default function ClientSettingsPage() {
                         >
                           <RefreshCw className="h-3 w-3 mr-2" />
                           Load Pipelines
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Contact Properties */}
+                  {hubspotEnabled && (
+                    <div className="space-y-3 pt-2 border-t">
+                      <p className="text-sm font-medium">Contact Properties</p>
+                      <p className="text-xs text-muted-foreground">
+                        Set property values applied to every synced contact (e.g., Lead Status, Lead Source).
+                      </p>
+                      {loadingContactProperties ? (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                          Loading properties...
+                        </div>
+                      ) : hubspotContactProperties.length > 0 ? (
+                        <div className="space-y-2">
+                          {Object.entries(hubspotContactPropertyMappings).map(([propName, propValue]) => {
+                            const property = hubspotContactProperties.find(p => p.name === propName);
+                            return (
+                              <div key={propName} className="flex items-center gap-2">
+                                <Select
+                                  value={propName}
+                                  onValueChange={(newPropName) => {
+                                    const newMappings = { ...hubspotContactPropertyMappings };
+                                    delete newMappings[propName];
+                                    const newProp = hubspotContactProperties.find(p => p.name === newPropName);
+                                    newMappings[newPropName] = newProp?.options?.[0]?.value || "";
+                                    setHubspotContactPropertyMappings(newMappings);
+                                    saveContactPropertyMappings(newMappings);
+                                  }}
+                                >
+                                  <SelectTrigger className="flex-1">
+                                    <SelectValue placeholder="Select property" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {hubspotContactProperties
+                                      .filter(p => p.name === propName || !hubspotContactPropertyMappings[p.name])
+                                      .map((p) => (
+                                        <SelectItem key={p.name} value={p.name}>
+                                          {p.label}
+                                        </SelectItem>
+                                      ))}
+                                  </SelectContent>
+                                </Select>
+                                <Select
+                                  value={propValue}
+                                  onValueChange={(newValue) => {
+                                    const newMappings = { ...hubspotContactPropertyMappings, [propName]: newValue };
+                                    setHubspotContactPropertyMappings(newMappings);
+                                    saveContactPropertyMappings(newMappings);
+                                  }}
+                                >
+                                  <SelectTrigger className="flex-1">
+                                    <SelectValue placeholder="Select value" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {(property?.options || []).map((o) => (
+                                      <SelectItem key={o.value} value={o.value}>
+                                        {o.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                                  onClick={() => {
+                                    const newMappings = { ...hubspotContactPropertyMappings };
+                                    delete newMappings[propName];
+                                    setHubspotContactPropertyMappings(newMappings);
+                                    saveContactPropertyMappings(newMappings);
+                                  }}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            );
+                          })}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const usedProps = new Set(Object.keys(hubspotContactPropertyMappings));
+                              const nextProp = hubspotContactProperties.find(p => !usedProps.has(p.name));
+                              if (nextProp) {
+                                const newMappings = {
+                                  ...hubspotContactPropertyMappings,
+                                  [nextProp.name]: nextProp.options?.[0]?.value || "",
+                                };
+                                setHubspotContactPropertyMappings(newMappings);
+                                saveContactPropertyMappings(newMappings);
+                              }
+                            }}
+                            disabled={Object.keys(hubspotContactPropertyMappings).length >= hubspotContactProperties.length}
+                          >
+                            + Add Property
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={fetchContactProperties}
+                          disabled={loadingContactProperties}
+                        >
+                          <RefreshCw className="h-3 w-3 mr-2" />
+                          Load Properties
                         </Button>
                       )}
                     </div>

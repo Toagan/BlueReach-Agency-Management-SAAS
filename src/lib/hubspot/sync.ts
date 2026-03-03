@@ -89,6 +89,24 @@ export async function syncLeadToHubSpot(
 
     const hubspot = new HubSpotClient(tokenSetting.value);
 
+    // Load configurable contact property mappings
+    const { data: contactPropsSetting } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", `client_${clientId}_hubspot_contact_properties`)
+      .single();
+
+    let contactPropertyMappings: Record<string, string> = {
+      hs_lead_status: "Email Outbound (pos. reply)",
+    };
+    if (contactPropsSetting?.value) {
+      try {
+        contactPropertyMappings = JSON.parse(contactPropsSetting.value);
+      } catch {
+        // Fallback to default if JSON is invalid
+      }
+    }
+
     // Build email thread content for the contact description
     let emailThreadContent = `POSITIVE REPLY - BlueReach Campaign\n`;
     emailThreadContent += `Client: ${clientName}\n`;
@@ -131,8 +149,8 @@ export async function syncLeadToHubSpot(
         lastname: leadLastName || undefined,
         phone: leadPhone || undefined,
         company: companyName || undefined,
-        // Lead Source Channel - always "Email Outbound" for BlueReach synced contacts
-        hs_lead_status: "Email Outbound (pos. reply)",
+        // Configurable contact property mappings (replaces hardcoded hs_lead_status)
+        ...contactPropertyMappings,
         // Vertical/Industry - set per campaign
         industry: vertical || undefined,
         // Campaign name for tracking

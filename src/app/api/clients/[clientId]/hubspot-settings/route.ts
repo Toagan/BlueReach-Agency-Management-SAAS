@@ -68,6 +68,24 @@ export async function GET(
       .eq("key", `client_${clientId}_hubspot_deal_stage`)
       .single();
 
+    // Get contact property mappings
+    const { data: contactPropsSetting } = await adminSupabase
+      .from("settings")
+      .select("value")
+      .eq("key", `client_${clientId}_hubspot_contact_properties`)
+      .single();
+
+    let contactPropertyMappings: Record<string, string> = {
+      hs_lead_status: "Email Outbound (pos. reply)",
+    };
+    if (contactPropsSetting?.value) {
+      try {
+        contactPropertyMappings = JSON.parse(contactPropsSetting.value);
+      } catch {
+        // Fallback to default
+      }
+    }
+
     return NextResponse.json({
       enabled: enabledSetting?.value === "true",
       hasAccessToken: !!tokenSetting?.value,
@@ -77,6 +95,7 @@ export async function GET(
         : 0,
       dealPipeline: pipelineSetting?.value || "default",
       dealStage: stageSetting?.value || "appointmentscheduled",
+      contactPropertyMappings,
     });
   } catch (error) {
     console.error("Error fetching HubSpot settings:", error);
@@ -101,12 +120,13 @@ export async function POST(
     if (auth.error) return auth.error;
 
     const body = await request.json();
-    const { enabled, accessToken, action, dealPipeline, dealStage } = body as {
+    const { enabled, accessToken, action, dealPipeline, dealStage, contactPropertyMappings } = body as {
       enabled?: boolean;
       accessToken?: string;
       action?: string;
       dealPipeline?: string;
       dealStage?: string;
+      contactPropertyMappings?: Record<string, string>;
     };
 
     const adminSupabase = getSupabaseAdmin();
@@ -133,6 +153,33 @@ export async function POST(
       } catch (error) {
         return NextResponse.json(
           { error: error instanceof Error ? error.message : "Failed to fetch pipelines" },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Handle fetchContactProperties action
+    if (action === "fetchContactProperties") {
+      const { data: tokenSetting } = await adminSupabase
+        .from("settings")
+        .select("value")
+        .eq("key", `client_${clientId}_hubspot_access_token`)
+        .single();
+
+      if (!tokenSetting?.value) {
+        return NextResponse.json(
+          { error: "No HubSpot access token configured" },
+          { status: 400 }
+        );
+      }
+
+      try {
+        const hubspotClient = new HubSpotClient(tokenSetting.value);
+        const contactProperties = await hubspotClient.getContactProperties();
+        return NextResponse.json({ contactProperties });
+      } catch (error) {
+        return NextResponse.json(
+          { error: error instanceof Error ? error.message : "Failed to fetch contact properties" },
           { status: 500 }
         );
       }
@@ -232,6 +279,18 @@ export async function POST(
       );
     }
 
+    // Save contact property mappings if provided
+    if (contactPropertyMappings !== undefined) {
+      await adminSupabase.from("settings").upsert(
+        {
+          key: `client_${clientId}_hubspot_contact_properties`,
+          value: JSON.stringify(contactPropertyMappings),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "key" }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       message: accessToken
@@ -270,6 +329,7 @@ export async function DELETE(
       `client_${clientId}_hubspot_sync_count`,
       `client_${clientId}_hubspot_deal_pipeline`,
       `client_${clientId}_hubspot_deal_stage`,
+      `client_${clientId}_hubspot_contact_properties`,
     ];
 
     for (const key of keysToDelete) {

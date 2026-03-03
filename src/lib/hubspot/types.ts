@@ -88,6 +88,21 @@ export interface HubSpotPipeline {
   stages: HubSpotPipelineStage[];
 }
 
+export interface HubSpotPropertyOption {
+  label: string;
+  value: string;
+  displayOrder: number;
+  hidden: boolean;
+}
+
+export interface HubSpotProperty {
+  name: string;
+  label: string;
+  type: string;
+  fieldType: string;
+  options: HubSpotPropertyOption[];
+}
+
 export interface HubSpotError {
   status: string;
   message: string;

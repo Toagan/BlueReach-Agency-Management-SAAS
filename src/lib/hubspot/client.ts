@@ -7,6 +7,7 @@ import type {
   HubSpotNote,
   HubSpotNoteInput,
   HubSpotPipeline,
+  HubSpotProperty,
   HubSpotSearchRequest,
   HubSpotSearchResponse,
   HubSpotError as HubSpotErrorResponse,
@@ -269,6 +270,18 @@ export class HubSpotClient {
       "/crm/v3/pipelines/deals"
     );
     return response.results;
+  }
+
+  /**
+   * Get all enumeration (dropdown/radio) contact properties
+   */
+  async getContactProperties(): Promise<HubSpotProperty[]> {
+    const response = await this.request<{ results: HubSpotProperty[] }>(
+      "/crm/v3/properties/contacts"
+    );
+    return response.results
+      .filter((p) => p.type === "enumeration")
+      .sort((a, b) => a.label.localeCompare(b.label));
   }
 
   /**
