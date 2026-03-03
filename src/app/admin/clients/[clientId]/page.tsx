@@ -403,7 +403,9 @@ export default function ClientDashboardPage() {
       .replace(/&gt;/g, ">")
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
-      .replace(/\n{3,}/g, "\n\n")
+      .replace(/[ \t]+\n/g, "\n")       // trailing whitespace on lines
+      .replace(/\n[ \t]+\n/g, "\n\n")   // lines with only whitespace
+      .replace(/\n{3,}/g, "\n\n")       // collapse 3+ newlines to 2
       .trim();
   }, []);
 
@@ -414,9 +416,18 @@ export default function ClientDashboardPage() {
       ? `Re: ${originalSubject.replace(/^(Re:\s*)+/i, "")}`
       : "Following up";
 
+    // Deduplicate emails by from_email + sent_at
+    const seen = new Set<string>();
+    const uniqueEmails = emails.filter((e) => {
+      const key = `${e.from_email}|${e.sent_at}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     let body = "\n\n";
-    if (emails.length > 0) {
-      const reversed = [...emails].reverse();
+    if (uniqueEmails.length > 0) {
+      const reversed = [...uniqueEmails].reverse();
       for (const email of reversed) {
         const emailBody = email.body_text || (email.body_html ? stripHtml(email.body_html) : "(No content)");
         const date = email.sent_at ? new Date(email.sent_at).toLocaleString("en-US", {
