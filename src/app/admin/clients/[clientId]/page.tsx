@@ -391,6 +391,22 @@ export default function ClientDashboardPage() {
 
   const [replyingLeadId, setReplyingLeadId] = useState<string | null>(null);
 
+  const stripHtml = useCallback((html: string) => {
+    return html
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>/gi, "\n\n")
+      .replace(/<\/div>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }, []);
+
   const buildReplyUrlFromEmails = useCallback((lead: Lead, emails: LeadEmail[]) => {
     const lastOutbound = [...emails].reverse().find((e) => e.direction === "outbound");
     const originalSubject = lastOutbound?.subject || emails.find((e) => e.subject)?.subject || "";
@@ -402,7 +418,7 @@ export default function ClientDashboardPage() {
     if (emails.length > 0) {
       const reversed = [...emails].reverse();
       for (const email of reversed) {
-        const emailBody = email.body_text || "(No content)";
+        const emailBody = email.body_text || (email.body_html ? stripHtml(email.body_html) : "(No content)");
         const date = email.sent_at ? new Date(email.sent_at).toLocaleString("en-US", {
           weekday: "short", month: "short", day: "numeric", year: "numeric",
           hour: "numeric", minute: "2-digit", hour12: true,
@@ -417,7 +433,7 @@ export default function ClientDashboardPage() {
 
     const base = typeof window !== "undefined" ? window.location.origin : "";
     return `${base}/reply?to=${encodeURIComponent(lead.email)}&gmail=${encodeURIComponent(gmailUrl)}&outlook=${encodeURIComponent(outlookUrl)}`;
-  }, []);
+  }, [stripHtml]);
 
   const handleReplyToLead = useCallback(async (lead: Lead) => {
     setReplyingLeadId(lead.id);
