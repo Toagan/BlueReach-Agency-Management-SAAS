@@ -344,7 +344,7 @@ Real-time sync to dashboard
 - `accounts.ts` - Email account management
 
 ### Webhook Events Handled
-- `lead_interested` → `is_positive_reply = true`
+- `lead_interested` → `is_positive_reply = true`, triggers positive reply notification email
 - `lead_not_interested` → `is_positive_reply = false`
 - `email_sent` → Increment `emails_sent` counter
 - `email_opened` → Increment open count
@@ -395,6 +395,34 @@ Uses DNS-over-HTTPS (Google DoH) for server-side lookups:
 - Domain health section with SPF/DKIM/DMARC status
 - Auto-refresh every 30 seconds
 
+## Positive Reply Notification Emails
+
+### Overview
+When a lead replies positively (via Instantly or Smartlead webhooks), an HTML email is sent to agency users via Resend with:
+- **"Reply to Lead"** button — opens Gmail or Outlook compose with pre-filled `To`, `Re: [subject]`, and quoted thread
+- **"View in Dashboard"** button — deep-links to `/admin/clients/[clientId]?lead=[leadId]` to scroll to that specific lead
+
+### Email Compose URL Builders (`src/lib/email/send.ts`)
+- `buildGmailComposeUrl()` — Gmail web compose (`mail.google.com/mail/?view=cm&...`) with nested `>` quoting matching Gmail's native reply format
+- `buildOutlookComposeUrl()` — Outlook web compose (`outlook.office.com/mail/deeplink/compose?...`) with `From/Sent/To/Subject` header blocks
+- `buildReplyUrl()` — constructs `/reply?to=...&gmail=...&outlook=...` smart redirect URL
+- Thread body is truncated to ~1500 chars to stay within URL length limits
+
+### Smart Reply Redirect Page (`/reply`)
+Client-side page that routes users to Gmail or Outlook compose:
+1. First visit: shows choice screen (Gmail vs Outlook)
+2. Saves preference in `localStorage` key `bluereach_email_provider`
+3. Subsequent visits: auto-redirects to saved provider
+4. `?reset` param clears saved preference
+5. "Reset preference" link at bottom of choice screen
+
+### Deep Link to Lead Card (`?lead=` param)
+On `/admin/clients/[clientId]?lead=[leadId]`:
+- Reads `?lead=` param via `window.location.search`
+- Expands the workflow section if collapsed
+- Scrolls to the matching lead card with `scrollIntoView`
+- Applies a temporary green ring highlight for 3 seconds
+
 ## Key Workflows
 
 ### Lead Workflow (Client Dashboard)
@@ -430,6 +458,9 @@ INSTANTLY_WEBHOOK_SECRET=
 
 # Smartlead
 SMARTLEAD_API_KEY=
+
+# Resend (transactional emails)
+RESEND_API_KEY=
 
 # OAuth (configured in Supabase dashboard)
 # Google and Microsoft providers
