@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users, Bell, BarChart3, Send, Zap, Link2, Unlink, FlaskConical, Target, Hash } from "lucide-react";
+import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users, Bell, BarChart3, Send, Zap, Link2, Unlink, Hash } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import Image from "next/image";
+import { createClient } from "@/lib/supabase/client";
 
 interface ClientData {
   id: string;
@@ -66,6 +67,7 @@ export default function ClientSettingsPage() {
   const params = useParams();
   const clientId = params.clientId as string;
 
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [client, setClient] = useState<ClientData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -120,10 +122,6 @@ export default function ClientSettingsPage() {
   const [disconnectingHubspot, setDisconnectingHubspot] = useState(false);
   const [testingHubspot, setTestingHubspot] = useState(false);
 
-  // Demo email tools state
-  const [sendingDemoPositiveReply, setSendingDemoPositiveReply] = useState(false);
-  const [sendingDemoStatsReport, setSendingDemoStatsReport] = useState(false);
-  const [demoEmailRecipient, setDemoEmailRecipient] = useState("");
 
   // HubSpot backfill state
   const [runningBackfill, setRunningBackfill] = useState(false);
@@ -398,39 +396,6 @@ export default function ClientSettingsPage() {
     }
   };
 
-  const sendDemoEmail = async (emailType: "positive_reply" | "stats_report") => {
-    const setLoading = emailType === "positive_reply" ? setSendingDemoPositiveReply : setSendingDemoStatsReport;
-    setLoading(true);
-    setError(null);
-
-    try {
-      const res = await fetch("/api/demo/send-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId,
-          emailType,
-          recipientEmail: demoEmailRecipient || undefined,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        const recipients = data.sentTo?.join(", ") || "configured recipients";
-        setSuccess(`Demo ${emailType === "positive_reply" ? "positive reply" : "stats report"} sent to ${recipients}`);
-        setTimeout(() => setSuccess(null), 5000);
-      } else {
-        setError(data.error || `Failed to send demo ${emailType}`);
-      }
-    } catch (error) {
-      console.error(`Error sending demo ${emailType}:`, error);
-      setError(`Failed to send demo ${emailType}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fetchSlackSettings = async () => {
     setLoadingSlackSettings(true);
     try {
@@ -577,6 +542,16 @@ export default function ClientSettingsPage() {
     fetchHubspotSettings();
     fetchSlackSettings();
     fetchClientCampaigns();
+
+    const checkRole = async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+        setIsAdmin(profile?.role === "admin");
+      }
+    };
+    checkRole();
   }, [clientId]);
 
   const fetchTeamMembers = async () => {
@@ -874,7 +849,7 @@ export default function ClientSettingsPage() {
       )}
 
       {/* Client Logo */}
-      <Card>
+      {isAdmin && <Card>
         <CardHeader>
           <CardTitle>Client Logo</CardTitle>
           <CardDescription>
@@ -940,10 +915,10 @@ export default function ClientSettingsPage() {
             </div>
           </div>
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Client Details */}
-      <Card>
+      {isAdmin && <Card>
         <CardHeader>
           <CardTitle>Client Details</CardTitle>
           <CardDescription>
@@ -982,10 +957,10 @@ export default function ClientSettingsPage() {
             />
           </div>
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Client Intelligence */}
-      <Card>
+      {isAdmin && <Card>
         <CardHeader>
           <CardTitle>Client Intelligence</CardTitle>
           <CardDescription>
@@ -1078,7 +1053,7 @@ export default function ClientSettingsPage() {
             </div>
           </div>
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Team Access */}
       <Card>
@@ -1574,90 +1549,8 @@ export default function ClientSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Demo Email Tools */}
-      <Card className="border-purple-200 dark:border-purple-800">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FlaskConical className="h-5 w-5 text-purple-500" />
-            Demo Email Tools
-          </CardTitle>
-          <CardDescription>
-            Send sample notification emails with fake data for demos and testing
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="demoRecipient">Custom Recipient (optional)</Label>
-            <Input
-              id="demoRecipient"
-              type="email"
-              value={demoEmailRecipient}
-              onChange={(e) => setDemoEmailRecipient(e.target.value)}
-              placeholder="Leave empty to use configured notification recipients"
-            />
-            <p className="text-xs text-muted-foreground">
-              Override the recipient for demo emails. If empty, emails go to enabled notification recipients.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 pt-2">
-            <div className="space-y-2 p-4 rounded-lg border bg-muted/30">
-              <div className="flex items-center gap-2">
-                <Target className="h-4 w-4 text-green-500" />
-                <span className="font-medium text-sm">Positive Reply</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Sample notification with fake lead data showing an interested reply.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => sendDemoEmail("positive_reply")}
-                disabled={sendingDemoPositiveReply}
-                className="w-full mt-2"
-              >
-                {sendingDemoPositiveReply ? (
-                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Send className="h-4 w-4 mr-2" />
-                )}
-                Send Demo
-              </Button>
-            </div>
-
-            <div className="space-y-2 p-4 rounded-lg border bg-muted/30">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="h-4 w-4 text-blue-500" />
-                <span className="font-medium text-sm">Stats Report</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Sample weekly report with fake performance metrics.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => sendDemoEmail("stats_report")}
-                disabled={sendingDemoStatsReport}
-                className="w-full mt-2"
-              >
-                {sendingDemoStatsReport ? (
-                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Send className="h-4 w-4 mr-2" />
-                )}
-                Send Demo
-              </Button>
-            </div>
-          </div>
-
-          <p className="text-xs text-muted-foreground text-center pt-2 border-t">
-            Demo emails use {client?.name || "this client"}&apos;s name but with sample lead/stats data.
-          </p>
-        </CardContent>
-      </Card>
-
       {/* HubSpot CRM Sync */}
-      <Card>
+      {isAdmin && <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Zap className="h-5 w-5" />
@@ -1891,15 +1784,17 @@ export default function ClientSettingsPage() {
             </>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Save Button */}
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving}>
-          <Save className="h-4 w-4 mr-2" />
-          {saving ? "Saving..." : "Save Settings"}
-        </Button>
-      </div>
+      {isAdmin && (
+        <div className="flex justify-end">
+          <Button onClick={handleSave} disabled={saving}>
+            <Save className="h-4 w-4 mr-2" />
+            {saving ? "Saving..." : "Save Settings"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
