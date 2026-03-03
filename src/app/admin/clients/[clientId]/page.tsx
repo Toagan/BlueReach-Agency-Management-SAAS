@@ -418,20 +418,36 @@ export default function ClientDashboardPage() {
 
     // Only quote the most recent email — its body already contains
     // the full conversation history nested inside (like a real reply).
-    let body = "\n\n";
-    if (emails.length > 0) {
-      const lastEmail = emails[emails.length - 1];
-      const emailBody = lastEmail.body_text || (lastEmail.body_html ? stripHtml(lastEmail.body_html) : "(No content)");
-      const date = lastEmail.sent_at ? new Date(lastEmail.sent_at).toLocaleString("en-US", {
-        weekday: "short", month: "short", day: "numeric", year: "numeric",
-        hour: "numeric", minute: "2-digit", hour12: true,
-      }) : "";
-      body += `On ${date}, ${lastEmail.from_email} wrote:\n${emailBody}\n`;
-    }
-    if (body.length > 1500) body = body.slice(0, 1500) + "\n[Thread truncated]";
+    const lastEmail = emails.length > 0 ? emails[emails.length - 1] : null;
+    const emailBody = lastEmail
+      ? (lastEmail.body_text || (lastEmail.body_html ? stripHtml(lastEmail.body_html) : ""))
+      : "";
 
-    const gmailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(lead.email)}&su=${encodeURIComponent(replySubject)}&body=${encodeURIComponent(body)}`;
-    const outlookUrl = `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(lead.email)}&subject=${encodeURIComponent(replySubject)}&body=${encodeURIComponent(body)}`;
+    // Gmail format: "On Mon, 2 Mar 2026 at 23:16, Name <email> wrote:"
+    let gmailBody = "\n\n";
+    if (lastEmail) {
+      const d = new Date(lastEmail.sent_at || "");
+      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      const senderName = lastEmail.from_email.split("@")[0];
+      gmailBody += `On ${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} at ${time}, ${senderName} <${lastEmail.from_email}> wrote:\n${emailBody}\n`;
+    }
+    if (gmailBody.length > 1500) gmailBody = gmailBody.slice(0, 1500) + "\n[Thread truncated]";
+
+    // Outlook format: "________\nFrom: Name <email>\nSent: DD Month YYYY HH:MM\n..."
+    let outlookBody = "\n\n";
+    if (lastEmail) {
+      const d = new Date(lastEmail.sent_at || "");
+      const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      const senderName = lastEmail.from_email.split("@")[0];
+      outlookBody += `________________________________________\nFrom: ${senderName} <${lastEmail.from_email}>\nSent: ${String(d.getDate()).padStart(2, "0")} ${months[d.getMonth()]} ${d.getFullYear()} ${time}\nTo: ${lead.email}\nSubject: ${replySubject}\n\n${emailBody}\n`;
+    }
+    if (outlookBody.length > 1500) outlookBody = outlookBody.slice(0, 1500) + "\n[Thread truncated]";
+
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(lead.email)}&su=${encodeURIComponent(replySubject)}&body=${encodeURIComponent(gmailBody)}`;
+    const outlookUrl = `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(lead.email)}&subject=${encodeURIComponent(replySubject)}&body=${encodeURIComponent(outlookBody)}`;
 
     const base = typeof window !== "undefined" ? window.location.origin : "";
     return `${base}/reply?to=${encodeURIComponent(lead.email)}&gmail=${encodeURIComponent(gmailUrl)}&outlook=${encodeURIComponent(outlookUrl)}`;

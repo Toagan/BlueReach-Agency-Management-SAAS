@@ -249,15 +249,11 @@ function getSenderName(email: EmailThreadMessage, leadName?: string): string {
 /**
  * Gmail compose URL — opens Gmail web/app on mobile.
  *
- * Builds the full thread in Gmail's native quoted-reply format:
- * each message is nested one level deeper with > prefixes,
- * exactly as it would appear if you hit Reply in Gmail.
+ * Only quotes the most recent email (its body already contains the full
+ * nested conversation). Uses Gmail's native attribution format:
  *
- *   On Tue, Mar 3, 2026 at 4:51 PM Max Mustermann <max@example.de> wrote:
- *   > Their reply text...
- *   >
- *   > On Sat, Feb 28, 2026 at 5:38 PM tilman@blue-reach.com wrote:
- *   >> Original outbound text...
+ *   On Mon, 2 Mar 2026 at 23:16, Name <email> wrote:
+ *   [body with nested quotes already inside]
  */
 function buildGmailComposeUrl(params: ComposeUrlParams): string {
   const subject = getReplySubject(params);
@@ -265,37 +261,13 @@ function buildGmailComposeUrl(params: ComposeUrlParams): string {
 
   let body = "\n\n";
   if (thread && thread.length > 0) {
-    // Build from the bottom up: the earliest message is the most deeply nested.
-    // Walk the thread in reverse to build nested quoting.
-    let quoted = "";
-    for (let i = 0; i < thread.length; i++) {
-      const email = thread[i];
-      const d = new Date(email.sent_at);
-      const { h12, minutes, ampm } = formatTime12h(d);
-      const name = getSenderName(email, params.leadName);
+    const lastEmail = thread[thread.length - 1];
+    const d = new Date(lastEmail.sent_at);
+    const name = getSenderName(lastEmail, params.leadName);
+    const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
-      const attribution = `On ${DAY_SHORT[d.getDay()]}, ${MONTH_SHORT[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} at ${h12}:${minutes} ${ampm} ${name} <${email.from_email}> wrote:`;
-      const msgBody = getMessageBody(email);
-
-      // The depth for message i is (thread.length - i):
-      // last message = depth 1 (>), second-to-last = depth 2 (>>), etc.
-      const depth = thread.length - i;
-      const prefix = "> ".repeat(depth);
-      const attrPrefix = depth > 1 ? "> ".repeat(depth - 1) : "";
-
-      // Build this message's block: attribution line + quoted body
-      const quotedLines = msgBody.split("\n").map(line => `${prefix}${line}`).join("\n");
-
-      if (i === 0) {
-        // Deepest / earliest message — just the attribution + quoted body
-        quoted = `${attrPrefix}${attribution}\n${quotedLines}`;
-      } else {
-        // Append previous (deeper) content after this message's body
-        quoted = `${attrPrefix}${attribution}\n${quotedLines}\n${attrPrefix}>\n${quoted}`;
-      }
-    }
-
-    body += quoted + "\n";
+    const attribution = `On ${DAY_SHORT[d.getDay()]}, ${d.getDate()} ${MONTH_SHORT[d.getMonth()]} ${d.getFullYear()} at ${time}, ${name} <${lastEmail.from_email}> wrote:`;
+    body += `${attribution}\n${getMessageBody(lastEmail)}\n`;
   }
 
   body = truncateBody(body);
@@ -306,22 +278,16 @@ function buildGmailComposeUrl(params: ComposeUrlParams): string {
 /**
  * Outlook compose URL — opens Outlook web/app on mobile.
  *
- * Builds the full thread in Outlook's native format:
- * each message gets a separator + From/Sent/To/Subject header block,
- * body is unquoted, and earlier messages appear below.
+ * Only quotes the most recent email (its body already contains the full
+ * nested conversation). Uses Outlook's native format:
  *
- *   ________________________________
- *   From: Max Mustermann <max@example.de>
- *   Sent: Tuesday, March 3, 2026 4:51 PM
- *   To: tilman@blue-reach.com
+ *   ________________________________________
+ *   From: Name <email>
+ *   Sent: 03 March 2026 17:51
+ *   To: recipient <email>
  *   Subject: Re: ...
  *
- *   Their reply text...
- *
- *   ________________________________
- *   From: tilman@blue-reach.com
- *   Sent: Saturday, February 28, 2026 5:38 PM
- *   ...
+ *   [body with nested quotes already inside]
  */
 function buildOutlookComposeUrl(params: ComposeUrlParams): string {
   const subject = getReplySubject(params);
@@ -329,23 +295,19 @@ function buildOutlookComposeUrl(params: ComposeUrlParams): string {
 
   let body = "\n\n";
   if (thread && thread.length > 0) {
-    // Walk thread from newest to oldest (reverse chronological)
-    for (let i = thread.length - 1; i >= 0; i--) {
-      const email = thread[i];
-      const d = new Date(email.sent_at);
-      const { h12, minutes, ampm } = formatTime12h(d);
-      const name = getSenderName(email, params.leadName);
-      const toEmail = email.to_email || "";
-      const msgSubject = email.subject || subject;
+    const lastEmail = thread[thread.length - 1];
+    const d = new Date(lastEmail.sent_at);
+    const name = getSenderName(lastEmail, params.leadName);
+    const toEmail = lastEmail.to_email || params.leadEmail;
+    const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
-      body += "________________________________\n";
-      body += `From: ${name} <${email.from_email}>\n`;
-      body += `Sent: ${DAY_FULL[d.getDay()]}, ${MONTH_FULL[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} ${h12}:${minutes} ${ampm}\n`;
-      body += `To: ${toEmail}\n`;
-      body += `Subject: ${msgSubject}\n\n`;
-      body += getMessageBody(email);
-      body += "\n\n";
-    }
+    body += "________________________________________\n";
+    body += `From: ${name} <${lastEmail.from_email}>\n`;
+    body += `Sent: ${String(d.getDate()).padStart(2, "0")} ${MONTH_FULL[d.getMonth()]} ${d.getFullYear()} ${time}\n`;
+    body += `To: ${toEmail}\n`;
+    body += `Subject: ${lastEmail.subject || subject}\n\n`;
+    body += getMessageBody(lastEmail);
+    body += "\n";
   }
 
   body = truncateBody(body);
