@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Subscription, BillingCycle } from "@/types/database";
-import { requirePlatformAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -12,15 +12,17 @@ function getSupabase() {
 
 // GET - List all subscriptions
 export async function GET() {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
     const supabase = getSupabase();
+    const ownerId = await getEffectiveOwnerId(auth);
 
     const { data: subscriptions, error } = await supabase
       .from("subscriptions")
       .select("*")
+      .eq("owner_id", ownerId)
       .order("name");
 
     if (error) {
@@ -43,11 +45,12 @@ export async function GET() {
 
 // POST - Create a new subscription
 export async function POST(request: Request) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
     const body = await request.json();
+    const ownerId = await getEffectiveOwnerId(auth);
     const {
       name,
       url,
@@ -73,8 +76,9 @@ export async function POST(request: Request) {
 
     const supabase = getSupabase();
 
-    const insertData: Partial<Subscription> = {
+    const insertData: Partial<Subscription> & { owner_id: string } = {
       name: name.trim(),
+      owner_id: ownerId,
       url: url?.trim() || null,
       username: username?.trim() || null,
       password: password || null,

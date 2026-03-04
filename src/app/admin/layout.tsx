@@ -1,8 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { isSuperAdmin, getUserSubscription } from "@/lib/stripe/helpers";
+import { getImpersonatedOwnerId } from "@/lib/impersonation";
+import { ImpersonationBanner } from "@/components/admin/impersonation-banner";
 
 export default async function AdminLayout({
   children,
@@ -35,6 +38,27 @@ export default async function AdminLayout({
     subscription = await getUserSubscription(user.id);
   }
 
+  // Check impersonation state
+  let impersonatedOwner: { name: string; email: string } | null = null;
+  const impersonatedId = await getImpersonatedOwnerId();
+  if (impersonatedId && profile?.role === "admin") {
+    const serviceSupabase = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const { data: ownerProfile } = await serviceSupabase
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", impersonatedId)
+      .single();
+    if (ownerProfile) {
+      impersonatedOwner = {
+        name: ownerProfile.full_name || "",
+        email: ownerProfile.email || "",
+      };
+    }
+  }
+
   const isTrialing = subscription?.status === "trialing";
   const isPastDue = subscription?.status === "past_due";
   const trialEnd = subscription?.trial_end
@@ -49,6 +73,13 @@ export default async function AdminLayout({
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Impersonation banner */}
+      {impersonatedOwner && (
+        <ImpersonationBanner
+          ownerName={impersonatedOwner.name}
+          ownerEmail={impersonatedOwner.email}
+        />
+      )}
       {/* Subscription banners */}
       {isTrialing && trialDaysLeft > 0 && (
         <div className="bg-blue-500/10 border-b border-blue-500/20 px-4 py-2 text-center">

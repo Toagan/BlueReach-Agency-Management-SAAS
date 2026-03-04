@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requirePlatformAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -11,7 +11,7 @@ function getSupabase() {
 
 // GET - Get health history for account(s)
 export async function GET(request: NextRequest) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
@@ -26,9 +26,23 @@ export async function GET(request: NextRequest) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
+    const ownerId = await getEffectiveOwnerId(auth);
+
+    // Get owner's account IDs for scoping
+    const { data: ownerAccounts } = await supabase
+      .from("email_accounts")
+      .select("id")
+      .eq("owner_id", ownerId);
+    const ownerAccountIds = ownerAccounts?.map(a => a.id) || [];
+
+    if (ownerAccountIds.length === 0) {
+      return NextResponse.json({ history: [], start_date: startDate.toISOString().split("T")[0], end_date: endDate.toISOString().split("T")[0] });
+    }
+
     let query = supabase
       .from("email_account_health_history")
       .select("*, email_accounts(email, provider_type)")
+      .in("email_account_id", ownerAccountIds)
       .gte("snapshot_date", startDate.toISOString().split("T")[0])
       .lte("snapshot_date", endDate.toISOString().split("T")[0])
       .order("snapshot_date", { ascending: true });
@@ -59,7 +73,7 @@ export async function GET(request: NextRequest) {
 
 // POST - Create daily snapshot for all accounts
 export async function POST() {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
@@ -134,7 +148,7 @@ export async function POST() {
 
 // DELETE - Clean up old history (retention policy)
 export async function DELETE(request: NextRequest) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {

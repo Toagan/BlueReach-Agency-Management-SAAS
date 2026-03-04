@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -17,18 +17,14 @@ export async function GET() {
   const supabase = getSupabase();
 
   try {
-    // For regular admins, only show their own profile
-    // For platform admins, show all profiles
-    let profilesQuery = supabase
+    const ownerId = await getEffectiveOwnerId(auth);
+
+    // Show the effective owner's profile
+    const { data: profiles, error: profilesError } = await supabase
       .from("profiles")
       .select("id, email, full_name, role")
+      .eq("id", ownerId)
       .order("email");
-
-    if (!auth.isPlatformAdmin) {
-      profilesQuery = profilesQuery.eq("id", auth.user.id);
-    }
-
-    const { data: profiles, error: profilesError } = await profilesQuery;
 
     if (profilesError) {
       console.error("Error fetching profiles:", profilesError);
@@ -40,7 +36,7 @@ export async function GET() {
       .from("settings")
       .select("value")
       .eq("key", "positive_reply_notification_users")
-      .eq("owner_id", auth.user.id)
+      .eq("owner_id", ownerId)
       .single();
 
     // Parse the preferences (stored as JSON array of user IDs)
@@ -87,6 +83,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { userId, enabled } = body;
+    const ownerId = await getEffectiveOwnerId(auth);
 
     if (!userId || typeof enabled !== "boolean") {
       return NextResponse.json(
@@ -100,7 +97,7 @@ export async function POST(request: Request) {
       .from("settings")
       .select("value")
       .eq("key", "positive_reply_notification_users")
-      .eq("owner_id", auth.user.id)
+      .eq("owner_id", ownerId)
       .single();
 
     let enabledUserIds: string[] = [];
@@ -124,7 +121,7 @@ export async function POST(request: Request) {
       .from("settings")
       .select("id")
       .eq("key", "positive_reply_notification_users")
-      .eq("owner_id", auth.user.id)
+      .eq("owner_id", ownerId)
       .single();
 
     if (existing) {
@@ -135,7 +132,7 @@ export async function POST(request: Request) {
           updated_at: new Date().toISOString(),
         })
         .eq("key", "positive_reply_notification_users")
-        .eq("owner_id", auth.user.id);
+        .eq("owner_id", ownerId);
 
       if (updateError) {
         console.error("Error saving preferences:", updateError);
@@ -147,7 +144,7 @@ export async function POST(request: Request) {
         .insert({
           key: "positive_reply_notification_users",
           value: JSON.stringify(enabledUserIds),
-          owner_id: auth.user.id,
+          owner_id: ownerId,
           is_encrypted: false,
           updated_at: new Date().toISOString(),
         });

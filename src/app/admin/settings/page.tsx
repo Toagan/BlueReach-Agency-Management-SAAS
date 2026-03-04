@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Key, Shield, Check, X, RefreshCw, Eye, EyeOff, Upload, ArrowLeft, Image as ImageIcon, Building2, Palette, Mail, Bell, Users } from "lucide-react";
+import { Settings, Key, Shield, Check, X, RefreshCw, Eye, EyeOff, Upload, ArrowLeft, Image as ImageIcon, Building2, Palette, Mail, Bell, Users, Globe } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
 import Image from "next/image";
@@ -25,6 +25,14 @@ interface NotificationUser {
   name: string;
   role: string;
   notificationsEnabled: boolean;
+}
+
+interface Agency {
+  id: string;
+  email: string;
+  name: string;
+  clientCount: number;
+  createdAt: string;
 }
 
 export default function SettingsPage() {
@@ -52,6 +60,12 @@ export default function SettingsPage() {
   const [senderName, setSenderName] = useState("");
   const [senderEmail, setSenderEmail] = useState("");
   const [savingBranding, setSavingBranding] = useState(false);
+
+  // Agency owners state (platform admin only)
+  const [agencies, setAgencies] = useState<Agency[]>([]);
+  const [loadingAgencies, setLoadingAgencies] = useState(true);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [viewingAs, setViewingAs] = useState<string | null>(null);
 
   // Notification preferences state
   const [notificationUsers, setNotificationUsers] = useState<NotificationUser[]>([]);
@@ -113,6 +127,46 @@ export default function SettingsPage() {
     }
   };
 
+  const fetchAgencies = async () => {
+    setLoadingAgencies(true);
+    try {
+      const res = await fetch("/api/admin/agencies");
+      if (res.ok) {
+        const data = await res.json();
+        setAgencies(data.agencies || []);
+        setIsPlatformAdmin(true);
+      } else if (res.status === 403) {
+        // Not a platform admin, that's fine
+        setIsPlatformAdmin(false);
+      }
+    } catch (error) {
+      console.error("Error fetching agencies:", error);
+    } finally {
+      setLoadingAgencies(false);
+    }
+  };
+
+  const handleViewDashboard = async (ownerId: string) => {
+    setViewingAs(ownerId);
+    try {
+      const res = await fetch("/api/admin/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ownerId }),
+      });
+      if (res.ok) {
+        window.location.href = "/admin";
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to start impersonation");
+        setViewingAs(null);
+      }
+    } catch (error) {
+      console.error("Error starting impersonation:", error);
+      setViewingAs(null);
+    }
+  };
+
   const fetchNotificationPreferences = async () => {
     setLoadingNotifications(true);
     try {
@@ -153,6 +207,7 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchSettings();
     fetchNotificationPreferences();
+    fetchAgencies();
   }, []);
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -313,6 +368,71 @@ export default function SettingsPage() {
         </h1>
         <p className="text-gray-500">Configure your agency branding and integrations</p>
       </div>
+
+      {/* Agency Owners (platform admin only) */}
+      {isPlatformAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5" />
+              Agency Owners
+            </CardTitle>
+            <CardDescription>
+              View and manage agency owners on the platform. Click &quot;View Dashboard&quot; to see
+              the platform as that agency.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingAgencies ? (
+              <div className="flex items-center justify-center py-8">
+                <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
+              </div>
+            ) : agencies.length === 0 ? (
+              <p className="text-sm text-gray-500 py-4">No other agency owners yet</p>
+            ) : (
+              <div className="space-y-3">
+                {agencies.map((agency) => (
+                  <div
+                    key={agency.id}
+                    className="flex items-center justify-between py-3 px-4 rounded-lg border bg-gray-50 dark:bg-gray-900"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                        <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">
+                          {agency.name || agency.email}
+                        </p>
+                        <p className="text-sm text-muted-foreground">{agency.email}</p>
+                      </div>
+                      <Badge variant="secondary" className="ml-2">
+                        {agency.clientCount} {agency.clientCount === 1 ? "client" : "clients"}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        Joined {new Date(agency.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleViewDashboard(agency.id)}
+                      disabled={viewingAs === agency.id}
+                    >
+                      {viewingAs === agency.id ? (
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Eye className="h-4 w-4 mr-2" />
+                      )}
+                      View Dashboard
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Agency Logo */}
       <Card>

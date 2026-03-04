@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -65,40 +65,38 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabase();
     const dateRange = getDateRange(period);
 
-    // Get owner's campaign IDs for scoping (platform admin sees all)
-    let ownerCampaignIds: string[] | null = null;
-    if (!auth.isPlatformAdmin) {
-      const { data: ownerClients } = await supabase
-        .from("clients")
-        .select("id")
-        .eq("owner_id", auth.user.id);
-      const clientIds = ownerClients?.map(c => c.id) || [];
+    // Get effective owner's campaign IDs for scoping (always scoped)
+    const ownerId = await getEffectiveOwnerId(auth);
+    const { data: ownerClients } = await supabase
+      .from("clients")
+      .select("id")
+      .eq("owner_id", ownerId);
+    const clientIds = ownerClients?.map(c => c.id) || [];
 
-      if (clientIds.length === 0) {
-        return NextResponse.json({
-          period,
-          start_date: dateRange?.startDate.toISOString().split("T")[0] || null,
-          end_date: dateRange?.endDate.toISOString().split("T")[0] || null,
-          leads_contacted: 0, emails_sent: 0, emails_opened: 0, emails_clicked: 0,
-          bounced: 0, replies: 0, opportunities: 0, reply_rate: 0, data_source: "empty",
-        });
-      }
+    if (clientIds.length === 0) {
+      return NextResponse.json({
+        period,
+        start_date: dateRange?.startDate.toISOString().split("T")[0] || null,
+        end_date: dateRange?.endDate.toISOString().split("T")[0] || null,
+        leads_contacted: 0, emails_sent: 0, emails_opened: 0, emails_clicked: 0,
+        bounced: 0, replies: 0, opportunities: 0, reply_rate: 0, data_source: "empty",
+      });
+    }
 
-      const { data: ownerCampaigns } = await supabase
-        .from("campaigns")
-        .select("id")
-        .in("client_id", clientIds);
-      ownerCampaignIds = ownerCampaigns?.map(c => c.id) || [];
+    const { data: ownerCampaigns } = await supabase
+      .from("campaigns")
+      .select("id")
+      .in("client_id", clientIds);
+    const ownerCampaignIds = ownerCampaigns?.map(c => c.id) || [];
 
-      if (ownerCampaignIds.length === 0) {
-        return NextResponse.json({
-          period,
-          start_date: dateRange?.startDate.toISOString().split("T")[0] || null,
-          end_date: dateRange?.endDate.toISOString().split("T")[0] || null,
-          leads_contacted: 0, emails_sent: 0, emails_opened: 0, emails_clicked: 0,
-          bounced: 0, replies: 0, opportunities: 0, reply_rate: 0, data_source: "empty",
-        });
-      }
+    if (ownerCampaignIds.length === 0) {
+      return NextResponse.json({
+        period,
+        start_date: dateRange?.startDate.toISOString().split("T")[0] || null,
+        end_date: dateRange?.endDate.toISOString().split("T")[0] || null,
+        leads_contacted: 0, emails_sent: 0, emails_opened: 0, emails_clicked: 0,
+        bounced: 0, replies: 0, opportunities: 0, reply_rate: 0, data_source: "empty",
+      });
     }
 
     let emailsSent = 0;
@@ -121,9 +119,7 @@ export async function GET(request: NextRequest) {
         .gte("snapshot_date", startDateStr)
         .lte("snapshot_date", endDateStr);
 
-      if (ownerCampaignIds !== null) {
-        dailyQuery = dailyQuery.in("campaign_id", ownerCampaignIds);
-      }
+      dailyQuery = dailyQuery.in("campaign_id", ownerCampaignIds);
 
       const { data: dailyStats, error: dailyError } = await dailyQuery;
 
@@ -142,11 +138,9 @@ export async function GET(request: NextRequest) {
           .gte("created_at", dateRange.startDate.toISOString())
           .lte("created_at", dateRange.endDate.toISOString());
 
-        if (ownerCampaignIds !== null) {
-          leadsQuery = leadsQuery.in("campaign_id", ownerCampaignIds);
-          repliesQuery = repliesQuery.in("campaign_id", ownerCampaignIds);
-          positiveQuery = positiveQuery.in("campaign_id", ownerCampaignIds);
-        }
+        leadsQuery = leadsQuery.in("campaign_id", ownerCampaignIds);
+        repliesQuery = repliesQuery.in("campaign_id", ownerCampaignIds);
+        positiveQuery = positiveQuery.in("campaign_id", ownerCampaignIds);
 
         const [l, r, p] = await Promise.all([leadsQuery, repliesQuery, positiveQuery]);
         leadsContacted = l.count || 0;
@@ -176,11 +170,9 @@ export async function GET(request: NextRequest) {
           .gte("created_at", dateRange.startDate.toISOString())
           .lte("created_at", dateRange.endDate.toISOString());
 
-        if (ownerCampaignIds !== null) {
-          leadsQuery = leadsQuery.in("campaign_id", ownerCampaignIds);
-          repliesQuery = repliesQuery.in("campaign_id", ownerCampaignIds);
-          positiveQuery = positiveQuery.in("campaign_id", ownerCampaignIds);
-        }
+        leadsQuery = leadsQuery.in("campaign_id", ownerCampaignIds);
+        repliesQuery = repliesQuery.in("campaign_id", ownerCampaignIds);
+        positiveQuery = positiveQuery.in("campaign_id", ownerCampaignIds);
 
         const [l, r, p] = await Promise.all([leadsQuery, repliesQuery, positiveQuery]);
         leadsContacted = l.count || 0;
@@ -196,12 +188,10 @@ export async function GET(request: NextRequest) {
       let positiveQuery = supabase.from("leads").select("*", { count: "exact", head: true }).eq("is_positive_reply", true);
       let campaignsQuery = supabase.from("campaigns").select("cached_emails_sent, cached_emails_opened, cached_emails_bounced");
 
-      if (ownerCampaignIds !== null) {
-        leadsQuery = leadsQuery.in("campaign_id", ownerCampaignIds);
-        repliesQuery = repliesQuery.in("campaign_id", ownerCampaignIds);
-        positiveQuery = positiveQuery.in("campaign_id", ownerCampaignIds);
-        campaignsQuery = campaignsQuery.in("id", ownerCampaignIds);
-      }
+      leadsQuery = leadsQuery.in("campaign_id", ownerCampaignIds);
+      repliesQuery = repliesQuery.in("campaign_id", ownerCampaignIds);
+      positiveQuery = positiveQuery.in("campaign_id", ownerCampaignIds);
+      campaignsQuery = campaignsQuery.in("id", ownerCampaignIds);
 
       const [leadsCountResult, repliesResult, positiveResult, campaignsResult] = await Promise.all([
         leadsQuery, repliesQuery, positiveQuery, campaignsQuery,

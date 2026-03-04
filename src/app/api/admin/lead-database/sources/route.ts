@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requirePlatformAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -11,11 +11,12 @@ function getSupabase() {
 
 // GET: List all lead sources
 export async function GET(request: NextRequest) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
     const supabase = getSupabase();
+    const ownerId = await getEffectiveOwnerId(auth);
     const searchParams = request.nextUrl.searchParams;
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
@@ -23,6 +24,7 @@ export async function GET(request: NextRequest) {
     const { data: sources, error, count } = await supabase
       .from("lead_sources")
       .select("*", { count: "exact" })
+      .eq("owner_id", ownerId)
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -46,11 +48,12 @@ export async function GET(request: NextRequest) {
 
 // POST: Create a new lead source (upload batch)
 export async function POST(request: NextRequest) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
     const supabase = getSupabase();
+    const ownerId = await getEffectiveOwnerId(auth);
     const body = await request.json();
 
     const {
@@ -86,6 +89,7 @@ export async function POST(request: NextRequest) {
         tags: tags || [],
         notes,
         custom_fields: custom_fields || {},
+        owner_id: ownerId,
       })
       .select()
       .single();

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 const NOTES_KEY = "admin_notes_content";
 
@@ -18,12 +18,13 @@ export async function GET() {
 
   try {
     const supabase = getSupabase();
+    const ownerId = await getEffectiveOwnerId(auth);
 
     const { data, error } = await supabase
       .from("settings")
       .select("value, updated_at")
       .eq("key", NOTES_KEY)
-      .eq("owner_id", auth.user.id)
+      .eq("owner_id", ownerId)
       .single();
 
     if (error && error.code !== "PGRST116") {
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
 
   try {
     const supabase = getSupabase();
+    const ownerId = await getEffectiveOwnerId(auth);
     const body = await request.json();
     const { content } = body;
 
@@ -59,7 +61,7 @@ export async function POST(request: Request) {
       .from("settings")
       .select("id")
       .eq("key", NOTES_KEY)
-      .eq("owner_id", auth.user.id)
+      .eq("owner_id", ownerId)
       .single();
 
     const now = new Date().toISOString();
@@ -73,7 +75,7 @@ export async function POST(request: Request) {
           updated_at: now,
         })
         .eq("key", NOTES_KEY)
-        .eq("owner_id", auth.user.id);
+        .eq("owner_id", ownerId);
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
@@ -83,7 +85,7 @@ export async function POST(request: Request) {
       const { error } = await supabase.from("settings").insert({
         key: NOTES_KEY,
         value: content || "",
-        owner_id: auth.user.id,
+        owner_id: ownerId,
         is_encrypted: false,
       });
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requirePlatformAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -116,17 +116,19 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
     const { id } = await params;
     const supabase = getSupabase();
+    const ownerId = await getEffectiveOwnerId(auth);
 
     const { data: subscription, error: fetchError } = await supabase
       .from("subscriptions")
       .select("*")
       .eq("id", id)
+      .eq("owner_id", ownerId)
       .single();
 
     if (fetchError || !subscription) {

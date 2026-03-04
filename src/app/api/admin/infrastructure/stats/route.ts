@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requirePlatformAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -10,16 +10,18 @@ function getSupabase() {
 }
 
 export async function GET() {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
     const supabase = getSupabase();
+    const ownerId = await getEffectiveOwnerId(auth);
 
-    // Get account statistics
+    // Get account statistics scoped by owner
     const { data: accounts, error: accountsError } = await supabase
       .from("email_accounts")
-      .select("id, provider_type, status, warmup_reputation, client_id, domain");
+      .select("id, provider_type, status, warmup_reputation, client_id, domain")
+      .eq("owner_id", ownerId);
 
     if (accountsError) {
       throw accountsError;

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getServerUrl } from "@/utils/get-url";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 // Create a Supabase client with service role for admin operations
 function getServiceSupabase() {
@@ -52,7 +52,8 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!auth.isPlatformAdmin && client.owner_id !== auth.user.id) {
+    const ownerId = await getEffectiveOwnerId(auth);
+    if (client.owner_id !== ownerId) {
       return NextResponse.json(
         { error: "Access denied to this client" },
         { status: 403 }
@@ -176,20 +177,19 @@ export async function GET(request: Request) {
       );
     }
 
-    // Verify the admin owns this client (or is platform admin)
-    if (!auth.isPlatformAdmin) {
-      const { data: client } = await serviceSupabase
-        .from("clients")
-        .select("owner_id")
-        .eq("id", clientId)
-        .single();
+    // Verify the admin owns this client
+    const effectiveOwner = await getEffectiveOwnerId(auth);
+    const { data: clientCheck } = await serviceSupabase
+      .from("clients")
+      .select("owner_id")
+      .eq("id", clientId)
+      .single();
 
-      if (!client || client.owner_id !== auth.user.id) {
-        return NextResponse.json(
-          { error: "Access denied to this client" },
-          { status: 403 }
-        );
-      }
+    if (!clientCheck || clientCheck.owner_id !== effectiveOwner) {
+      return NextResponse.json(
+        { error: "Access denied to this client" },
+        { status: 403 }
+      );
     }
 
     const { data: invitations, error } = await serviceSupabase

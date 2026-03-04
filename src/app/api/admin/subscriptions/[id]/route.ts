@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Subscription, BillingCycle } from "@/types/database";
-import { requirePlatformAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -15,17 +15,19 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
     const { id } = await params;
     const supabase = getSupabase();
+    const ownerId = await getEffectiveOwnerId(auth);
 
     const { data: subscription, error } = await supabase
       .from("subscriptions")
       .select("*")
       .eq("id", id)
+      .eq("owner_id", ownerId)
       .single();
 
     if (error) {
@@ -51,12 +53,13 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
     const { id } = await params;
     const body = await request.json();
+    const ownerId = await getEffectiveOwnerId(auth);
     const {
       name,
       url,
@@ -97,6 +100,7 @@ export async function PUT(
       .from("subscriptions")
       .update(updateData)
       .eq("id", id)
+      .eq("owner_id", ownerId)
       .select()
       .single();
 
@@ -123,17 +127,19 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
     const { id } = await params;
     const supabase = getSupabase();
+    const ownerId = await getEffectiveOwnerId(auth);
 
     const { error } = await supabase
       .from("subscriptions")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .eq("owner_id", ownerId);
 
     if (error) {
       console.error("Error deleting subscription:", error);

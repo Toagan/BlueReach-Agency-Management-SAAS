@@ -142,6 +142,7 @@ export interface ClientUser {
 
 export interface LeadSource {
   id: string;
+  owner_id: string;
   name: string;
   file_name: string | null;
   industry: string | null;
@@ -330,6 +331,7 @@ export interface AuditLog {
 
 export interface Subscription {
   id: string;
+  owner_id: string;
   name: string;
   url: string | null;
   username: string | null;
@@ -358,6 +360,7 @@ export type DmarcPolicy = "none" | "quarantine" | "reject";
 
 export interface EmailAccount {
   id: string;
+  owner_id: string;
   provider_type: EmailAccountProvider;
   provider_account_id: string | null;
   email: string;

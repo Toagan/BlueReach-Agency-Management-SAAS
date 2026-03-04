@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { getImpersonatedOwnerId } from "@/lib/impersonation";
 
 /**
  * Get the authenticated user from the request cookies.
@@ -85,6 +86,21 @@ export async function requirePlatformAdmin(): Promise<
 }
 
 /**
+ * Get the effective owner ID for the current request.
+ * If the user is a platform admin and has an impersonation cookie set,
+ * returns the impersonated owner's ID. Otherwise returns the user's own ID.
+ */
+export async function getEffectiveOwnerId(auth: { user: { id: string }; isPlatformAdmin: boolean }): Promise<string> {
+  if (auth.isPlatformAdmin) {
+    const impersonatedId = await getImpersonatedOwnerId();
+    if (impersonatedId) {
+      return impersonatedId;
+    }
+  }
+  return auth.user.id;
+}
+
+/**
  * Require access to a specific client. Admins only see their own clients
  * unless they are platform admins. Client users must have a link in client_users table.
  */
@@ -115,23 +131,21 @@ export async function requireClientAccess(clientId: string): Promise<
   const isPlatformAdmin = profile.is_platform_admin === true;
 
   if (isAdmin) {
-    // Platform admins can access any client
-    if (!isPlatformAdmin) {
-      // Regular admins: verify they own this client
-      const { data: client } = await supabase
-        .from("clients")
-        .select("owner_id")
-        .eq("id", clientId)
-        .single();
+    // All admins: verify they own this client (effective owner handles impersonation)
+    const effectiveOwner = await getEffectiveOwnerId({ user: auth.user, isPlatformAdmin });
+    const { data: client } = await supabase
+      .from("clients")
+      .select("owner_id")
+      .eq("id", clientId)
+      .single();
 
-      if (!client || client.owner_id !== auth.user.id) {
-        return {
-          error: NextResponse.json(
-            { error: "Access denied to this client" },
-            { status: 403 }
-          ),
-        };
-      }
+    if (!client || client.owner_id !== effectiveOwner) {
+      return {
+        error: NextResponse.json(
+          { error: "Access denied to this client" },
+          { status: 403 }
+        ),
+      };
     }
   } else {
     // Client users: check client_users table
@@ -193,22 +207,21 @@ export async function requireCampaignAccess(campaignId: string): Promise<
   const isPlatformAdmin = profile?.is_platform_admin === true;
 
   if (isAdmin) {
-    if (!isPlatformAdmin) {
-      // Regular admins: verify they own the campaign's client
-      const { data: client } = await supabase
-        .from("clients")
-        .select("owner_id")
-        .eq("id", campaign.client_id)
-        .single();
+    // All admins: verify they own the campaign's client (effective owner handles impersonation)
+    const effectiveOwner = await getEffectiveOwnerId({ user: auth.user, isPlatformAdmin });
+    const { data: client } = await supabase
+      .from("clients")
+      .select("owner_id")
+      .eq("id", campaign.client_id)
+      .single();
 
-      if (!client || client.owner_id !== auth.user.id) {
-        return {
-          error: NextResponse.json(
-            { error: "Access denied to this campaign" },
-            { status: 403 }
-          ),
-        };
-      }
+    if (!client || client.owner_id !== effectiveOwner) {
+      return {
+        error: NextResponse.json(
+          { error: "Access denied to this campaign" },
+          { status: 403 }
+        ),
+      };
     }
   } else {
     const { data: clientAccess } = await supabase

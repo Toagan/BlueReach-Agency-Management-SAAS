@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -17,16 +17,13 @@ export async function GET() {
   try {
     const supabase = getSupabase();
 
-    let query = supabase
+    const ownerId = await getEffectiveOwnerId(auth);
+
+    const { data: settings, error } = await supabase
       .from("settings")
       .select("key, value, is_encrypted, updated_at")
+      .eq("owner_id", ownerId)
       .order("key");
-
-    if (!auth.isPlatformAdmin) {
-      query = query.eq("owner_id", auth.user.id);
-    }
-
-    const { data: settings, error } = await query;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -68,12 +65,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Key is required" }, { status: 400 });
     }
 
+    const ownerId = await getEffectiveOwnerId(auth);
+
     // Check if setting exists for this owner
     const { data: existing } = await supabase
       .from("settings")
       .select("id")
       .eq("key", key)
-      .eq("owner_id", auth.user.id)
+      .eq("owner_id", ownerId)
       .single();
 
     if (existing) {
@@ -85,7 +84,7 @@ export async function POST(request: Request) {
           updated_at: new Date().toISOString(),
         })
         .eq("key", key)
-        .eq("owner_id", auth.user.id);
+        .eq("owner_id", ownerId);
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
@@ -95,7 +94,7 @@ export async function POST(request: Request) {
       const { error } = await supabase.from("settings").insert({
         key,
         value: value || "",
-        owner_id: auth.user.id,
+        owner_id: ownerId,
         is_encrypted: key.includes("key") || key.includes("secret"),
       });
 
@@ -135,7 +134,7 @@ export async function DELETE(request: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq("key", key)
-      .eq("owner_id", auth.user.id);
+      .eq("owner_id", await getEffectiveOwnerId(auth));
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

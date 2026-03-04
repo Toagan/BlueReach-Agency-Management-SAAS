@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getServiceSupabase() {
   return createClient(
@@ -16,8 +16,10 @@ export async function GET() {
   try {
     const supabase = getServiceSupabase();
 
-    // Fetch clients scoped by owner (platform admin sees all)
-    let query = supabase
+    const ownerId = await getEffectiveOwnerId(auth);
+
+    // Fetch clients scoped by effective owner (always scoped)
+    const { data: clients, error } = await supabase
       .from("clients")
       .select(`
         *,
@@ -27,13 +29,8 @@ export async function GET() {
           is_active
         )
       `)
+      .eq("owner_id", ownerId)
       .order("created_at", { ascending: false });
-
-    if (!auth.isPlatformAdmin) {
-      query = query.eq("owner_id", auth.user.id);
-    }
-
-    const { data: clients, error } = await query;
 
     if (error) {
       console.error("Error fetching clients:", error);
@@ -84,10 +81,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Build insert data with owner_id
+    const ownerId = await getEffectiveOwnerId(auth);
+
+    // Build insert data with effective owner_id
     const insertData: Record<string, string> = {
       name: name.trim(),
-      owner_id: auth.user.id,
+      owner_id: ownerId,
     };
 
     if (instantly_api_key && typeof instantly_api_key === "string") {

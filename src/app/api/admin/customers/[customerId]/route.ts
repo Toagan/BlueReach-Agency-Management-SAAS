@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getServiceSupabase() {
   return createClient(
@@ -9,14 +9,11 @@ function getServiceSupabase() {
   );
 }
 
-/** Verify the current admin owns this client (or is platform admin). */
+/** Verify the effective owner owns this client. */
 async function verifyClientOwnership(
   customerId: string,
-  userId: string,
-  isPlatformAdmin: boolean
+  effectiveOwnerId: string,
 ): Promise<NextResponse | null> {
-  if (isPlatformAdmin) return null; // platform admin can access all
-
   const supabase = getServiceSupabase();
   const { data: client } = await supabase
     .from("clients")
@@ -24,7 +21,7 @@ async function verifyClientOwnership(
     .eq("id", customerId)
     .single();
 
-  if (!client || client.owner_id !== userId) {
+  if (!client || client.owner_id !== effectiveOwnerId) {
     return NextResponse.json({ error: "Access denied to this client" }, { status: 403 });
   }
   return null;
@@ -42,7 +39,8 @@ export async function GET(
     const supabase = getServiceSupabase();
 
     // Verify ownership
-    const denied = await verifyClientOwnership(customerId, auth.user.id, auth.isPlatformAdmin);
+    const ownerId = await getEffectiveOwnerId(auth);
+    const denied = await verifyClientOwnership(customerId, ownerId);
     if (denied) return denied;
 
     const { data: client, error } = await supabase
@@ -80,7 +78,8 @@ export async function PATCH(
     const supabase = getServiceSupabase();
 
     // Verify ownership
-    const denied = await verifyClientOwnership(customerId, auth.user.id, auth.isPlatformAdmin);
+    const ownerId = await getEffectiveOwnerId(auth);
+    const denied = await verifyClientOwnership(customerId, ownerId);
     if (denied) return denied;
 
     const body = await request.json();
@@ -140,7 +139,8 @@ export async function DELETE(
     const serviceSupabase = getServiceSupabase();
 
     // Verify ownership
-    const denied = await verifyClientOwnership(customerId, auth.user.id, auth.isPlatformAdmin);
+    const ownerId = await getEffectiveOwnerId(auth);
+    const denied = await verifyClientOwnership(customerId, ownerId);
     if (denied) return denied;
 
     // Get all users linked to this client

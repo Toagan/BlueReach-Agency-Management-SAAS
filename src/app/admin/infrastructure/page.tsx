@@ -1,35 +1,72 @@
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { redirect } from "next/navigation";
+import { getImpersonatedOwnerId } from "@/lib/impersonation";
 import { InfrastructureView } from "./infrastructure-view";
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
-async function fetchInfrastructureData(params: Record<string, string | string[] | undefined>) {
+function getServiceSupabase() {
+  return createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
+
+async function getEffectiveOwner() {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const serviceSupabase = getServiceSupabase();
+  const { data: profile } = await serviceSupabase
+    .from("profiles")
+    .select("role, is_platform_admin")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || profile.role !== "admin") return null;
+
+  const isPlatformAdmin = profile.is_platform_admin === true;
+  let ownerId = user.id;
+  if (isPlatformAdmin) {
+    const impersonatedId = await getImpersonatedOwnerId();
+    if (impersonatedId) ownerId = impersonatedId;
+  }
+
+  return ownerId;
+}
+
+async function fetchInfrastructureData(params: Record<string, string | string[] | undefined>, ownerId: string) {
+  const supabase = getServiceSupabase();
   const page = Number(params.page) || 1;
   const limit = 20;
   const offset = (page - 1) * limit;
 
-  // Fetch accounts
+  // Fetch accounts scoped by owner
   const { data: accounts, count: totalAccounts } = await supabase
     .from("email_accounts")
     .select("*", { count: "exact" })
+    .eq("owner_id", ownerId)
     .range(offset, offset + limit - 1)
     .order("email");
 
-  // Fetch clients for dropdown
+  // Fetch clients for dropdown scoped by owner
   const { data: clients } = await supabase
     .from("clients")
     .select("id, name, owner_id, created_at")
+    .eq("owner_id", ownerId)
     .eq("is_active", true)
     .order("name");
 
-  // Calculate stats
+  // Calculate stats scoped by owner
   const { data: allAccounts } = await supabase
     .from("email_accounts")
-    .select("status, warmup_reputation, provider_type, client_id");
+    .select("status, warmup_reputation, provider_type, client_id")
+    .eq("owner_id", ownerId);
 
   const byProvider: Record<string, number> = {};
   const byStatus: Record<string, number> = {};
@@ -59,21 +96,26 @@ async function fetchInfrastructureData(params: Record<string, string | string[] 
     domains_issues: 0,
   };
 
-  // Fetch domain health with proper DomainSummary type
+  // Fetch domain health filtered by owner's account domains
   const domains =
     accounts?.map((a) => a.domain).filter((d): d is string => Boolean(d)) || [];
   const uniqueDomains = [...new Set(domains)];
 
-  const { data: domainHealth } = await supabase
-    .from("domain_health")
-    .select("*")
-    .in("domain", uniqueDomains);
+  let domainHealth: typeof domainHealthData = [];
+  let domainHealthData: Array<{ domain: string; health_score: number; [key: string]: unknown }> = [];
+  if (uniqueDomains.length > 0) {
+    const { data } = await supabase
+      .from("domain_health")
+      .select("*")
+      .in("domain", uniqueDomains);
+    domainHealthData = (data || []) as typeof domainHealthData;
+  }
 
   // Build domain summary with proper types
-  const domainSummary = (domainHealth || []).map((health) => ({
+  const domainSummary = domainHealthData.map((health) => ({
     ...health,
     account_count: accounts?.filter((a) => a.domain === health.domain).length || 0,
-    client_count: 0, // Would need separate query to calculate
+    client_count: 0,
   }));
 
   // Update stats with domain health info
@@ -92,12 +134,17 @@ async function fetchInfrastructureData(params: Record<string, string | string[] 
 }
 
 export default async function InfrastructurePage({ searchParams }: PageProps) {
+  const ownerId = await getEffectiveOwner();
+  if (!ownerId) {
+    redirect("/login");
+  }
+
   const params = await searchParams;
 
   // Try to fetch data, provide defaults if tables don't exist yet
   let data;
   try {
-    data = await fetchInfrastructureData(params);
+    data = await fetchInfrastructureData(params, ownerId);
   } catch {
     // Tables may not exist yet
     data = {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requirePlatformAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -176,11 +176,12 @@ function extractDomain(url: string): string | null {
 
 // POST: Upload and process CSV
 export async function POST(request: NextRequest) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
     const supabase = getSupabase();
+    const ownerId = await getEffectiveOwnerId(auth);
     const formData = await request.formData();
 
     const file = formData.get("file") as File;
@@ -196,6 +197,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Source ID is required" },
         { status: 400 }
+      );
+    }
+
+    // Verify source belongs to effective owner
+    const { data: source } = await supabase
+      .from("lead_sources")
+      .select("id")
+      .eq("id", sourceId)
+      .eq("owner_id", ownerId)
+      .single();
+
+    if (!source) {
+      return NextResponse.json(
+        { error: "Source not found or access denied" },
+        { status: 403 }
       );
     }
 

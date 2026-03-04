@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { fetchAllInstantlyAccounts, getWarmupAnalytics, getInstantlyClient } from "@/lib/instantly";
 import { fetchSmartleadAccounts, getSmartleadWarmupAnalytics, getSmartleadClient } from "@/lib/smartlead";
 import type { EmailAccountProvider } from "@/types/database";
-import { requirePlatformAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -20,7 +20,7 @@ interface SyncStats {
 }
 
 // Sync accounts from Instantly
-async function syncInstantlyAccounts(supabase: ReturnType<typeof getSupabase>): Promise<SyncStats> {
+async function syncInstantlyAccounts(supabase: ReturnType<typeof getSupabase>, ownerId: string): Promise<SyncStats> {
   const stats: SyncStats = { added: 0, updated: 0, removed: 0, errors: [] };
 
   try {
@@ -77,8 +77,8 @@ async function syncInstantlyAccounts(supabase: ReturnType<typeof getSupabase>): 
           await supabase.from("email_accounts").update(accountData).eq("id", existingId);
           stats.updated++;
         } else {
-          // Insert new
-          await supabase.from("email_accounts").insert(accountData);
+          // Insert new with owner_id
+          await supabase.from("email_accounts").insert({ ...accountData, owner_id: ownerId });
           stats.added++;
         }
       } catch (error) {
@@ -97,7 +97,7 @@ async function syncInstantlyAccounts(supabase: ReturnType<typeof getSupabase>): 
 }
 
 // Sync accounts from Smartlead
-async function syncSmartleadAccounts(supabase: ReturnType<typeof getSupabase>): Promise<SyncStats> {
+async function syncSmartleadAccounts(supabase: ReturnType<typeof getSupabase>, ownerId: string): Promise<SyncStats> {
   const stats: SyncStats = { added: 0, updated: 0, removed: 0, errors: [] };
 
   try {
@@ -163,8 +163,8 @@ async function syncSmartleadAccounts(supabase: ReturnType<typeof getSupabase>): 
           await supabase.from("email_accounts").update(accountData).eq("id", existing.id);
           stats.updated++;
         } else {
-          // Insert new
-          await supabase.from("email_accounts").insert(accountData);
+          // Insert new with owner_id
+          await supabase.from("email_accounts").insert({ ...accountData, owner_id: ownerId });
           stats.added++;
         }
       } catch (error) {
@@ -180,23 +180,24 @@ async function syncSmartleadAccounts(supabase: ReturnType<typeof getSupabase>): 
 
 // POST - Trigger sync from providers
 export async function POST(request: NextRequest) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
     const body = await request.json().catch(() => ({}));
     const providers: string[] = body.providers || ["instantly", "smartlead"];
+    const ownerId = await getEffectiveOwnerId(auth);
 
     const supabase = getSupabase();
     const results: Record<string, SyncStats> = {};
 
     // Sync from requested providers
     if (providers.includes("instantly")) {
-      results.instantly = await syncInstantlyAccounts(supabase);
+      results.instantly = await syncInstantlyAccounts(supabase, ownerId);
     }
 
     if (providers.includes("smartlead")) {
-      results.smartlead = await syncSmartleadAccounts(supabase);
+      results.smartlead = await syncSmartleadAccounts(supabase, ownerId);
     }
 
     // Calculate totals

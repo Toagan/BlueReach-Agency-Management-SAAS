@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requirePlatformAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -11,7 +11,7 @@ function getSupabase() {
 
 // GET - List all email accounts with optional filtering
 export async function GET(request: NextRequest) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
@@ -23,13 +23,15 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = (page - 1) * limit;
+    const ownerId = await getEffectiveOwnerId(auth);
 
     const supabase = getSupabase();
 
-    // Build query using the view for joined data
+    // Build query using the view for joined data, scoped by owner
     let query = supabase
       .from("email_accounts_with_health")
-      .select("*", { count: "exact" });
+      .select("*", { count: "exact" })
+      .eq("owner_id", ownerId);
 
     // Apply filters
     if (clientId && clientId !== "all") {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -42,6 +42,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const ownerId = await getEffectiveOwnerId(auth);
+
     // Generate unique filename
     const ext = file.name.split(".").pop() || "png";
     const fileName = `agency-logo-${Date.now()}.${ext}`;
@@ -73,7 +75,7 @@ export async function POST(request: Request) {
           .upsert({
             key: "agency_logo_url",
             value: dataUrl,
-            owner_id: auth.user.id,
+            owner_id: ownerId,
             is_encrypted: false,
             updated_at: new Date().toISOString(),
           }, {

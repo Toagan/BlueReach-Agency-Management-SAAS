@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requirePlatformAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -15,17 +15,19 @@ interface RouteParams {
 
 // GET - Get single account details
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
     const { accountId } = await params;
+    const ownerId = await getEffectiveOwnerId(auth);
     const supabase = getSupabase();
 
     const { data: account, error } = await supabase
       .from("email_accounts_with_health")
       .select("*")
       .eq("id", accountId)
+      .eq("owner_id", ownerId)
       .single();
 
     if (error) {
@@ -47,13 +49,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 // PATCH - Update account (assign client, etc.)
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
     const { accountId } = await params;
     const body = await request.json();
+    const ownerId = await getEffectiveOwnerId(auth);
     const supabase = getSupabase();
+
+    // Verify account belongs to effective owner
+    const { data: existing } = await supabase
+      .from("email_accounts")
+      .select("id")
+      .eq("id", accountId)
+      .eq("owner_id", ownerId)
+      .single();
+
+    if (!existing) {
+      return NextResponse.json({ error: "Account not found" }, { status: 404 });
+    }
 
     // Only allow updating certain fields
     const allowedFields = ["client_id"];
@@ -76,6 +91,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .from("email_accounts")
       .update(updates)
       .eq("id", accountId)
+      .eq("owner_id", ownerId)
       .select()
       .single();
 
@@ -95,17 +111,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 // DELETE - Remove account from tracking
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
     const { accountId } = await params;
+    const ownerId = await getEffectiveOwnerId(auth);
     const supabase = getSupabase();
 
     const { error } = await supabase
       .from("email_accounts")
       .delete()
-      .eq("id", accountId);
+      .eq("id", accountId)
+      .eq("owner_id", ownerId);
 
     if (error) {
       throw error;

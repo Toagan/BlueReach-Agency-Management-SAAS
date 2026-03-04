@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getServiceSupabase() {
   return createClient(
@@ -22,32 +22,29 @@ export async function GET(request: NextRequest) {
     const statusFilter = searchParams.get("status");
     const positiveFilter = searchParams.get("positive") === "true";
 
-    // Get owner's campaign IDs for scoping
-    let ownerCampaignIds: string[] | null = null;
-    if (!auth.isPlatformAdmin) {
-      const { data: ownerClients } = await supabase
-        .from("clients")
-        .select("id")
-        .eq("owner_id", auth.user.id);
-      const clientIds = ownerClients?.map(c => c.id) || [];
+    // Get effective owner's campaign IDs for scoping (always scoped)
+    const ownerId = await getEffectiveOwnerId(auth);
+    const { data: ownerClients } = await supabase
+      .from("clients")
+      .select("id")
+      .eq("owner_id", ownerId);
+    const clientIds = ownerClients?.map(c => c.id) || [];
 
-      if (clientIds.length === 0) {
-        // No clients = empty CSV
-        const csvContent = "No data";
-        return new NextResponse(csvContent, {
-          headers: {
-            "Content-Type": "text/csv; charset=utf-8",
-            "Content-Disposition": `attachment; filename="${exportType}_leads_${new Date().toISOString().split("T")[0]}.csv"`,
-          },
-        });
-      }
-
-      const { data: campaigns } = await supabase
-        .from("campaigns")
-        .select("id")
-        .in("client_id", clientIds);
-      ownerCampaignIds = campaigns?.map(c => c.id) || [];
+    if (clientIds.length === 0) {
+      const csvContent = "No data";
+      return new NextResponse(csvContent, {
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="${exportType}_leads_${new Date().toISOString().split("T")[0]}.csv"`,
+        },
+      });
     }
+
+    const { data: campaigns } = await supabase
+      .from("campaigns")
+      .select("id")
+      .in("client_id", clientIds);
+    const ownerCampaignIds = campaigns?.map(c => c.id) || [];
 
     // Build query based on export type - select all fields
     let query = supabase
@@ -55,7 +52,7 @@ export async function GET(request: NextRequest) {
       .select("*, client_id, client_name, campaign_name, campaigns(name, client_id, clients(name))");
 
     // Scope to owner's campaigns
-    if (ownerCampaignIds !== null) {
+    if (ownerCampaignIds.length > 0) {
       query = query.in("campaign_id", ownerCampaignIds);
     }
 

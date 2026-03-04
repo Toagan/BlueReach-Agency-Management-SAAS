@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { checkDomainHealth, checkDomainsHealth } from "@/lib/dns";
-import { requirePlatformAdmin } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -12,7 +12,7 @@ function getSupabase() {
 
 // GET - Get domain health records from database
 export async function GET(request: NextRequest) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
 
 // POST - Check DNS health for domain(s) and store results
 export async function POST(request: NextRequest) {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
@@ -140,16 +140,18 @@ export async function POST(request: NextRequest) {
 
 // PATCH - Refresh DNS health for domains from email accounts
 export async function PATCH() {
-  const auth = await requirePlatformAdmin();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
     const supabase = getSupabase();
+    const ownerId = await getEffectiveOwnerId(auth);
 
-    // Get unique domains from email accounts
+    // Get unique domains from owner's email accounts
     const { data: accounts, error: accountsError } = await supabase
       .from("email_accounts")
       .select("domain")
+      .eq("owner_id", ownerId)
       .not("domain", "is", null);
 
     if (accountsError) {
