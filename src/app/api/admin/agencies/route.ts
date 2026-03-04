@@ -20,10 +20,10 @@ export async function GET() {
     // Get all admin profiles (exclude the platform admin's own row)
     const { data: profiles, error: profilesError } = await supabase
       .from("profiles")
-      .select("id, email, full_name, created_at")
+      .select("id, email, full_name")
       .eq("role", "admin")
       .neq("id", auth.user.id)
-      .order("created_at", { ascending: false });
+      .order("email");
 
     if (profilesError) {
       throw profilesError;
@@ -42,7 +42,7 @@ export async function GET() {
           email: profile.email,
           name: profile.full_name,
           clientCount: count || 0,
-          createdAt: profile.created_at,
+          createdAt: null,
         };
       })
     );
