@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireClientAccess } from "@/lib/auth";
+import { requireClientAccess, getClientOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -20,6 +20,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const auth = await requireClientAccess(clientId);
     if (auth.error) return auth.error;
     const supabase = getSupabase();
+    const ownerId = await getClientOwnerId(clientId);
 
     // Fetch tool links from settings
     const keys = [
@@ -28,10 +29,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       `client_${clientId}_outbound_url`,
     ];
 
-    const { data: settings } = await supabase
+    let query = supabase
       .from("settings")
       .select("key, value")
       .in("key", keys);
+
+    if (ownerId) query = query.eq("owner_id", ownerId);
+
+    const { data: settings } = await query;
 
     const settingsMap = new Map(settings?.map((s) => [s.key, s.value]) || []);
 
@@ -59,6 +64,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { goalText, clayUrl, outboundUrl } = body;
 
     const supabase = getSupabase();
+    const ownerId = await getClientOwnerId(clientId);
 
     // Upsert each setting
     const settings = [
@@ -70,7 +76,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     for (const setting of settings) {
       await supabase
         .from("settings")
-        .upsert(setting, { onConflict: "key" });
+        .upsert({ ...setting, owner_id: ownerId }, { onConflict: "key,owner_id" });
     }
 
     return NextResponse.json({ success: true });

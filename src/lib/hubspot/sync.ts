@@ -64,72 +64,56 @@ export async function syncLeadToHubSpot(
   const supabase = getSupabase();
 
   try {
-    // Check if HubSpot is enabled for this client
-    const { data: enabledSetting } = await supabase
-      .from("settings")
-      .select("value")
-      .eq("key", `client_${clientId}_hubspot_enabled`)
+    // Resolve owner_id for settings scoping
+    const { data: clientRow } = await supabase
+      .from("clients")
+      .select("owner_id")
+      .eq("id", clientId)
       .single();
+    const ownerId = clientRow?.owner_id || null;
 
-    if (enabledSetting?.value !== "true") {
+    // Batch-read all HubSpot settings for this client
+    const settingKeys = [
+      `client_${clientId}_hubspot_enabled`,
+      `client_${clientId}_hubspot_access_token`,
+      `client_${clientId}_hubspot_contact_properties`,
+      `client_${clientId}_hubspot_create_contacts`,
+      `client_${clientId}_hubspot_create_deals`,
+      `client_${clientId}_hubspot_deal_value`,
+    ];
+    let sq = supabase.from("settings").select("key, value").in("key", settingKeys);
+    if (ownerId) sq = sq.eq("owner_id", ownerId);
+    const { data: allSettings } = await sq;
+    const sm = new Map(allSettings?.map((r) => [r.key, r.value]) || []);
+
+    if (sm.get(`client_${clientId}_hubspot_enabled`) !== "true") {
       return { success: true, skipped: true };
     }
 
-    // Get the HubSpot access token
-    const { data: tokenSetting } = await supabase
-      .from("settings")
-      .select("value")
-      .eq("key", `client_${clientId}_hubspot_access_token`)
-      .single();
-
-    if (!tokenSetting?.value) {
+    const accessToken = sm.get(`client_${clientId}_hubspot_access_token`);
+    if (!accessToken) {
       console.log(`[HubSpot] No access token configured for client ${clientId}`);
       return { success: true, skipped: true };
     }
 
-    const hubspot = new HubSpotClient(tokenSetting.value);
-
-    // Load configurable contact property mappings
-    const { data: contactPropsSetting } = await supabase
-      .from("settings")
-      .select("value")
-      .eq("key", `client_${clientId}_hubspot_contact_properties`)
-      .single();
+    const hubspot = new HubSpotClient(accessToken);
 
     let contactPropertyMappings: Record<string, string> = {
       hs_lead_status: "Email Outbound (pos. reply)",
     };
-    if (contactPropsSetting?.value) {
+    const contactPropsRaw = sm.get(`client_${clientId}_hubspot_contact_properties`);
+    if (contactPropsRaw) {
       try {
-        contactPropertyMappings = JSON.parse(contactPropsSetting.value);
+        contactPropertyMappings = JSON.parse(contactPropsRaw);
       } catch {
         // Fallback to default if JSON is invalid
       }
     }
 
-    // Read sync toggles and deal value
-    const { data: createContactsSetting } = await supabase
-      .from("settings")
-      .select("value")
-      .eq("key", `client_${clientId}_hubspot_create_contacts`)
-      .single();
-
-    const { data: createDealsSetting } = await supabase
-      .from("settings")
-      .select("value")
-      .eq("key", `client_${clientId}_hubspot_create_deals`)
-      .single();
-
-    const { data: dealValueSetting } = await supabase
-      .from("settings")
-      .select("value")
-      .eq("key", `client_${clientId}_hubspot_deal_value`)
-      .single();
-
     // Defaults: contacts on, deals off
-    const shouldCreateContacts = createContactsSetting?.value !== "false";
-    const shouldCreateDeals = createDealsSetting?.value === "true";
-    const dealValue = dealValueSetting?.value || undefined;
+    const shouldCreateContacts = sm.get(`client_${clientId}_hubspot_create_contacts`) !== "false";
+    const shouldCreateDeals = sm.get(`client_${clientId}_hubspot_create_deals`) === "true";
+    const dealValue = sm.get(`client_${clientId}_hubspot_deal_value`) || undefined;
 
     // Build email thread content for the contact description
     let emailThreadContent = `POSITIVE REPLY - BlueReach Campaign\n`;
@@ -212,17 +196,13 @@ export async function syncLeadToHubSpot(
     if (shouldCreateDeals && contactId) {
       try {
         // Load deal pipeline/stage settings
-        const { data: pipelineSetting } = await supabase
-          .from("settings")
-          .select("value")
-          .eq("key", `client_${clientId}_hubspot_deal_pipeline`)
-          .single();
+        let pq = supabase.from("settings").select("value").eq("key", `client_${clientId}_hubspot_deal_pipeline`);
+        if (ownerId) pq = pq.eq("owner_id", ownerId);
+        const { data: pipelineSetting } = await pq.single();
 
-        const { data: stageSetting } = await supabase
-          .from("settings")
-          .select("value")
-          .eq("key", `client_${clientId}_hubspot_deal_stage`)
-          .single();
+        let stq = supabase.from("settings").select("value").eq("key", `client_${clientId}_hubspot_deal_stage`);
+        if (ownerId) stq = stq.eq("owner_id", ownerId);
+        const { data: stageSetting } = await stq.single();
 
         const pipeline = pipelineSetting?.value || "default";
         const dealstage = stageSetting?.value || "appointmentscheduled";
@@ -247,11 +227,9 @@ export async function syncLeadToHubSpot(
 
     // Update sync stats
     const syncCountKey = `client_${clientId}_hubspot_sync_count`;
-    const { data: currentCount } = await supabase
-      .from("settings")
-      .select("value")
-      .eq("key", syncCountKey)
-      .single();
+    let cq = supabase.from("settings").select("value").eq("key", syncCountKey);
+    if (ownerId) cq = cq.eq("owner_id", ownerId);
+    const { data: currentCount } = await cq.single();
 
     const newCount = (currentCount?.value ? parseInt(currentCount.value, 10) : 0) + 1;
 
@@ -259,9 +237,10 @@ export async function syncLeadToHubSpot(
       {
         key: syncCountKey,
         value: String(newCount),
+        owner_id: ownerId,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "key" }
+      { onConflict: "key,owner_id" }
     );
 
     // Update last sync timestamp
@@ -269,9 +248,10 @@ export async function syncLeadToHubSpot(
       {
         key: `client_${clientId}_hubspot_last_sync`,
         value: new Date().toISOString(),
+        owner_id: ownerId,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "key" }
+      { onConflict: "key,owner_id" }
     );
 
     return {

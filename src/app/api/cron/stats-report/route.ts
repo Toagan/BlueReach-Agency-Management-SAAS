@@ -327,7 +327,7 @@ async function handleStatsReport(request: NextRequest) {
         // Get client info
         const { data: client, error: clientError } = await supabase
           .from("clients")
-          .select("id, name")
+          .select("id, name, owner_id")
           .eq("id", clientId)
           .single();
 
@@ -397,9 +397,10 @@ async function handleStatsReport(request: NextRequest) {
           .upsert({
             key: `client_${clientId}_stats_report_last_sent`,
             value: new Date().toISOString(),
+            owner_id: client.owner_id,
             updated_at: new Date().toISOString(),
           }, {
-            onConflict: "key",
+            onConflict: "key,owner_id",
           });
 
       } catch (clientError) {
@@ -430,12 +431,22 @@ async function handleStatsReport(request: NextRequest) {
           const slackClientId = match[1];
           const slackInterval = setting.value; // "weekly", "monthly", "quarterly"
 
+          // Get client info first (need owner_id for settings scoping)
+          const { data: slackClient } = await supabase
+            .from("clients")
+            .select("id, name, owner_id")
+            .eq("id", slackClientId)
+            .single();
+
+          if (!slackClient) continue;
+
           // Check if interval has elapsed
-          const { data: lastSentSetting } = await supabase
+          let lsq = supabase
             .from("settings")
             .select("value")
-            .eq("key", `client_${slackClientId}_slack_stats_last_sent`)
-            .single();
+            .eq("key", `client_${slackClientId}_slack_stats_last_sent`);
+          if (slackClient.owner_id) lsq = lsq.eq("owner_id", slackClient.owner_id);
+          const { data: lastSentSetting } = await lsq.single();
 
           const lastSent = lastSentSetting?.value ? new Date(lastSentSetting.value) : null;
           const now = new Date();
@@ -445,15 +456,6 @@ async function handleStatsReport(request: NextRequest) {
             const minDays = slackInterval === "weekly" ? 6 : slackInterval === "monthly" ? 28 : 85; // quarterly ~90 days
             if (daysSinceLastSent < minDays) continue;
           }
-
-          // Get client info
-          const { data: slackClient } = await supabase
-            .from("clients")
-            .select("id, name")
-            .eq("id", slackClientId)
-            .single();
-
-          if (!slackClient) continue;
 
           // Compute stats
           const slackIntervalForStats = slackInterval === "quarterly" ? "monthly" : slackInterval;
@@ -486,8 +488,9 @@ async function handleStatsReport(request: NextRequest) {
               .upsert({
                 key: `client_${slackClientId}_slack_stats_last_sent`,
                 value: now.toISOString(),
+                owner_id: slackClient.owner_id,
                 updated_at: now.toISOString(),
-              }, { onConflict: "key" });
+              }, { onConflict: "key,owner_id" });
           }
         }
       }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireClientAccess } from "@/lib/auth";
+import { requireClientAccess, getClientOwnerId } from "@/lib/auth";
 import { sendSlackTestPositiveReply, sendSlackTestStats } from "@/lib/slack";
 import { sendSlackSetupEmail } from "@/lib/email";
 
@@ -22,8 +22,9 @@ export async function GET(
     if (auth.error) return auth.error;
 
     const adminSupabase = getSupabaseAdmin();
+    const ownerId = await getClientOwnerId(clientId);
 
-    const { data: settings } = await adminSupabase
+    let settingsQuery = adminSupabase
       .from("settings")
       .select("key, value")
       .in("key", [
@@ -32,6 +33,8 @@ export async function GET(
         `client_${clientId}_slack_stats_interval`,
         `client_${clientId}_slack_setup_email_sent`,
       ]);
+    if (ownerId) settingsQuery = settingsQuery.eq("owner_id", ownerId);
+    const { data: settings } = await settingsQuery;
 
     const settingsMap = new Map(settings?.map((s) => [s.key, s.value]) || []);
 
@@ -77,14 +80,16 @@ export async function POST(
     const { action } = body as { action?: string };
 
     const adminSupabase = getSupabaseAdmin();
+    const ownerId = await getClientOwnerId(clientId);
 
     // Action: test webhook
     if (action === "test") {
-      const { data: webhookSetting } = await adminSupabase
+      let wq = adminSupabase
         .from("settings")
         .select("value")
-        .eq("key", `client_${clientId}_slack_webhook_url`)
-        .single();
+        .eq("key", `client_${clientId}_slack_webhook_url`);
+      if (ownerId) wq = wq.eq("owner_id", ownerId);
+      const { data: webhookSetting } = await wq.single();
 
       if (!webhookSetting?.value) {
         return NextResponse.json({ error: "No webhook URL configured" }, { status: 400 });
@@ -106,11 +111,12 @@ export async function POST(
 
     // Action: test stats only
     if (action === "testStats") {
-      const { data: webhookSetting } = await adminSupabase
+      let wsq = adminSupabase
         .from("settings")
         .select("value")
-        .eq("key", `client_${clientId}_slack_webhook_url`)
-        .single();
+        .eq("key", `client_${clientId}_slack_webhook_url`);
+      if (ownerId) wsq = wsq.eq("owner_id", ownerId);
+      const { data: webhookSetting } = await wsq.single();
 
       if (!webhookSetting?.value) {
         return NextResponse.json({ error: "No webhook URL configured" }, { status: 400 });
@@ -161,8 +167,9 @@ export async function POST(
         .upsert({
           key: `client_${clientId}_slack_setup_email_sent`,
           value: new Date().toISOString(),
+          owner_id: ownerId,
           updated_at: new Date().toISOString(),
-        }, { onConflict: "key" });
+        }, { onConflict: "key,owner_id" });
 
       return NextResponse.json({ success: true, message: `Setup instructions sent to ${recipientEmail}` });
     }
@@ -185,8 +192,9 @@ export async function POST(
         .upsert({
           key: `client_${clientId}_slack_webhook_url`,
           value: webhookUrl,
+          owner_id: ownerId,
           updated_at: new Date().toISOString(),
-        }, { onConflict: "key" });
+        }, { onConflict: "key,owner_id" });
     }
 
     if (positiveReplyCampaigns !== undefined) {
@@ -196,8 +204,9 @@ export async function POST(
         .upsert({
           key: `client_${clientId}_slack_positive_reply_campaigns`,
           value,
+          owner_id: ownerId,
           updated_at: new Date().toISOString(),
-        }, { onConflict: "key" });
+        }, { onConflict: "key,owner_id" });
     }
 
     if (statsInterval !== undefined) {
@@ -211,8 +220,9 @@ export async function POST(
         .upsert({
           key: `client_${clientId}_slack_stats_interval`,
           value: statsInterval,
+          owner_id: ownerId,
           updated_at: new Date().toISOString(),
-        }, { onConflict: "key" });
+        }, { onConflict: "key,owner_id" });
     }
 
     return NextResponse.json({ success: true, message: "Slack settings saved" });

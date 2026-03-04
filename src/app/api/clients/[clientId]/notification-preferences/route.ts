@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireClientAccess } from "@/lib/auth";
+import { requireClientAccess, getClientOwnerId } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -19,6 +19,7 @@ export async function GET(request: Request, { params }: RouteParams) {
   const auth = await requireClientAccess(clientId);
   if (auth.error) return auth.error;
   const supabase = getSupabase();
+  const ownerId = await getClientOwnerId(clientId);
 
   try {
     // Get admin users (always can receive notifications)
@@ -59,11 +60,14 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     // Get client-specific notification preferences
     const settingKey = `client_${clientId}_notification_users`;
-    const { data: prefsSetting } = await supabase
+    let prefsQuery = supabase
       .from("settings")
       .select("value")
-      .eq("key", settingKey)
-      .single();
+      .eq("key", settingKey);
+
+    if (ownerId) prefsQuery = prefsQuery.eq("owner_id", ownerId);
+
+    const { data: prefsSetting } = await prefsQuery.single();
 
     // Parse the preferences (stored as JSON array of user IDs)
     let enabledUserIds: string[] = [];
@@ -107,6 +111,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   const auth = await requireClientAccess(clientId);
   if (auth.error) return auth.error;
   const supabase = getSupabase();
+  const ownerId = await getClientOwnerId(clientId);
 
   try {
     const body = await request.json();
@@ -122,11 +127,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     const settingKey = `client_${clientId}_notification_users`;
 
     // Get current preferences
-    const { data: prefsSetting } = await supabase
+    let prefsQuery = supabase
       .from("settings")
       .select("value")
-      .eq("key", settingKey)
-      .single();
+      .eq("key", settingKey);
+
+    if (ownerId) prefsQuery = prefsQuery.eq("owner_id", ownerId);
+
+    const { data: prefsSetting } = await prefsQuery.single();
 
     let enabledUserIds: string[] = [];
     if (prefsSetting?.value) {
@@ -157,9 +165,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       .upsert({
         key: settingKey,
         value: JSON.stringify(enabledUserIds),
+        owner_id: ownerId,
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: "key",
+        onConflict: "key,owner_id",
       });
 
     if (upsertError) {

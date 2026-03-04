@@ -231,6 +231,20 @@ export async function requireCampaignAccess(campaignId: string): Promise<
   return { user: auth.user, isAdmin, isPlatformAdmin, clientId: campaign.client_id };
 }
 
+/**
+ * Get the owner_id for a client. Used by client-specific routes
+ * to scope settings and other per-owner data.
+ */
+export async function getClientOwnerId(clientId: string): Promise<string | null> {
+  const supabase = getServiceSupabase();
+  const { data } = await supabase
+    .from("clients")
+    .select("owner_id")
+    .eq("id", clientId)
+    .single();
+  return data?.owner_id || null;
+}
+
 function getServiceSupabase() {
   return createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

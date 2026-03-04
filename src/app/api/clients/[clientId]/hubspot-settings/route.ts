@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { HubSpotClient } from "@/lib/hubspot";
-import { requireClientAccess } from "@/lib/auth";
+import { requireClientAccess, getClientOwnerId } from "@/lib/auth";
 import { sendHubSpotSetupEmail } from "@/lib/email/send";
 
 function getSupabaseAdmin() {
@@ -23,110 +23,58 @@ export async function GET(
     if (auth.error) return auth.error;
 
     const adminSupabase = getSupabaseAdmin();
+    const ownerId = await getClientOwnerId(clientId);
 
-    // Get HubSpot enabled setting
-    const enabledKey = `client_${clientId}_hubspot_enabled`;
-    const { data: enabledSetting } = await adminSupabase
-      .from("settings")
-      .select("value")
-      .eq("key", enabledKey)
-      .single();
+    // Batch-read all HubSpot settings for this client
+    const keys = [
+      `client_${clientId}_hubspot_enabled`,
+      `client_${clientId}_hubspot_access_token`,
+      `client_${clientId}_hubspot_last_sync`,
+      `client_${clientId}_hubspot_sync_count`,
+      `client_${clientId}_hubspot_deal_pipeline`,
+      `client_${clientId}_hubspot_deal_stage`,
+      `client_${clientId}_hubspot_contact_properties`,
+      `client_${clientId}_hubspot_create_contacts`,
+      `client_${clientId}_hubspot_create_deals`,
+      `client_${clientId}_hubspot_deal_value`,
+      `client_${clientId}_hubspot_setup_email_sent`,
+    ];
 
-    // Get HubSpot access token (just check if it exists, don't return the actual token)
-    const tokenKey = `client_${clientId}_hubspot_access_token`;
-    const { data: tokenSetting } = await adminSupabase
+    let settingsQuery = adminSupabase
       .from("settings")
-      .select("value")
-      .eq("key", tokenKey)
-      .single();
+      .select("key, value")
+      .in("key", keys);
+    if (ownerId) settingsQuery = settingsQuery.eq("owner_id", ownerId);
+    const { data: settings } = await settingsQuery;
 
-    // Get last sync timestamp
-    const lastSyncKey = `client_${clientId}_hubspot_last_sync`;
-    const { data: lastSyncSetting } = await adminSupabase
-      .from("settings")
-      .select("value")
-      .eq("key", lastSyncKey)
-      .single();
-
-    // Get sync count
-    const syncCountKey = `client_${clientId}_hubspot_sync_count`;
-    const { data: syncCountSetting } = await adminSupabase
-      .from("settings")
-      .select("value")
-      .eq("key", syncCountKey)
-      .single();
-
-    // Get deal pipeline/stage settings
-    const { data: pipelineSetting } = await adminSupabase
-      .from("settings")
-      .select("value")
-      .eq("key", `client_${clientId}_hubspot_deal_pipeline`)
-      .single();
-
-    const { data: stageSetting } = await adminSupabase
-      .from("settings")
-      .select("value")
-      .eq("key", `client_${clientId}_hubspot_deal_stage`)
-      .single();
-
-    // Get contact property mappings
-    const { data: contactPropsSetting } = await adminSupabase
-      .from("settings")
-      .select("value")
-      .eq("key", `client_${clientId}_hubspot_contact_properties`)
-      .single();
+    const s = new Map(settings?.map((r) => [r.key, r.value]) || []);
 
     let contactPropertyMappings: Record<string, string> = {
       hs_lead_status: "Email Outbound (pos. reply)",
     };
-    if (contactPropsSetting?.value) {
+    const contactPropsRaw = s.get(`client_${clientId}_hubspot_contact_properties`);
+    if (contactPropsRaw) {
       try {
-        contactPropertyMappings = JSON.parse(contactPropsSetting.value);
+        contactPropertyMappings = JSON.parse(contactPropsRaw);
       } catch {
         // Fallback to default
       }
     }
 
-    // Get deal/contact toggle settings
-    const { data: createContactsSetting } = await adminSupabase
-      .from("settings")
-      .select("value")
-      .eq("key", `client_${clientId}_hubspot_create_contacts`)
-      .single();
-
-    const { data: createDealsSetting } = await adminSupabase
-      .from("settings")
-      .select("value")
-      .eq("key", `client_${clientId}_hubspot_create_deals`)
-      .single();
-
-    const { data: dealValueSetting } = await adminSupabase
-      .from("settings")
-      .select("value")
-      .eq("key", `client_${clientId}_hubspot_deal_value`)
-      .single();
-
-    // Get setup email sent timestamp
-    const { data: setupEmailSetting } = await adminSupabase
-      .from("settings")
-      .select("value")
-      .eq("key", `client_${clientId}_hubspot_setup_email_sent`)
-      .single();
-
     return NextResponse.json({
-      enabled: enabledSetting?.value === "true",
-      hasAccessToken: !!tokenSetting?.value,
-      lastSync: lastSyncSetting?.value || null,
-      syncCount: syncCountSetting?.value
-        ? parseInt(syncCountSetting.value, 10)
+      enabled: s.get(`client_${clientId}_hubspot_enabled`) === "true",
+      hasAccessToken: !!s.get(`client_${clientId}_hubspot_access_token`),
+      lastSync: s.get(`client_${clientId}_hubspot_last_sync`) || null,
+      syncCount: s.get(`client_${clientId}_hubspot_sync_count`)
+        ? parseInt(s.get(`client_${clientId}_hubspot_sync_count`)!, 10)
         : 0,
-      dealPipeline: pipelineSetting?.value || "default",
-      dealStage: stageSetting?.value || "appointmentscheduled",
+      dealPipeline: s.get(`client_${clientId}_hubspot_deal_pipeline`) || "default",
+      dealStage: s.get(`client_${clientId}_hubspot_deal_stage`) || "appointmentscheduled",
       contactPropertyMappings,
-      createContacts: createContactsSetting?.value !== "false", // default true
-      createDeals: createDealsSetting?.value === "true", // default false
-      dealValue: dealValueSetting?.value || "",
-      setupEmailSent: setupEmailSetting?.value || null,
+      createContacts: s.get(`client_${clientId}_hubspot_create_contacts`) !== "false", // default true
+      createDeals: s.get(`client_${clientId}_hubspot_create_deals`) === "true", // default false
+      dealValue: s.get(`client_${clientId}_hubspot_deal_value`) || "",
+      setupEmailSent: s.get(`client_${clientId}_hubspot_setup_email_sent`) || null,
     });
   } catch (error) {
     console.error("Error fetching HubSpot settings:", error);
@@ -165,6 +113,7 @@ export async function POST(
     };
 
     const adminSupabase = getSupabaseAdmin();
+    const ownerId = await getClientOwnerId(clientId);
 
     // Handle sendSetupEmail action
     if (action === "sendSetupEmail") {
@@ -198,19 +147,21 @@ export async function POST(
         .upsert({
           key: `client_${clientId}_hubspot_setup_email_sent`,
           value: new Date().toISOString(),
+          owner_id: ownerId,
           updated_at: new Date().toISOString(),
-        }, { onConflict: "key" });
+        }, { onConflict: "key,owner_id" });
 
       return NextResponse.json({ success: true, message: `Setup instructions sent to ${emailTo}` });
     }
 
     // Handle fetchPipelines action
     if (action === "fetchPipelines") {
-      const { data: tokenSetting } = await adminSupabase
+      let tq = adminSupabase
         .from("settings")
         .select("value")
-        .eq("key", `client_${clientId}_hubspot_access_token`)
-        .single();
+        .eq("key", `client_${clientId}_hubspot_access_token`);
+      if (ownerId) tq = tq.eq("owner_id", ownerId);
+      const { data: tokenSetting } = await tq.single();
 
       if (!tokenSetting?.value) {
         return NextResponse.json(
@@ -233,11 +184,12 @@ export async function POST(
 
     // Handle fetchContactProperties action
     if (action === "fetchContactProperties") {
-      const { data: tokenSetting } = await adminSupabase
+      let cpq = adminSupabase
         .from("settings")
         .select("value")
-        .eq("key", `client_${clientId}_hubspot_access_token`)
-        .single();
+        .eq("key", `client_${clientId}_hubspot_access_token`);
+      if (ownerId) cpq = cpq.eq("owner_id", ownerId);
+      const { data: tokenSetting } = await cpq.single();
 
       if (!tokenSetting?.value) {
         return NextResponse.json(
@@ -264,9 +216,10 @@ export async function POST(
         {
           key: `client_${clientId}_hubspot_create_contacts`,
           value: createContacts ? "true" : "false",
+          owner_id: ownerId,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "key" }
+        { onConflict: "key,owner_id" }
       );
     }
 
@@ -275,9 +228,10 @@ export async function POST(
         {
           key: `client_${clientId}_hubspot_create_deals`,
           value: createDeals ? "true" : "false",
+          owner_id: ownerId,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "key" }
+        { onConflict: "key,owner_id" }
       );
     }
 
@@ -286,9 +240,10 @@ export async function POST(
         {
           key: `client_${clientId}_hubspot_deal_value`,
           value: dealValue,
+          owner_id: ownerId,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "key" }
+        { onConflict: "key,owner_id" }
       );
     }
 
@@ -313,9 +268,10 @@ export async function POST(
             {
               key: tokenKey,
               value: accessToken,
+              owner_id: ownerId,
               updated_at: new Date().toISOString(),
             },
-            { onConflict: "key" }
+            { onConflict: "key,owner_id" }
           );
 
         if (tokenError) {
@@ -348,9 +304,10 @@ export async function POST(
           {
             key: enabledKey,
             value: enabled ? "true" : "false",
+            owner_id: ownerId,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: "key" }
+          { onConflict: "key,owner_id" }
         );
 
       if (enabledError) {
@@ -368,9 +325,10 @@ export async function POST(
         {
           key: `client_${clientId}_hubspot_deal_pipeline`,
           value: dealPipeline,
+          owner_id: ownerId,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "key" }
+        { onConflict: "key,owner_id" }
       );
     }
 
@@ -380,9 +338,10 @@ export async function POST(
         {
           key: `client_${clientId}_hubspot_deal_stage`,
           value: dealStage,
+          owner_id: ownerId,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "key" }
+        { onConflict: "key,owner_id" }
       );
     }
 
@@ -392,9 +351,10 @@ export async function POST(
         {
           key: `client_${clientId}_hubspot_contact_properties`,
           value: JSON.stringify(contactPropertyMappings),
+          owner_id: ownerId,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "key" }
+        { onConflict: "key,owner_id" }
       );
     }
 
@@ -427,6 +387,7 @@ export async function DELETE(
     if (auth.error) return auth.error;
 
     const adminSupabase = getSupabaseAdmin();
+    const ownerId = await getClientOwnerId(clientId);
 
     // Delete all HubSpot-related settings for this client
     const keysToDelete = [
@@ -444,7 +405,9 @@ export async function DELETE(
     ];
 
     for (const key of keysToDelete) {
-      await adminSupabase.from("settings").delete().eq("key", key);
+      let dq = adminSupabase.from("settings").delete().eq("key", key);
+      if (ownerId) dq = dq.eq("owner_id", ownerId);
+      await dq;
     }
 
     return NextResponse.json({

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createClient as createServerClient } from "@/lib/supabase/server";
-import { requireClientAccess } from "@/lib/auth";
+import { requireClientAccess, getClientOwnerId } from "@/lib/auth";
 
 function getSupabaseAdmin() {
   return createClient(
@@ -21,22 +20,25 @@ export async function GET(
     if (auth.error) return auth.error;
 
     const adminSupabase = getSupabaseAdmin();
+    const ownerId = await getClientOwnerId(clientId);
 
     // Get the stats report interval setting
     const settingKey = `client_${clientId}_stats_report_interval`;
-    const { data: setting } = await adminSupabase
+    let intervalQuery = adminSupabase
       .from("settings")
       .select("value")
-      .eq("key", settingKey)
-      .single();
+      .eq("key", settingKey);
+    if (ownerId) intervalQuery = intervalQuery.eq("owner_id", ownerId);
+    const { data: setting } = await intervalQuery.single();
 
     // Get last sent timestamp
     const lastSentKey = `client_${clientId}_stats_report_last_sent`;
-    const { data: lastSentSetting } = await adminSupabase
+    let lastSentQuery = adminSupabase
       .from("settings")
       .select("value")
-      .eq("key", lastSentKey)
-      .single();
+      .eq("key", lastSentKey);
+    if (ownerId) lastSentQuery = lastSentQuery.eq("owner_id", ownerId);
+    const { data: lastSentSetting } = await lastSentQuery.single();
 
     return NextResponse.json({
       interval: setting?.value || "disabled",
@@ -71,6 +73,7 @@ export async function POST(
     }
 
     const adminSupabase = getSupabaseAdmin();
+    const ownerId = await getClientOwnerId(clientId);
 
     // Update the setting
     const settingKey = `client_${clientId}_stats_report_interval`;
@@ -79,9 +82,10 @@ export async function POST(
       .upsert({
         key: settingKey,
         value: interval,
+        owner_id: ownerId,
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: "key",
+        onConflict: "key,owner_id",
       });
 
     if (error) {
