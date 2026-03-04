@@ -91,12 +91,13 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    // If user has a session but NO profile, they bypassed the callback or were never invited
+    // If user has a session but NO profile, redirect to auth callback to auto-create profile
+    // This happens when OAuth redirects to the wrong URL and the callback never ran
     if (!profile) {
-      console.log("[Middleware] User has session but no profile, access denied:", user.email);
+      console.log("[Middleware] User has session but no profile, redirecting to callback for setup:", user.email);
       const url = request.nextUrl.clone();
-      url.pathname = "/access-denied";
-      url.searchParams.set("email", user.email || "");
+      url.pathname = "/auth/callback";
+      url.search = "";
       return NextResponse.redirect(url);
     }
 

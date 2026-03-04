@@ -309,7 +309,74 @@ export async function GET(request: Request) {
     }
   }
 
-  // Return to login with error
+  // ========================================
+  // FALLBACK: No code, but user may already have a session (e.g., OAuth redirected to wrong URL)
+  // The middleware redirects here when user has session but no profile
+  // ========================================
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (user) {
+    const userId = user.id;
+    const userEmail = user.email?.toLowerCase() || "";
+    const serviceSupabase = getServiceSupabase();
+
+    console.log("[Auth Callback] Fallback: user has session but no code, checking profile for:", userEmail);
+
+    const { data: existingProfile } = await serviceSupabase
+      .from("profiles")
+      .select("id, role")
+      .eq("id", userId)
+      .single();
+
+    if (!existingProfile) {
+      // No profile — create one (same logic as new user registration)
+      if (isSuperAdmin(userEmail)) {
+        await serviceSupabase.from("profiles").insert({
+          id: userId, email: userEmail, role: "admin",
+        });
+        return NextResponse.redirect(`${origin}/admin`);
+      }
+
+      // Check for pending invitation
+      const { data: invitation } = await serviceSupabase
+        .from("client_invitations")
+        .select("id, client_id")
+        .eq("email", userEmail)
+        .is("accepted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (invitation) {
+        await serviceSupabase.from("profiles").insert({
+          id: userId, email: userEmail, role: "client",
+        });
+        await serviceSupabase.from("client_users").upsert({
+          user_id: userId, client_id: invitation.client_id, role: "viewer",
+        }, { onConflict: "client_id,user_id" });
+        await serviceSupabase.from("client_invitations")
+          .update({ accepted_at: new Date().toISOString() })
+          .eq("id", invitation.id);
+        return NextResponse.redirect(`${origin}/admin/clients/${invitation.client_id}`);
+      }
+
+      // No invitation — new agency owner
+      console.log("[Auth Callback] Fallback: creating admin profile for new agency owner:", userEmail);
+      await serviceSupabase.from("profiles").insert({
+        id: userId, email: userEmail, role: "admin",
+      });
+      return NextResponse.redirect(`${origin}/choose-plan`);
+    }
+
+    // Profile exists — redirect based on role
+    if (existingProfile.role === "admin") {
+      return NextResponse.redirect(`${origin}/admin`);
+    }
+    return NextResponse.redirect(`${origin}/dashboard`);
+  }
+
+  // No code and no session
   console.log("[Auth Callback] Authentication failed, redirecting to login");
   return NextResponse.redirect(`${origin}/login?error=Could not authenticate`);
 }
