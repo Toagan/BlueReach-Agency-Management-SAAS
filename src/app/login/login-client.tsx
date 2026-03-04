@@ -145,78 +145,89 @@ export function LoginClient() {
         {/* Content */}
         <div className="relative z-10 flex flex-col justify-between p-12 xl:p-16 w-full">
           {/* Logo */}
-          <div>
-            <Image src="/bluereach-logo.png" alt="Blue Reach" width={200} height={50} className="h-14 w-auto" priority />
+          <div className="-mb-16">
+            <Image src="/bluereach-logo.png" alt="Blue Reach" width={300} height={75} className="h-44 w-auto relative -top-8" priority />
           </div>
 
           {/* Main Content */}
           <div className="space-y-10 max-w-xl">
             {/* Headline */}
             <div className="space-y-6">
-              <h1 className="text-5xl xl:text-6xl font-bold text-white leading-[1.08] tracking-tight">
-                See your outreach
-                <span className="block mt-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-emerald-400">
-                  results in real-time
-                </span>
-              </h1>
-
-              <p className="text-lg text-zinc-400 leading-relaxed max-w-lg">
-                Track your email campaigns, monitor lead responses, and see your pipeline grow. Full transparency into your outbound performance.
-              </p>
+              {inviteToken ? (
+                <>
+                  <h1 className="text-5xl xl:text-6xl font-bold text-white leading-[1.08] tracking-tight">
+                    Your dashboard
+                    <span className="block mt-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-emerald-400">
+                      is ready
+                    </span>
+                  </h1>
+                  <p className="text-lg text-zinc-400 leading-relaxed max-w-lg">
+                    Your agency set up a live dashboard so you can track every reply, meeting, and deal in real time.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h1 className="text-5xl xl:text-6xl font-bold text-white leading-[1.08] tracking-tight">
+                    Join 200+ agencies
+                    <span className="block mt-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-emerald-400">
+                      already scaling
+                    </span>
+                  </h1>
+                  <p className="text-lg text-zinc-400 leading-relaxed max-w-lg">
+                    The command center that lets you manage 50 clients without hiring another ops person. 14-day free trial, no credit card required.
+                  </p>
+                </>
+              )}
             </div>
 
-            {/* Feature Cards - Client focused */}
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                {
-                  icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
-                  title: "Campaign Performance",
-                  desc: "Emails sent, opened & replied",
-                  color: "blue"
-                },
-                {
-                  icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z",
-                  title: "Lead Responses",
-                  desc: "Track interested prospects",
-                  color: "cyan"
-                },
-                {
-                  icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
-                  title: "Meetings Booked",
-                  desc: "See your calendar fill up",
-                  color: "indigo"
-                },
-                {
-                  icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
-                  title: "Pipeline Value",
-                  desc: "Track your deal progress",
-                  color: "emerald"
-                },
-              ].map((feature, i) => (
-                <div
-                  key={i}
-                  className="group p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] hover:border-white/[0.1] transition-all duration-300 cursor-pointer"
-                >
-                  <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${
-                    feature.color === 'blue' ? 'from-blue-500/20 to-blue-600/10' :
-                    feature.color === 'cyan' ? 'from-cyan-500/20 to-cyan-600/10' :
-                    feature.color === 'indigo' ? 'from-indigo-500/20 to-indigo-600/10' :
-                    'from-emerald-500/20 to-emerald-600/10'
-                  } flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
-                    <svg className={`w-5 h-5 ${
-                      feature.color === 'blue' ? 'text-blue-400' :
-                      feature.color === 'cyan' ? 'text-cyan-400' :
-                      feature.color === 'indigo' ? 'text-indigo-400' :
-                      'text-emerald-400'
-                    }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={feature.icon} />
-                    </svg>
+            {inviteToken ? (
+              /* Client invite: 3 outcome stats */
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { label: "Live campaign stats", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z", color: "blue" },
+                  { label: "Every positive reply", icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z", color: "cyan" },
+                  { label: "Meetings & deals tracked", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z", color: "emerald" },
+                ].map((stat, i) => (
+                  <div key={i} className="p-5 rounded-2xl bg-white/[0.03] border border-white/[0.07] text-center">
+                    <div className={`w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center ${
+                      stat.color === 'blue' ? 'bg-blue-500/15' :
+                      stat.color === 'cyan' ? 'bg-cyan-500/15' :
+                      'bg-emerald-500/15'
+                    }`}>
+                      <svg className={`w-6 h-6 ${
+                        stat.color === 'blue' ? 'text-blue-400' :
+                        stat.color === 'cyan' ? 'text-cyan-400' :
+                        'text-emerald-400'
+                      }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={stat.icon} />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-zinc-300">{stat.label}</p>
                   </div>
-                  <h3 className="font-semibold text-white text-sm">{feature.title}</h3>
-                  <p className="text-xs text-zinc-500 mt-0.5">{feature.desc}</p>
+                ))}
+              </div>
+            ) : (
+              /* Agency owner: testimonial */
+              <div className="p-8 rounded-2xl bg-white/[0.03] border border-white/[0.07]">
+                <div className="flex gap-1 mb-4">
+                  {[...Array(5)].map((_, j) => (
+                    <svg key={j} className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                  ))}
                 </div>
-              ))}
-            </div>
+                <p className="text-zinc-300 leading-relaxed mb-6 text-lg">
+                  &ldquo;We went from 8 clients to 23 in four months without adding headcount. Before Blue Reach, scaling meant hiring another ops person just to handle reporting. Now it runs itself.&rdquo;
+                </p>
+                <div className="flex items-center gap-3">
+                  <Image src="/testimonial-1.jpg" alt="Marcus Chen" width={48} height={48} className="w-12 h-12 rounded-full object-cover" />
+                  <div>
+                    <p className="font-semibold text-white">Marcus Chen</p>
+                    <p className="text-sm text-zinc-500">Founder, Pipeline Pros</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Footer */}
@@ -246,39 +257,21 @@ export function LoginClient() {
         <div className="relative z-10 w-full max-w-[380px] space-y-8">
           {/* Mobile Logo */}
           <div className="lg:hidden flex justify-center mb-8">
-            <Image src="/bluereach-logo.png" alt="Blue Reach" width={200} height={50} className="h-14 w-auto" />
+            <Image src="/bluereach-logo.png" alt="Blue Reach" width={300} height={75} className="h-44 w-auto" />
           </div>
 
           {/* Header */}
           <div className="text-center lg:text-left space-y-3">
             <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
-              {inviteToken ? "You're invited!" : "Welcome back"}
+              {inviteToken ? "Welcome aboard" : "Start your free trial"}
             </h2>
             <p className="text-zinc-400 text-lg">
               {inviteToken
-                ? "Sign in to access your outreach dashboard"
-                : "Sign in to view your campaign results"
+                ? "Sign in to access the dashboard your agency built for you."
+                : "14 days free. No credit card needed."
               }
             </p>
           </div>
-
-          {/* Invite Banner */}
-          {inviteToken && (
-            <div className="relative overflow-hidden bg-gradient-to-r from-emerald-500/10 via-cyan-500/10 to-emerald-500/10 border border-emerald-500/20 rounded-2xl p-5">
-              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-transparent animate-shimmer" />
-              <div className="relative flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/30 to-cyan-500/20 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="font-semibold text-white">Your dashboard is ready</p>
-                  <p className="text-sm text-zinc-400">Sign in to see your campaign performance</p>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Error Message */}
           {message && message.type === "error" && (
@@ -368,40 +361,30 @@ export function LoginClient() {
             </button>
           </div>
 
-          {/* Trust Indicators */}
-          <div className="pt-6 space-y-5">
-            {/* Security badge */}
-            <div className="flex items-center justify-center gap-2">
-              <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-                <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                <span className="text-sm text-emerald-400 font-medium">Secure & Encrypted</span>
+          {/* Trust bar */}
+          {inviteToken ? (
+            <div className="pt-6">
+              <div className="flex items-center justify-center gap-2">
+                <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                  <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <span className="text-sm text-emerald-400 font-medium">Secure & read-only access</span>
+                </div>
+              </div>
+              <p className="text-center text-xs text-zinc-600 mt-3">Your data is encrypted. View reports, nothing more.</p>
+            </div>
+          ) : (
+            <div className="pt-6 space-y-4">
+              <p className="text-center text-xs text-zinc-600 uppercase tracking-wider">Trusted by agencies using</p>
+              <div className="flex items-center justify-center gap-6 opacity-40">
+                <span className="text-sm font-semibold text-zinc-400 tracking-tight">Instantly</span>
+                <span className="text-sm font-semibold text-zinc-400 tracking-tight">Smartlead</span>
+                <span className="text-sm font-semibold text-zinc-400 tracking-tight">HubSpot</span>
+                <span className="text-sm font-semibold text-zinc-400 tracking-tight">Slack</span>
               </div>
             </div>
-
-            {/* Trust text */}
-            <div className="flex items-center justify-center gap-5 text-xs text-zinc-500">
-              <div className="flex items-center gap-1.5">
-                <svg className="w-3.5 h-3.5 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                <span>SSL Encrypted</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <svg className="w-3.5 h-3.5 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>Real-time data</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <svg className="w-3.5 h-3.5 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <span>Always up-to-date</span>
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* Footer */}
           <div className="text-center text-xs text-zinc-600 pt-4">
