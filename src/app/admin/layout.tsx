@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { isSuperAdmin, getUserSubscription } from "@/lib/stripe/helpers";
 import { getImpersonatedOwnerId } from "@/lib/impersonation";
@@ -106,11 +107,8 @@ export default async function AdminLayout({
       <header className="bg-card border-b border-border sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <Link href="/admin" className="flex items-center gap-2">
-              <span className="text-2xl">🌊</span>
-              <span className="text-xl font-bold text-primary">
-                Blue<span className="text-foreground">Reach</span>
-              </span>
+            <Link href="/admin" className="flex items-center">
+              <Image src="/bluereach-logo.png" alt="Blue Reach" width={200} height={50} className="h-10 w-auto" priority />
             </Link>
             <div className="flex items-center gap-4">
               {isAdmin && (

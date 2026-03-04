@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 import { LayoutDashboard, Users, MessageSquare, Settings, Zap } from "lucide-react";
 
 interface SidebarProps {
@@ -17,14 +18,7 @@ export function Sidebar({ isAdmin = false, clients = [] }: SidebarProps) {
     <aside className="w-64 min-h-screen bg-slate-900 text-white flex flex-col">
       {/* Logo */}
       <div className="p-6 border-b border-slate-800">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Zap className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-white">BlueReach Agency</h1>
-          </div>
-        </div>
+        <Image src="/bluereach-logo.png" alt="Blue Reach" width={180} height={45} className="h-10 w-auto" />
       </div>
 
       {/* Navigation */}
