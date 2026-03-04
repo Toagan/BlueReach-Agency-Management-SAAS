@@ -48,7 +48,7 @@ export function MarketingHeader() {
               Sign in
             </Link>
             <Link
-              href="/login?role=agency"
+              href="/login"
               className="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:-translate-y-0.5"
             >
               Get Started
@@ -96,7 +96,7 @@ export function MarketingHeader() {
                 Sign in
               </Link>
               <Link
-                href="/login?role=agency"
+                href="/login"
                 className="w-full py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-center font-semibold rounded-xl"
               >
                 Get Started

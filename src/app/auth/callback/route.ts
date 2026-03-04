@@ -21,10 +21,9 @@ export async function GET(request: Request) {
   const code = searchParams.get("code");
   const redirect = searchParams.get("redirect");
   const clientIdFromUrl = searchParams.get("client_id");
-  const role = searchParams.get("role");
   const next = searchParams.get("next") ?? redirect ?? "/dashboard";
 
-  console.log("[Auth Callback] Params:", { code: !!code, clientIdFromUrl, role, next, origin });
+  console.log("[Auth Callback] Params:", { code: !!code, clientIdFromUrl, next, origin });
 
   if (code) {
     const supabase = await createClient();
@@ -133,26 +132,7 @@ export async function GET(request: Request) {
             return NextResponse.redirect(`${origin}/admin/clients/${invitation.client_id}`);
           }
 
-          // Check 3: No invitation — route based on selected role
-          if (role === "client") {
-            // Client signup without invitation - create client profile, show waiting page
-            console.log("[Auth Callback] Client signup without invitation:", userEmail);
-            const { error: clientProfileError } = await serviceSupabase.from("profiles").insert({
-              id: userId,
-              email: userEmail,
-              first_name: userMetadata.first_name || userMetadata.name?.split(" ")[0] || null,
-              role: "client",
-            });
-
-            if (clientProfileError) {
-              console.error("[Auth Callback] Error creating client profile:", clientProfileError);
-              return NextResponse.redirect(`${origin}/login?error=Failed to create profile`);
-            }
-
-            return NextResponse.redirect(`${origin}/client/not-assigned`);
-          }
-
-          // Agency owner or default — create admin profile and redirect to plan selection
+          // Check 3: No invitation — new agency owner signup
           console.log("[Auth Callback] New agency owner signup for:", userEmail);
 
           const { error: profileError } = await serviceSupabase.from("profiles").insert({
