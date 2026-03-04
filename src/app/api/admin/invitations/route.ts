@@ -104,61 +104,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
 
-    // Send invitation email using Supabase Auth
-    // This sends a magic link that allows the user to sign in
     const baseUrl = await getServerUrl();
-    const inviteUrl = `${baseUrl}/auth/accept-invite?token=${token}`;
+    const loginUrl = `${baseUrl}/login`;
 
-    // Check if user already exists
-    const { data: existingUsers } = await serviceSupabase.auth.admin.listUsers();
-    const existingUser = existingUsers?.users?.find(
-      (u) => u.email?.toLowerCase() === email.toLowerCase()
-    );
+    // Check if user already exists in our system (has a profile)
+    // If so, link them directly and mark invitation as accepted
+    const { data: existingProfile } = await serviceSupabase
+      .from("profiles")
+      .select("id")
+      .eq("email", email.toLowerCase().trim())
+      .single();
 
-    if (existingUser) {
-      // User already exists - update their metadata with new client_id and link them
-      console.log("[Invitation] User already exists, updating metadata and linking:", existingUser.id);
-
-      // Update user metadata to point to new client
-      const { error: updateError } = await serviceSupabase.auth.admin.updateUserById(
-        existingUser.id,
-        {
-          user_metadata: {
-            ...existingUser.user_metadata,
-            client_id: client_id,
-            first_name: first_name || existingUser.user_metadata?.first_name || "",
-            invited: true,
-          },
-        }
-      );
-
-      if (updateError) {
-        console.error("[Invitation] Error updating user metadata:", updateError);
-      }
-
-      // Ensure profile exists
-      const { data: existingProfile } = await serviceSupabase
-        .from("profiles")
-        .select("id")
-        .eq("id", existingUser.id)
-        .single();
-
-      if (!existingProfile) {
-        await serviceSupabase.from("profiles").insert({
-          id: existingUser.id,
-          email: existingUser.email,
-          first_name: first_name || existingUser.user_metadata?.first_name || null,
-          role: "client",
-        });
-        console.log("[Invitation] Created profile for existing user");
-      }
+    if (existingProfile) {
+      console.log("[Invitation] User already has profile, linking directly:", existingProfile.id);
 
       // Link them to the client
       const { error: linkError } = await serviceSupabase
         .from("client_users")
         .upsert({
           client_id: client_id,
-          user_id: existingUser.id,
+          user_id: existingProfile.id,
           role: "viewer",
         }, { onConflict: "client_id,user_id" });
 
@@ -166,73 +131,39 @@ export async function POST(request: Request) {
         console.error("[Invitation] Error linking existing user:", linkError);
       }
 
-      // Update invitation as already accepted
+      // Mark invitation as accepted since user is already linked
       await serviceSupabase
         .from("client_invitations")
         .update({ accepted_at: new Date().toISOString() })
         .eq("id", invitation.id);
-
-      // Send notification email to existing user using magic link
-      // This lets them know they have access to a new client
-      console.log("[Invitation] Sending notification email to existing user:", email);
-      const { error: magicLinkError } = await serviceSupabase.auth.signInWithOtp({
-        email: email,
-        options: {
-          emailRedirectTo: `${baseUrl}/auth/callback?next=/admin/clients/${client_id}`,
-          data: {
-            client_id: client_id,
-            client_name: client.name,
-          },
-        },
-      });
-
-      if (magicLinkError) {
-        console.error("[Invitation] Error sending magic link to existing user:", magicLinkError);
-      } else {
-        console.log("[Invitation] Magic link sent to existing user");
-      }
-
-      return NextResponse.json({
-        success: true,
-        invitation,
-        invite_url: inviteUrl,
-        email_sent: !magicLinkError,
-        user_linked: true,
-        message: "User already exists and has been linked to the client. Notification email sent.",
-      });
     }
 
-    // New user - send invite email
-    console.log("[Invitation] Sending invite email to:", email);
-    const { data: inviteData, error: inviteError } = await serviceSupabase.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${baseUrl}/auth/callback?next=/admin/clients/${client_id}&client_id=${client_id}`,
-      data: {
-        first_name: first_name || "",
-        client_id: client_id,
-        invited: true,
-      },
+    // Send branded invitation email via Resend
+    // The email directs them to log in with Google/Microsoft OAuth
+    // The auth callback will match their email to the pending invitation
+    console.log("[Invitation] Sending invitation email to:", email);
+
+    const { sendInvitationEmail } = await import("@/lib/email/send");
+    const emailResult = await sendInvitationEmail({
+      to: email,
+      inviteeName: first_name || email.split("@")[0],
+      clientName: client.name,
+      loginUrl,
+      inviterName: undefined,
     });
 
-    console.log("[Invitation] Invite result:", { inviteData, inviteError });
-
-    if (inviteError) {
-      console.error("[Invitation] Error sending invite email:", inviteError);
-      return NextResponse.json({
-        success: true,
-        invitation,
-        invite_url: inviteUrl,
-        email_sent: false,
-        email_error: inviteError.message,
-      });
+    if (!emailResult.success) {
+      console.error("[Invitation] Error sending invitation email:", emailResult.error);
+    } else {
+      console.log("[Invitation] Invitation email sent successfully to:", email);
     }
 
-    console.log("[Invitation] Email sent successfully to:", email);
     return NextResponse.json({
       success: true,
       invitation,
-      invite_url: inviteUrl,
-      email_sent: true,
-      user_created: inviteData?.user?.id,
+      email_sent: emailResult.success,
+      email_error: emailResult.success ? undefined : emailResult.error,
+      user_linked: !!existingProfile,
     });
   } catch (error) {
     console.error("Error in invitations POST:", error);
