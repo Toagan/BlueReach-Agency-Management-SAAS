@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 
 export function LoginClient() {
@@ -144,13 +145,8 @@ export function LoginClient() {
         {/* Content */}
         <div className="relative z-10 flex flex-col justify-between p-12 xl:p-16 w-full">
           {/* Logo */}
-          <div className="flex items-center gap-3 group cursor-pointer">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:shadow-blue-500/50 transition-all duration-300 group-hover:scale-105">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-            <span className="text-2xl font-bold text-white tracking-tight">Blue Reach</span>
+          <div>
+            <Image src="/bluereach-logo.png" alt="Blue Reach" width={200} height={50} className="h-14 w-auto" priority />
           </div>
 
           {/* Main Content */}
@@ -249,13 +245,8 @@ export function LoginClient() {
 
         <div className="relative z-10 w-full max-w-[380px] space-y-8">
           {/* Mobile Logo */}
-          <div className="lg:hidden flex flex-col items-center gap-4 mb-8">
-            <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30">
-              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-            <span className="text-2xl font-bold text-white tracking-tight">Blue Reach</span>
+          <div className="lg:hidden flex justify-center mb-8">
+            <Image src="/bluereach-logo.png" alt="Blue Reach" width={200} height={50} className="h-14 w-auto" />
           </div>
 
           {/* Header */}
