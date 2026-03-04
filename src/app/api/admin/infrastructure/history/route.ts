@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/auth";
+import { requirePlatformAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -11,7 +11,7 @@ function getSupabase() {
 
 // GET - Get health history for account(s)
 export async function GET(request: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requirePlatformAdmin();
   if (auth.error) return auth.error;
 
   try {
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
 
 // POST - Create daily snapshot for all accounts
 export async function POST() {
-  const auth = await requireAdmin();
+  const auth = await requirePlatformAdmin();
   if (auth.error) return auth.error;
 
   try {
@@ -134,7 +134,7 @@ export async function POST() {
 
 // DELETE - Clean up old history (retention policy)
 export async function DELETE(request: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requirePlatformAdmin();
   if (auth.error) return auth.error;
 
   try {

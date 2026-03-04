@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/auth";
+import { requirePlatformAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -176,7 +176,7 @@ function extractDomain(url: string): string | null {
 
 // POST: Upload and process CSV
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requirePlatformAdmin();
   if (auth.error) return auth.error;
 
   try {

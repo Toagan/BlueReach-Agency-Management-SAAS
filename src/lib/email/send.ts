@@ -35,10 +35,10 @@ interface BrandingSettings {
   senderEmail: string;
 }
 
-async function getBrandingSettings(): Promise<BrandingSettings> {
+async function getBrandingSettings(ownerId?: string): Promise<BrandingSettings> {
   const supabase = getSupabase();
 
-  const { data: settings } = await supabase
+  let query = supabase
     .from("settings")
     .select("key, value")
     .in("key", [
@@ -49,6 +49,12 @@ async function getBrandingSettings(): Promise<BrandingSettings> {
       "agency_sender_name",
       "agency_sender_email",
     ]);
+
+  if (ownerId) {
+    query = query.eq("owner_id", ownerId);
+  }
+
+  const { data: settings } = await query;
 
   const settingsMap = new Map(settings?.map((s) => [s.key, s.value]) || []);
 
@@ -80,14 +86,19 @@ function maskApiKey(key: string): string {
   return `${key.substring(0, 6)}...${key.substring(key.length - 3)}`;
 }
 
-async function getResendClient(): Promise<Resend | null> {
+async function getResendClient(ownerId?: string): Promise<Resend | null> {
   // First, try to get API key from database settings
   const supabase = getSupabase();
-  const { data: setting } = await supabase
+  let resendQuery = supabase
     .from("settings")
     .select("value")
-    .eq("key", "resend_api_key")
-    .single();
+    .eq("key", "resend_api_key");
+
+  if (ownerId) {
+    resendQuery = resendQuery.eq("owner_id", ownerId);
+  }
+
+  const { data: setting } = await resendQuery.single();
 
   let apiKey = setting?.value;
   let source = "database";
@@ -332,22 +343,36 @@ function buildReplyBody(params: ComposeUrlParams): string {
 export async function sendPositiveReplyNotification(
   params: SendPositiveReplyNotificationParams
 ): Promise<{ success: boolean; error?: string; sentTo: string[] }> {
-  const resend = await getResendClient();
   const supabase = getSupabase();
+
+  // Resolve the client's owner_id for tenant scoping
+  const { data: client } = await supabase
+    .from("clients")
+    .select("owner_id")
+    .eq("id", params.clientId)
+    .single();
+  const ownerId = client?.owner_id;
+
+  const resend = await getResendClient(ownerId);
 
   if (!resend) {
     return { success: false, error: "Email service not configured", sentTo: [] };
   }
 
-  const branding = await getBrandingSettings();
+  const branding = await getBrandingSettings(ownerId);
 
-  // Get client-specific notification preferences
+  // Get client-specific notification preferences (scoped by owner)
   const settingKey = `client_${params.clientId}_notification_users`;
-  const { data: prefsSetting } = await supabase
+  let prefsQuery = supabase
     .from("settings")
     .select("value")
-    .eq("key", settingKey)
-    .single();
+    .eq("key", settingKey);
+
+  if (ownerId) {
+    prefsQuery = prefsQuery.eq("owner_id", ownerId);
+  }
+
+  const { data: prefsSetting } = await prefsQuery.single();
 
   let enabledUserIds: string[] = [];
   if (prefsSetting?.value) {
@@ -358,13 +383,18 @@ export async function sendPositiveReplyNotification(
     }
   }
 
-  // If no client-specific preferences set, default to all admins
+  // If no client-specific preferences set, default to client's owner only
   if (!prefsSetting) {
-    const { data: adminProfiles } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("role", "admin");
-    enabledUserIds = adminProfiles?.map((p) => p.id) || [];
+    if (ownerId) {
+      enabledUserIds = [ownerId];
+    } else {
+      // Fallback for orphaned clients: all admins
+      const { data: adminProfiles } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("role", "admin");
+      enabledUserIds = adminProfiles?.map((p) => p.id) || [];
+    }
   }
 
   if (enabledUserIds.length === 0) {
@@ -510,14 +540,23 @@ export interface SendStatsReportParams {
 export async function sendStatsReport(
   params: SendStatsReportParams
 ): Promise<{ success: boolean; error?: string; sentTo: string[] }> {
-  const resend = await getResendClient();
   const supabase = getSupabase();
+
+  // Resolve the client's owner_id for tenant scoping
+  const { data: clientData } = await supabase
+    .from("clients")
+    .select("owner_id")
+    .eq("id", params.clientId)
+    .single();
+  const ownerId = clientData?.owner_id;
+
+  const resend = await getResendClient(ownerId);
 
   if (!resend) {
     return { success: false, error: "Email service not configured", sentTo: [] };
   }
 
-  const branding = await getBrandingSettings();
+  const branding = await getBrandingSettings(ownerId);
 
   let recipients: Array<{ email: string; name: string }> = [];
 
@@ -528,11 +567,16 @@ export async function sendStatsReport(
   } else {
     // Get client-specific notification preferences (same users as positive reply notifications)
     const settingKey = `client_${params.clientId}_notification_users`;
-    const { data: prefsSetting } = await supabase
+    let prefsQuery = supabase
       .from("settings")
       .select("value")
-      .eq("key", settingKey)
-      .single();
+      .eq("key", settingKey);
+
+    if (ownerId) {
+      prefsQuery = prefsQuery.eq("owner_id", ownerId);
+    }
+
+    const { data: prefsSetting } = await prefsQuery.single();
 
     let enabledUserIds: string[] = [];
     if (prefsSetting?.value) {
@@ -543,13 +587,17 @@ export async function sendStatsReport(
       }
     }
 
-    // If no client-specific preferences set, default to all admins
+    // If no client-specific preferences set, default to client's owner only
     if (!prefsSetting) {
-      const { data: adminProfiles } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("role", "admin");
-      enabledUserIds = adminProfiles?.map((p) => p.id) || [];
+      if (ownerId) {
+        enabledUserIds = [ownerId];
+      } else {
+        const { data: adminProfiles } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("role", "admin");
+        enabledUserIds = adminProfiles?.map((p) => p.id) || [];
+      }
     }
 
     if (enabledUserIds.length === 0) {

@@ -1,14 +1,33 @@
-import { createClient } from "@/lib/supabase/server";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { requireAdmin } from "@/lib/auth";
 
-// Service role client for operations that bypass RLS
 function getServiceSupabase() {
-  return createServiceClient(
+  return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
+}
+
+/** Verify the current admin owns this client (or is platform admin). */
+async function verifyClientOwnership(
+  customerId: string,
+  userId: string,
+  isPlatformAdmin: boolean
+): Promise<NextResponse | null> {
+  if (isPlatformAdmin) return null; // platform admin can access all
+
+  const supabase = getServiceSupabase();
+  const { data: client } = await supabase
+    .from("clients")
+    .select("owner_id")
+    .eq("id", customerId)
+    .single();
+
+  if (!client || client.owner_id !== userId) {
+    return NextResponse.json({ error: "Access denied to this client" }, { status: 403 });
+  }
+  return null;
 }
 
 export async function GET(
@@ -20,26 +39,11 @@ export async function GET(
 
   try {
     const { customerId } = await params;
-    const supabase = await createClient();
+    const supabase = getServiceSupabase();
 
-    // Verify admin access
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    // Verify ownership
+    const denied = await verifyClientOwnership(customerId, auth.user.id, auth.isPlatformAdmin);
+    if (denied) return denied;
 
     const { data: client, error } = await supabase
       .from("clients")
@@ -73,26 +77,11 @@ export async function PATCH(
 
   try {
     const { customerId } = await params;
-    const supabase = await createClient();
+    const supabase = getServiceSupabase();
 
-    // Verify admin access
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    // Verify ownership
+    const denied = await verifyClientOwnership(customerId, auth.user.id, auth.isPlatformAdmin);
+    if (denied) return denied;
 
     const body = await request.json();
     const updates: Record<string, unknown> = {};
@@ -148,29 +137,11 @@ export async function DELETE(
 
   try {
     const { customerId } = await params;
-    const supabase = await createClient();
-
-    // Verify admin access
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    // Use service role client for cleanup operations
     const serviceSupabase = getServiceSupabase();
+
+    // Verify ownership
+    const denied = await verifyClientOwnership(customerId, auth.user.id, auth.isPlatformAdmin);
+    if (denied) return denied;
 
     // Get all users linked to this client
     const { data: clientUsers } = await serviceSupabase

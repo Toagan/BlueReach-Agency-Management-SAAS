@@ -9,7 +9,7 @@ function getSupabase() {
   );
 }
 
-// GET - Get all workspace users with their notification preferences
+// GET - Get workspace users with notification preferences (scoped to owner)
 export async function GET() {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
@@ -17,22 +17,30 @@ export async function GET() {
   const supabase = getSupabase();
 
   try {
-    // Get all profiles (workspace users)
-    const { data: profiles, error: profilesError } = await supabase
+    // For regular admins, only show their own profile
+    // For platform admins, show all profiles
+    let profilesQuery = supabase
       .from("profiles")
       .select("id, email, full_name, role")
       .order("email");
+
+    if (!auth.isPlatformAdmin) {
+      profilesQuery = profilesQuery.eq("id", auth.user.id);
+    }
+
+    const { data: profiles, error: profilesError } = await profilesQuery;
 
     if (profilesError) {
       console.error("Error fetching profiles:", profilesError);
       return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
     }
 
-    // Get notification preferences from settings
+    // Get notification preferences from settings (scoped by owner)
     const { data: prefsSetting } = await supabase
       .from("settings")
       .select("value")
       .eq("key", "positive_reply_notification_users")
+      .eq("owner_id", auth.user.id)
       .single();
 
     // Parse the preferences (stored as JSON array of user IDs)
@@ -45,11 +53,9 @@ export async function GET() {
       }
     }
 
-    // If no preferences set yet, default to all admin users enabled
+    // If no preferences set yet, default to the current admin
     if (!prefsSetting) {
-      enabledUserIds = profiles
-        ?.filter((p) => p.role === "admin")
-        .map((p) => p.id) || [];
+      enabledUserIds = [auth.user.id];
     }
 
     // Build user list with enabled status
@@ -71,7 +77,7 @@ export async function GET() {
   }
 }
 
-// POST - Update notification preferences
+// POST - Update notification preferences (scoped by owner)
 export async function POST(request: Request) {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
@@ -89,11 +95,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get current preferences
+    // Get current preferences for this owner
     const { data: prefsSetting } = await supabase
       .from("settings")
       .select("value")
       .eq("key", "positive_reply_notification_users")
+      .eq("owner_id", auth.user.id)
       .single();
 
     let enabledUserIds: string[] = [];
@@ -112,20 +119,43 @@ export async function POST(request: Request) {
       enabledUserIds = enabledUserIds.filter((id) => id !== userId);
     }
 
-    // Save back to settings
-    const { error: upsertError } = await supabase
+    // Save back to settings (scoped by owner)
+    const { data: existing } = await supabase
       .from("settings")
-      .upsert({
-        key: "positive_reply_notification_users",
-        value: JSON.stringify(enabledUserIds),
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: "key",
-      });
+      .select("id")
+      .eq("key", "positive_reply_notification_users")
+      .eq("owner_id", auth.user.id)
+      .single();
 
-    if (upsertError) {
-      console.error("Error saving preferences:", upsertError);
-      return NextResponse.json({ error: "Failed to save preferences" }, { status: 500 });
+    if (existing) {
+      const { error: updateError } = await supabase
+        .from("settings")
+        .update({
+          value: JSON.stringify(enabledUserIds),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("key", "positive_reply_notification_users")
+        .eq("owner_id", auth.user.id);
+
+      if (updateError) {
+        console.error("Error saving preferences:", updateError);
+        return NextResponse.json({ error: "Failed to save preferences" }, { status: 500 });
+      }
+    } else {
+      const { error: insertError } = await supabase
+        .from("settings")
+        .insert({
+          key: "positive_reply_notification_users",
+          value: JSON.stringify(enabledUserIds),
+          owner_id: auth.user.id,
+          is_encrypted: false,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (insertError) {
+        console.error("Error saving preferences:", insertError);
+        return NextResponse.json({ error: "Failed to save preferences" }, { status: 500 });
+      }
     }
 
     return NextResponse.json({ success: true, enabledUserIds });

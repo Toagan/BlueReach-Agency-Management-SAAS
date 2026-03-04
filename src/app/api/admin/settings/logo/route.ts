@@ -67,16 +67,17 @@ export async function POST(request: Request) {
         const base64 = buffer.toString("base64");
         const dataUrl = `data:${file.type};base64,${base64}`;
 
-        // Save to settings table
+        // Save to settings table (scoped by owner)
         const { error: settingsError } = await supabase
           .from("settings")
           .upsert({
             key: "agency_logo_url",
             value: dataUrl,
+            owner_id: auth.user.id,
             is_encrypted: false,
             updated_at: new Date().toISOString(),
           }, {
-            onConflict: "key",
+            onConflict: "key,owner_id",
           });
 
         if (settingsError) {
@@ -103,16 +104,17 @@ export async function POST(request: Request) {
 
     const logoUrl = urlData.publicUrl;
 
-    // Save URL to settings
+    // Save URL to settings (scoped by owner)
     const { error: settingsError } = await supabase
       .from("settings")
       .upsert({
         key: "agency_logo_url",
         value: logoUrl,
+        owner_id: auth.user.id,
         is_encrypted: false,
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: "key",
+        onConflict: "key,owner_id",
       });
 
     if (settingsError) {

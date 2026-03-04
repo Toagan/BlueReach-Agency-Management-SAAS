@@ -9,7 +9,7 @@ function getSupabase() {
   );
 }
 
-// GET - Get all settings (values masked for security)
+// GET - Get all settings (values masked for security), scoped by owner
 export async function GET() {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
@@ -17,17 +17,23 @@ export async function GET() {
   try {
     const supabase = getSupabase();
 
-    const { data: settings, error } = await supabase
+    let query = supabase
       .from("settings")
       .select("key, value, is_encrypted, updated_at")
       .order("key");
+
+    if (!auth.isPlatformAdmin) {
+      query = query.eq("owner_id", auth.user.id);
+    }
+
+    const { data: settings, error } = await query;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     // Mask encrypted values (only show if set or not)
-    const maskedSettings = settings.map((setting) => ({
+    const maskedSettings = (settings || []).map((setting) => ({
       key: setting.key,
       is_set: !!setting.value && setting.value.length > 0,
       is_encrypted: setting.is_encrypted,
@@ -48,7 +54,7 @@ export async function GET() {
   }
 }
 
-// POST - Update a setting
+// POST - Update a setting (scoped by owner)
 export async function POST(request: Request) {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
@@ -62,11 +68,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Key is required" }, { status: 400 });
     }
 
-    // Check if setting exists
+    // Check if setting exists for this owner
     const { data: existing } = await supabase
       .from("settings")
       .select("id")
       .eq("key", key)
+      .eq("owner_id", auth.user.id)
       .single();
 
     if (existing) {
@@ -77,16 +84,18 @@ export async function POST(request: Request) {
           value: value || "",
           updated_at: new Date().toISOString(),
         })
-        .eq("key", key);
+        .eq("key", key)
+        .eq("owner_id", auth.user.id);
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
     } else {
-      // Insert new setting
+      // Insert new setting with owner_id
       const { error } = await supabase.from("settings").insert({
         key,
         value: value || "",
+        owner_id: auth.user.id,
         is_encrypted: key.includes("key") || key.includes("secret"),
       });
 
@@ -105,7 +114,7 @@ export async function POST(request: Request) {
   }
 }
 
-// DELETE - Clear a setting value
+// DELETE - Clear a setting value (scoped by owner)
 export async function DELETE(request: Request) {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
@@ -125,7 +134,8 @@ export async function DELETE(request: Request) {
         value: "",
         updated_at: new Date().toISOString(),
       })
-      .eq("key", key);
+      .eq("key", key)
+      .eq("owner_id", auth.user.id);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

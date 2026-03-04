@@ -21,6 +21,7 @@ export interface Profile {
   role: UserRole;
   full_name: string | null;
   stripe_customer_id?: string | null;
+  is_platform_admin?: boolean;
 }
 
 // Stripe billing types
@@ -56,6 +57,7 @@ export interface StripeSubscription {
 export interface Client {
   id: string;
   name: string;
+  owner_id: string;
   logo_url?: string | null;
   website?: string | null;
   notes?: string | null;

@@ -11,7 +11,7 @@ function getSupabase() {
   );
 }
 
-// GET - Get notes content
+// GET - Get notes content (scoped by owner)
 export async function GET() {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
@@ -23,6 +23,7 @@ export async function GET() {
       .from("settings")
       .select("value, updated_at")
       .eq("key", NOTES_KEY)
+      .eq("owner_id", auth.user.id)
       .single();
 
     if (error && error.code !== "PGRST116") {
@@ -43,7 +44,7 @@ export async function GET() {
   }
 }
 
-// POST - Save notes content
+// POST - Save notes content (scoped by owner)
 export async function POST(request: Request) {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
@@ -53,11 +54,12 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { content } = body;
 
-    // Check if notes setting exists
+    // Check if notes setting exists for this owner
     const { data: existing } = await supabase
       .from("settings")
       .select("id")
       .eq("key", NOTES_KEY)
+      .eq("owner_id", auth.user.id)
       .single();
 
     const now = new Date().toISOString();
@@ -70,16 +72,18 @@ export async function POST(request: Request) {
           value: content || "",
           updated_at: now,
         })
-        .eq("key", NOTES_KEY);
+        .eq("key", NOTES_KEY)
+        .eq("owner_id", auth.user.id);
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
     } else {
-      // Insert new notes setting
+      // Insert new notes setting with owner_id
       const { error } = await supabase.from("settings").insert({
         key: NOTES_KEY,
         value: content || "",
+        owner_id: auth.user.id,
         is_encrypted: false,
       });
 

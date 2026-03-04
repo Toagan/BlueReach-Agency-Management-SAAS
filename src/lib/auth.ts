@@ -34,11 +34,11 @@ export async function requireAuth(): Promise<
 }
 
 /**
- * Require admin role. Returns the user or a 401/403 response.
+ * Require admin role. Returns the user and platform admin flag, or an error response.
  */
 export async function requireAdmin(): Promise<
-  | { user: { id: string; email?: string }; error?: never }
-  | { user?: never; error: NextResponse }
+  | { user: { id: string; email?: string }; isPlatformAdmin: boolean; error?: never }
+  | { user?: never; isPlatformAdmin?: never; error: NextResponse }
 > {
   const auth = await requireAuth();
   if (auth.error) return auth;
@@ -46,7 +46,7 @@ export async function requireAdmin(): Promise<
   const supabase = getServiceSupabase();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_platform_admin")
     .eq("id", auth.user.id)
     .single();
 
@@ -59,16 +59,38 @@ export async function requireAdmin(): Promise<
     };
   }
 
+  return { user: auth.user, isPlatformAdmin: profile.is_platform_admin === true };
+}
+
+/**
+ * Require platform admin role. Returns 403 for regular admins.
+ */
+export async function requirePlatformAdmin(): Promise<
+  | { user: { id: string; email?: string }; error?: never }
+  | { user?: never; error: NextResponse }
+> {
+  const auth = await requireAdmin();
+  if (auth.error) return auth;
+
+  if (!auth.isPlatformAdmin) {
+    return {
+      error: NextResponse.json(
+        { error: "Platform admin access required" },
+        { status: 403 }
+      ),
+    };
+  }
+
   return { user: auth.user };
 }
 
 /**
- * Require access to a specific client. Admins always have access.
- * Client users must have a link in client_users table.
+ * Require access to a specific client. Admins only see their own clients
+ * unless they are platform admins. Client users must have a link in client_users table.
  */
 export async function requireClientAccess(clientId: string): Promise<
-  | { user: { id: string; email?: string }; isAdmin: boolean; error?: never }
-  | { user?: never; isAdmin?: never; error: NextResponse }
+  | { user: { id: string; email?: string }; isAdmin: boolean; isPlatformAdmin: boolean; error?: never }
+  | { user?: never; isAdmin?: never; isPlatformAdmin?: never; error: NextResponse }
 > {
   const auth = await requireAuth();
   if (auth.error) return auth;
@@ -76,7 +98,7 @@ export async function requireClientAccess(clientId: string): Promise<
   const supabase = getServiceSupabase();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_platform_admin")
     .eq("id", auth.user.id)
     .single();
 
@@ -90,8 +112,29 @@ export async function requireClientAccess(clientId: string): Promise<
   }
 
   const isAdmin = profile.role === "admin";
+  const isPlatformAdmin = profile.is_platform_admin === true;
 
-  if (!isAdmin) {
+  if (isAdmin) {
+    // Platform admins can access any client
+    if (!isPlatformAdmin) {
+      // Regular admins: verify they own this client
+      const { data: client } = await supabase
+        .from("clients")
+        .select("owner_id")
+        .eq("id", clientId)
+        .single();
+
+      if (!client || client.owner_id !== auth.user.id) {
+        return {
+          error: NextResponse.json(
+            { error: "Access denied to this client" },
+            { status: 403 }
+          ),
+        };
+      }
+    }
+  } else {
+    // Client users: check client_users table
     const { data: clientAccess } = await supabase
       .from("client_users")
       .select("client_id")
@@ -109,15 +152,15 @@ export async function requireClientAccess(clientId: string): Promise<
     }
   }
 
-  return { user: auth.user, isAdmin };
+  return { user: auth.user, isAdmin, isPlatformAdmin };
 }
 
 /**
  * Require access to a specific campaign via its client.
  */
 export async function requireCampaignAccess(campaignId: string): Promise<
-  | { user: { id: string; email?: string }; isAdmin: boolean; clientId: string; error?: never }
-  | { user?: never; isAdmin?: never; clientId?: never; error: NextResponse }
+  | { user: { id: string; email?: string }; isAdmin: boolean; isPlatformAdmin: boolean; clientId: string; error?: never }
+  | { user?: never; isAdmin?: never; isPlatformAdmin?: never; clientId?: never; error: NextResponse }
 > {
   const auth = await requireAuth();
   if (auth.error) return auth;
@@ -142,13 +185,32 @@ export async function requireCampaignAccess(campaignId: string): Promise<
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_platform_admin")
     .eq("id", auth.user.id)
     .single();
 
   const isAdmin = profile?.role === "admin";
+  const isPlatformAdmin = profile?.is_platform_admin === true;
 
-  if (!isAdmin) {
+  if (isAdmin) {
+    if (!isPlatformAdmin) {
+      // Regular admins: verify they own the campaign's client
+      const { data: client } = await supabase
+        .from("clients")
+        .select("owner_id")
+        .eq("id", campaign.client_id)
+        .single();
+
+      if (!client || client.owner_id !== auth.user.id) {
+        return {
+          error: NextResponse.json(
+            { error: "Access denied to this campaign" },
+            { status: 403 }
+          ),
+        };
+      }
+    }
+  } else {
     const { data: clientAccess } = await supabase
       .from("client_users")
       .select("client_id")
@@ -166,7 +228,7 @@ export async function requireCampaignAccess(campaignId: string): Promise<
     }
   }
 
-  return { user: auth.user, isAdmin, clientId: campaign.client_id };
+  return { user: auth.user, isAdmin, isPlatformAdmin, clientId: campaign.client_id };
 }
 
 function getServiceSupabase() {

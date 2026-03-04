@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { fetchAllInstantlyAccounts, getWarmupAnalytics, getInstantlyClient } from "@/lib/instantly";
 import { fetchSmartleadAccounts, getSmartleadWarmupAnalytics, getSmartleadClient } from "@/lib/smartlead";
 import type { EmailAccountProvider } from "@/types/database";
-import { requireAdmin } from "@/lib/auth";
+import { requirePlatformAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -180,7 +180,7 @@ async function syncSmartleadAccounts(supabase: ReturnType<typeof getSupabase>): 
 
 // POST - Trigger sync from providers
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requirePlatformAdmin();
   if (auth.error) return auth.error;
 
   try {

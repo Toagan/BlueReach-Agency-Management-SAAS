@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/auth";
+import { requirePlatformAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -11,7 +11,7 @@ function getSupabase() {
 
 // GET - List all email accounts with optional filtering
 export async function GET(request: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requirePlatformAdmin();
   if (auth.error) return auth.error;
 
   try {

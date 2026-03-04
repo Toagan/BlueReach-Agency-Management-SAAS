@@ -14,7 +14,7 @@ export async function GET() {
   const auth = await requireAuth();
   if (auth.error) return auth.error;
 
-  // Super-admin gets synthetic agency/active response
+  // Super-admin / platform admin gets synthetic agency/active response
   if (isSuperAdmin(auth.user.email)) {
     return NextResponse.json({
       plan: "agency",
@@ -31,11 +31,12 @@ export async function GET() {
     return NextResponse.json({ plan: null, status: null });
   }
 
-  // Get current client count
+  // Get current client count (scoped to this owner's clients only)
   const supabase = getServiceSupabase();
   const { count } = await supabase
     .from("clients")
-    .select("id", { count: "exact", head: true });
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", auth.user.id);
 
   return NextResponse.json({
     plan: subscription.plan,

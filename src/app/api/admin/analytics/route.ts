@@ -65,6 +65,42 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabase();
     const dateRange = getDateRange(period);
 
+    // Get owner's campaign IDs for scoping (platform admin sees all)
+    let ownerCampaignIds: string[] | null = null;
+    if (!auth.isPlatformAdmin) {
+      const { data: ownerClients } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("owner_id", auth.user.id);
+      const clientIds = ownerClients?.map(c => c.id) || [];
+
+      if (clientIds.length === 0) {
+        return NextResponse.json({
+          period,
+          start_date: dateRange?.startDate.toISOString().split("T")[0] || null,
+          end_date: dateRange?.endDate.toISOString().split("T")[0] || null,
+          leads_contacted: 0, emails_sent: 0, emails_opened: 0, emails_clicked: 0,
+          bounced: 0, replies: 0, opportunities: 0, reply_rate: 0, data_source: "empty",
+        });
+      }
+
+      const { data: ownerCampaigns } = await supabase
+        .from("campaigns")
+        .select("id")
+        .in("client_id", clientIds);
+      ownerCampaignIds = ownerCampaigns?.map(c => c.id) || [];
+
+      if (ownerCampaignIds.length === 0) {
+        return NextResponse.json({
+          period,
+          start_date: dateRange?.startDate.toISOString().split("T")[0] || null,
+          end_date: dateRange?.endDate.toISOString().split("T")[0] || null,
+          leads_contacted: 0, emails_sent: 0, emails_opened: 0, emails_clicked: 0,
+          bounced: 0, replies: 0, opportunities: 0, reply_rate: 0, data_source: "empty",
+        });
+      }
+    }
+
     let emailsSent = 0;
     let emailsOpened = 0;
     let emailsClicked = 0;
@@ -79,42 +115,46 @@ export async function GET(request: NextRequest) {
       const startDateStr = dateRange.startDate.toISOString().split("T")[0];
       const endDateStr = dateRange.endDate.toISOString().split("T")[0];
 
-      const { data: dailyStats, error: dailyError } = await supabase
+      let dailyQuery = supabase
         .from("campaign_analytics_daily")
         .select("emails_sent, emails_opened, emails_clicked, emails_replied, positive_replies, leads_contacted")
         .gte("snapshot_date", startDateStr)
         .lte("snapshot_date", endDateStr);
 
+      if (ownerCampaignIds !== null) {
+        dailyQuery = dailyQuery.in("campaign_id", ownerCampaignIds);
+      }
+
+      const { data: dailyStats, error: dailyError } = await dailyQuery;
+
       if (dailyError) {
         console.error("Error fetching daily analytics:", dailyError);
-        // Fall back to leads count if daily snapshots not available
-        const { count: leadsCount } = await supabase
-          .from("leads")
-          .select("*", { count: "exact", head: true })
+        // Fall back to leads count
+        let leadsQuery = supabase.from("leads").select("*", { count: "exact", head: true })
           .gte("created_at", dateRange.startDate.toISOString())
           .lte("created_at", dateRange.endDate.toISOString());
-
-        const { count: repliesCount } = await supabase
-          .from("leads")
-          .select("*", { count: "exact", head: true })
+        let repliesQuery = supabase.from("leads").select("*", { count: "exact", head: true })
           .eq("has_replied", true)
           .gte("created_at", dateRange.startDate.toISOString())
           .lte("created_at", dateRange.endDate.toISOString());
-
-        const { count: positiveCount } = await supabase
-          .from("leads")
-          .select("*", { count: "exact", head: true })
+        let positiveQuery = supabase.from("leads").select("*", { count: "exact", head: true })
           .eq("is_positive_reply", true)
           .gte("created_at", dateRange.startDate.toISOString())
           .lte("created_at", dateRange.endDate.toISOString());
 
-        leadsContacted = leadsCount || 0;
-        emailsSent = leadsContacted; // Fallback proxy
-        replies = repliesCount || 0;
-        opportunities = positiveCount || 0;
+        if (ownerCampaignIds !== null) {
+          leadsQuery = leadsQuery.in("campaign_id", ownerCampaignIds);
+          repliesQuery = repliesQuery.in("campaign_id", ownerCampaignIds);
+          positiveQuery = positiveQuery.in("campaign_id", ownerCampaignIds);
+        }
+
+        const [l, r, p] = await Promise.all([leadsQuery, repliesQuery, positiveQuery]);
+        leadsContacted = l.count || 0;
+        emailsSent = leadsContacted;
+        replies = r.count || 0;
+        opportunities = p.count || 0;
         dataSource = "leads_fallback";
       } else if (dailyStats && dailyStats.length > 0) {
-        // Aggregate daily stats
         emailsSent = dailyStats.reduce((sum, d) => sum + (d.emails_sent || 0), 0);
         emailsOpened = dailyStats.reduce((sum, d) => sum + (d.emails_opened || 0), 0);
         emailsClicked = dailyStats.reduce((sum, d) => sum + (d.emails_clicked || 0), 0);
@@ -123,41 +163,48 @@ export async function GET(request: NextRequest) {
         leadsContacted = dailyStats.reduce((sum, d) => sum + (d.leads_contacted || 0), 0);
         dataSource = "daily_snapshots";
       } else {
-        // No daily data for this period - fall back to leads count
-        const { count: leadsCount } = await supabase
-          .from("leads")
-          .select("*", { count: "exact", head: true })
+        // No daily data - fall back to leads count
+        let leadsQuery = supabase.from("leads").select("*", { count: "exact", head: true })
           .gte("created_at", dateRange.startDate.toISOString())
           .lte("created_at", dateRange.endDate.toISOString());
-
-        const { count: repliesCount } = await supabase
-          .from("leads")
-          .select("*", { count: "exact", head: true })
+        let repliesQuery = supabase.from("leads").select("*", { count: "exact", head: true })
           .eq("has_replied", true)
           .gte("created_at", dateRange.startDate.toISOString())
           .lte("created_at", dateRange.endDate.toISOString());
-
-        const { count: positiveCount } = await supabase
-          .from("leads")
-          .select("*", { count: "exact", head: true })
+        let positiveQuery = supabase.from("leads").select("*", { count: "exact", head: true })
           .eq("is_positive_reply", true)
           .gte("created_at", dateRange.startDate.toISOString())
           .lte("created_at", dateRange.endDate.toISOString());
 
-        leadsContacted = leadsCount || 0;
-        emailsSent = leadsContacted; // Fallback proxy
-        replies = repliesCount || 0;
-        opportunities = positiveCount || 0;
+        if (ownerCampaignIds !== null) {
+          leadsQuery = leadsQuery.in("campaign_id", ownerCampaignIds);
+          repliesQuery = repliesQuery.in("campaign_id", ownerCampaignIds);
+          positiveQuery = positiveQuery.in("campaign_id", ownerCampaignIds);
+        }
+
+        const [l, r, p] = await Promise.all([leadsQuery, repliesQuery, positiveQuery]);
+        leadsContacted = l.count || 0;
+        emailsSent = leadsContacted;
+        replies = r.count || 0;
+        opportunities = p.count || 0;
         dataSource = "leads_fallback";
       }
     } else {
       // ALL-TIME: Use campaigns.cached_* for email stats, leads table for lead counts
+      let leadsQuery = supabase.from("leads").select("*", { count: "exact", head: true });
+      let repliesQuery = supabase.from("leads").select("*", { count: "exact", head: true }).eq("has_replied", true);
+      let positiveQuery = supabase.from("leads").select("*", { count: "exact", head: true }).eq("is_positive_reply", true);
+      let campaignsQuery = supabase.from("campaigns").select("cached_emails_sent, cached_emails_opened, cached_emails_bounced");
+
+      if (ownerCampaignIds !== null) {
+        leadsQuery = leadsQuery.in("campaign_id", ownerCampaignIds);
+        repliesQuery = repliesQuery.in("campaign_id", ownerCampaignIds);
+        positiveQuery = positiveQuery.in("campaign_id", ownerCampaignIds);
+        campaignsQuery = campaignsQuery.in("id", ownerCampaignIds);
+      }
+
       const [leadsCountResult, repliesResult, positiveResult, campaignsResult] = await Promise.all([
-        // Count actual leads in the database (source of truth for leads contacted)
-        supabase.from("leads").select("*", { count: "exact", head: true }),
-        supabase.from("leads").select("*", { count: "exact", head: true }).eq("has_replied", true),
-        supabase.from("leads").select("*", { count: "exact", head: true }).eq("is_positive_reply", true),
-        supabase.from("campaigns").select("cached_emails_sent, cached_emails_opened, cached_emails_bounced"),
+        leadsQuery, repliesQuery, positiveQuery, campaignsQuery,
       ]);
 
       leadsContacted = leadsCountResult.count || 0;

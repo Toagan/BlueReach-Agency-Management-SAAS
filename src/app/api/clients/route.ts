@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAuth } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -12,7 +12,7 @@ function getSupabase() {
 // POST - Create a new client
 export async function POST(request: Request) {
   try {
-    const auth = await requireAuth();
+    const auth = await requireAdmin();
     if (auth.error) return auth.error;
     const body = await request.json();
     const { name } = body;
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
 
     const { data: client, error } = await supabase
       .from("clients")
-      .insert({ name: name.trim() })
+      .insert({ name: name.trim(), owner_id: auth.user.id })
       .select()
       .single();
 
@@ -50,18 +50,24 @@ export async function POST(request: Request) {
   }
 }
 
-// GET - List all clients with their campaigns
+// GET - List all clients with their campaigns (scoped by owner)
 export async function GET() {
   try {
-    const auth = await requireAuth();
+    const auth = await requireAdmin();
     if (auth.error) return auth.error;
     const supabase = getSupabase();
 
-    // Fetch all clients
-    const { data: clients, error: clientsError } = await supabase
+    // Fetch clients scoped by owner (platform admin sees all)
+    let clientsQuery = supabase
       .from("clients")
       .select("id, name")
       .order("name");
+
+    if (!auth.isPlatformAdmin) {
+      clientsQuery = clientsQuery.eq("owner_id", auth.user.id);
+    }
+
+    const { data: clients, error: clientsError } = await clientsQuery;
 
     if (clientsError) {
       return NextResponse.json(
@@ -70,22 +76,31 @@ export async function GET() {
       );
     }
 
-    // Fetch all campaigns
-    const { data: campaigns, error: campaignsError } = await supabase
-      .from("campaigns")
-      .select("id, name, client_id, instantly_campaign_id, is_active")
-      .order("name");
+    const clientIds = (clients || []).map(c => c.id);
 
-    if (campaignsError) {
-      return NextResponse.json(
-        { error: campaignsError.message },
-        { status: 500 }
-      );
+    // Fetch campaigns only for visible clients
+    let campaigns: typeof campaignsData = [];
+    let campaignsData: Array<{ id: string; name: string; client_id: string; instantly_campaign_id: string | null; is_active: boolean }> = [];
+
+    if (clientIds.length > 0) {
+      const { data, error: campaignsError } = await supabase
+        .from("campaigns")
+        .select("id, name, client_id, instantly_campaign_id, is_active")
+        .in("client_id", clientIds)
+        .order("name");
+
+      if (campaignsError) {
+        return NextResponse.json(
+          { error: campaignsError.message },
+          { status: 500 }
+        );
+      }
+      campaignsData = data || [];
     }
 
     // Group campaigns by client
-    const campaignsByClient = new Map<string, typeof campaigns>();
-    for (const campaign of campaigns || []) {
+    const campaignsByClient = new Map<string, typeof campaignsData>();
+    for (const campaign of campaignsData) {
       const clientCampaigns = campaignsByClient.get(campaign.client_id) || [];
       clientCampaigns.push(campaign);
       campaignsByClient.set(campaign.client_id, clientCampaigns);

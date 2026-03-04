@@ -22,7 +22,7 @@ async function fetchInfrastructureData(params: Record<string, string | string[] 
   // Fetch clients for dropdown
   const { data: clients } = await supabase
     .from("clients")
-    .select("id, name, created_at")
+    .select("id, name, owner_id, created_at")
     .eq("is_active", true)
     .order("name");
 

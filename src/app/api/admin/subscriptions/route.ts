@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Subscription, BillingCycle } from "@/types/database";
-import { requireAdmin } from "@/lib/auth";
+import { requirePlatformAdmin } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -12,7 +12,7 @@ function getSupabase() {
 
 // GET - List all subscriptions
 export async function GET() {
-  const auth = await requireAdmin();
+  const auth = await requirePlatformAdmin();
   if (auth.error) return auth.error;
 
   try {
@@ -43,7 +43,7 @@ export async function GET() {
 
 // POST - Create a new subscription
 export async function POST(request: Request) {
-  const auth = await requireAdmin();
+  const auth = await requirePlatformAdmin();
   if (auth.error) return auth.error;
 
   try {

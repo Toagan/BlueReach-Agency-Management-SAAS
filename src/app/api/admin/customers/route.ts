@@ -1,35 +1,23 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { requireAdmin } from "@/lib/auth";
+
+function getServiceSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export async function GET() {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
-    const supabase = await createClient();
+    const supabase = getServiceSupabase();
 
-    // Verify admin access
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    // Fetch all clients with campaign counts and lead stats
-    const { data: clients, error } = await supabase
+    // Fetch clients scoped by owner (platform admin sees all)
+    let query = supabase
       .from("clients")
       .select(`
         *,
@@ -40,6 +28,12 @@ export async function GET() {
         )
       `)
       .order("created_at", { ascending: false });
+
+    if (!auth.isPlatformAdmin) {
+      query = query.eq("owner_id", auth.user.id);
+    }
+
+    const { data: clients, error } = await query;
 
     if (error) {
       console.error("Error fetching clients:", error);
@@ -78,26 +72,7 @@ export async function POST(request: Request) {
   if (auth.error) return auth.error;
 
   try {
-    const supabase = await createClient();
-
-    // Verify admin access
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const supabase = getServiceSupabase();
 
     const body = await request.json();
     const { name, instantly_api_key, webhook_secret } = body;
@@ -109,8 +84,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Build insert data with optional fields
-    const insertData: Record<string, string> = { name: name.trim() };
+    // Build insert data with owner_id
+    const insertData: Record<string, string> = {
+      name: name.trim(),
+      owner_id: auth.user.id,
+    };
 
     if (instantly_api_key && typeof instantly_api_key === "string") {
       insertData.instantly_api_key = instantly_api_key.trim();

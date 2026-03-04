@@ -1,12 +1,11 @@
-import { createClient } from "@/lib/supabase/server";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { getServerUrl } from "@/utils/get-url";
 import { requireAdmin } from "@/lib/auth";
 
 // Create a Supabase client with service role for admin operations
 function getServiceSupabase() {
-  return createServiceClient(
+  return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
@@ -18,27 +17,7 @@ export async function POST(request: Request) {
   if (auth.error) return auth.error;
 
   try {
-    const supabase = await createClient();
     const serviceSupabase = getServiceSupabase();
-
-    // Verify admin access
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
 
     const body = await request.json();
     const { client_id, email, first_name } = body;
@@ -59,10 +38,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get client name for the invitation
+    // Verify the admin owns this client (or is platform admin)
     const { data: client } = await serviceSupabase
       .from("clients")
-      .select("name")
+      .select("name, owner_id")
       .eq("id", client_id)
       .single();
 
@@ -70,6 +49,13 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Client not found" },
         { status: 404 }
+      );
+    }
+
+    if (!auth.isPlatformAdmin && client.owner_id !== auth.user.id) {
+      return NextResponse.json(
+        { error: "Access denied to this client" },
+        { status: 403 }
       );
     }
 
@@ -87,7 +73,7 @@ export async function POST(request: Request) {
         first_name: first_name?.trim() || null,
         token,
         expires_at: expiresAt.toISOString(),
-        invited_by: user.id,
+        invited_by: auth.user.id,
       })
       .select()
       .single();
@@ -139,8 +125,6 @@ export async function POST(request: Request) {
     }
 
     // Send branded invitation email via Resend
-    // The email directs them to log in with Google/Microsoft OAuth
-    // The auth callback will match their email to the pending invitation
     console.log("[Invitation] Sending invitation email to:", email);
 
     const { sendInvitationEmail } = await import("@/lib/email/send");
@@ -180,15 +164,7 @@ export async function GET(request: Request) {
   if (auth.error) return auth.error;
 
   try {
-    const supabase = await createClient();
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const serviceSupabase = getServiceSupabase();
 
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get("client_id");
@@ -200,7 +176,23 @@ export async function GET(request: Request) {
       );
     }
 
-    const { data: invitations, error } = await supabase
+    // Verify the admin owns this client (or is platform admin)
+    if (!auth.isPlatformAdmin) {
+      const { data: client } = await serviceSupabase
+        .from("clients")
+        .select("owner_id")
+        .eq("id", clientId)
+        .single();
+
+      if (!client || client.owner_id !== auth.user.id) {
+        return NextResponse.json(
+          { error: "Access denied to this client" },
+          { status: 403 }
+        );
+      }
+    }
+
+    const { data: invitations, error } = await serviceSupabase
       .from("client_invitations")
       .select("*")
       .eq("client_id", clientId)
