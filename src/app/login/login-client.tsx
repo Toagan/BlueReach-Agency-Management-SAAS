@@ -154,14 +154,9 @@ export function LoginClient() {
           </div>
 
           {/* Main Content */}
-          <div className="space-y-12 max-w-xl">
+          <div className="space-y-10 max-w-xl">
             {/* Headline */}
             <div className="space-y-6">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-                <span className="text-sm text-emerald-300 font-medium">Your client portal is ready</span>
-              </div>
-
               <h1 className="text-5xl xl:text-6xl font-bold text-white leading-[1.08] tracking-tight">
                 See your outreach
                 <span className="block mt-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-emerald-400">
@@ -169,29 +164,13 @@ export function LoginClient() {
                 </span>
               </h1>
 
-              <p className="text-xl text-zinc-400 leading-relaxed max-w-lg">
+              <p className="text-lg text-zinc-400 leading-relaxed max-w-lg">
                 Track your email campaigns, monitor lead responses, and see your pipeline grow. Full transparency into your outbound performance.
               </p>
             </div>
 
-            {/* Value Props */}
-            <div className="flex items-center gap-6 xl:gap-10">
-              {[
-                { icon: "M13 10V3L4 14h7v7l9-11h-7z", label: "Live updates" },
-                { icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z", label: "Full visibility" },
-                { icon: "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z", label: "Secure access" },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center gap-2 text-zinc-400">
-                  <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-                  </svg>
-                  <span className="text-sm font-medium">{item.label}</span>
-                </div>
-              ))}
-            </div>
-
             {/* Feature Cards - Client focused */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               {[
                 {
                   icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
