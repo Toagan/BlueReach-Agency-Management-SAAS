@@ -374,6 +374,18 @@ export async function POST(
         // Use the higher of API reply count or local reply count
         const replyCount = Math.max(analytics.replyCount || 0, localReplyCount || 0);
 
+        // Count actual leads in our DB (more reliable than provider API count)
+        const { count: localLeadsCount } = await supabase
+          .from("leads")
+          .select("*", { count: "exact", head: true })
+          .eq("campaign_id", campaignId);
+
+        const { count: localContactedCount } = await supabase
+          .from("leads")
+          .select("*", { count: "exact", head: true })
+          .eq("campaign_id", campaignId)
+          .not("sent_at", "is", null);
+
         await supabase
           .from("campaigns")
           .update({
@@ -382,6 +394,8 @@ export async function POST(
             cached_reply_count: replyCount,
             cached_emails_bounced: analytics.bouncedCount || 0,
             cached_positive_count: analytics.totalOpportunities || 0,
+            cached_leads_count: localLeadsCount || 0,
+            cached_contacted_count: localContactedCount || 0,
             cache_updated_at: new Date().toISOString(),
           })
           .eq("id", campaignId);
