@@ -46,16 +46,31 @@ async function fetchSmartleadSequencesDirect(
   for (const step of steps) {
     const stepNumber = step.seq_number || step.sequence_number || 1;
     const variants = step.sequence_variants || step.seq_variants || [];
+    const delayDays = step.seq_delay_details?.delay_in_days
+      ?? step.seq_delay_details?.delayInDays
+      ?? 0;
 
-    for (const variant of variants) {
-      const variantLabel = variant.variant_label || "A";
+    if (variants && variants.length > 0) {
+      for (const variant of variants) {
+        const variantLabel = variant.variant_label || "A";
+        sequences.push({
+          step_number: stepNumber,
+          variant: variantLabel,
+          subject: variant.subject || step.subject || null,
+          body_text: null,
+          body_html: variant.email_body || step.email_body || null,
+          delay_days: delayDays,
+        });
+      }
+    } else if (step.subject || step.email_body) {
+      // No variants — use step-level subject/body directly
       sequences.push({
         step_number: stepNumber,
-        variant: variantLabel,
-        subject: variant.subject || step.subject || null,
+        variant: "A",
+        subject: step.subject || null,
         body_text: null,
-        body_html: variant.email_body || step.email_body || null,
-        delay_days: step.seq_delay_details?.delay_in_days || 0,
+        body_html: step.email_body || null,
+        delay_days: delayDays,
       });
     }
   }

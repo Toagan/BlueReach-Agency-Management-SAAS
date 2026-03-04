@@ -256,28 +256,57 @@ export class SmartleadProvider implements EmailCampaignProvider {
     let sequences: ProviderCampaignDetails["sequences"] = undefined;
     try {
       console.log(`[SmartleadProvider] Fetching sequences from /campaigns/${campaignId}/sequences`);
-      const seqResponse = await this.client.get<SmartleadSequenceResponse>(
+      const rawResponse = await this.client.get<SmartleadSequenceResponse | SmartleadSequenceStep[]>(
         `/campaigns/${campaignId}/sequences`
       );
 
-      console.log(`[SmartleadProvider] Sequences API response:`, JSON.stringify(seqResponse, null, 2).slice(0, 500));
+      console.log(`[SmartleadProvider] Sequences API response (isArray: ${Array.isArray(rawResponse)}):`, JSON.stringify(rawResponse, null, 2).slice(0, 500));
 
-      if (seqResponse.email_campaign_sequences && seqResponse.email_campaign_sequences.length > 0) {
+      // Handle both response formats: raw array or { email_campaign_sequences: [...] }
+      const steps = Array.isArray(rawResponse)
+        ? rawResponse
+        : (rawResponse as SmartleadSequenceResponse).email_campaign_sequences || [];
+
+      if (steps.length > 0) {
         sequences = [{
-          steps: seqResponse.email_campaign_sequences.map((step) => ({
-            stepNumber: step.seq_number,
-            delayDays: step.seq_delay_details?.delay_in_days || 0,
-            variants: step.seq_variants.map((variant) => ({
-              id: String(variant.variant_id),
-              subject: variant.subject,
-              body: variant.email_body,
-              isActive: variant.is_active !== false, // Default to active if not specified
-            })),
-          })),
+          steps: steps.map((step) => {
+            // Handle both field names: seq_variants or sequence_variants
+            const variants = step.seq_variants || (step as unknown as { sequence_variants?: SmartleadSequenceVariant[] }).sequence_variants || [];
+            // Handle both delay field names: delay_in_days or delayInDays
+            const delayDays = step.seq_delay_details?.delay_in_days
+              ?? (step.seq_delay_details as unknown as { delayInDays?: number })?.delayInDays
+              ?? 0;
+
+            // If no variants, use step-level subject/body as a single variant
+            if (variants.length === 0) {
+              const stepAny = step as unknown as { subject?: string; email_body?: string };
+              return {
+                stepNumber: step.seq_number,
+                delayDays,
+                variants: [{
+                  id: String(step.seq_id),
+                  subject: stepAny.subject || "",
+                  body: stepAny.email_body || "",
+                  isActive: true,
+                }],
+              };
+            }
+
+            return {
+              stepNumber: step.seq_number,
+              delayDays,
+              variants: variants.map((variant) => ({
+                id: String(variant.variant_id),
+                subject: variant.subject,
+                body: variant.email_body,
+                isActive: variant.is_active !== false,
+              })),
+            };
+          }),
         }];
-        console.log(`[SmartleadProvider] Fetched ${seqResponse.email_campaign_sequences.length} sequence steps for campaign ${campaignId}`);
+        console.log(`[SmartleadProvider] Fetched ${steps.length} sequence steps for campaign ${campaignId}`);
       } else {
-        console.log(`[SmartleadProvider] No email_campaign_sequences found in response for campaign ${campaignId}`);
+        console.log(`[SmartleadProvider] No sequences found in response for campaign ${campaignId}`);
       }
     } catch (err) {
       console.error(`[SmartleadProvider] Error fetching sequences for campaign ${campaignId}:`, err);
