@@ -90,18 +90,23 @@ function AccessDeniedContent() {
 
           {/* Actions */}
           <div className="space-y-3">
-            <Link
-              href="/login"
-              className="block w-full py-3 px-4 bg-zinc-800 hover:bg-zinc-700 text-white font-medium rounded-xl text-center transition-colors border border-zinc-700"
-            >
-              Try a different account
-            </Link>
-            <Link
-              href="/"
-              className="block w-full py-3 px-4 text-zinc-400 hover:text-white font-medium rounded-xl text-center transition-colors"
-            >
-              Go to homepage
-            </Link>
+            <form action="/auth/signout" method="post">
+              <button
+                type="submit"
+                className="block w-full py-3 px-4 bg-zinc-800 hover:bg-zinc-700 text-white font-medium rounded-xl text-center transition-colors border border-zinc-700 cursor-pointer"
+              >
+                Try a different account
+              </button>
+            </form>
+            <form action="/auth/signout" method="post">
+              <input type="hidden" name="redirect" value="/" />
+              <button
+                type="submit"
+                className="block w-full py-3 px-4 text-zinc-400 hover:text-white font-medium rounded-xl text-center transition-colors cursor-pointer"
+              >
+                Go to homepage
+              </button>
+            </form>
           </div>
         </div>
 
