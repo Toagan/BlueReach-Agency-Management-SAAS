@@ -186,6 +186,38 @@ export async function POST(request: Request) {
         break;
       }
 
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const subDetails = invoice.parent?.subscription_details;
+        const subscriptionRef = subDetails?.subscription;
+        const subscriptionId =
+          typeof subscriptionRef === "string"
+            ? subscriptionRef
+            : subscriptionRef?.id;
+
+        if (subscriptionId) {
+          // Reset past_due subscriptions back to active on successful payment
+          const { data: existing } = await supabase
+            .from("stripe_subscriptions")
+            .select("status")
+            .eq("stripe_subscription_id", subscriptionId)
+            .single();
+
+          if (existing?.status === "past_due") {
+            await supabase
+              .from("stripe_subscriptions")
+              .update({
+                status: "active",
+                updated_at: new Date().toISOString(),
+              })
+              .eq("stripe_subscription_id", subscriptionId);
+
+            console.log("[Stripe Webhook] Payment succeeded, reactivated subscription:", subscriptionId);
+          }
+        }
+        break;
+      }
+
       default:
         console.log("[Stripe Webhook] Unhandled event type:", event.type);
     }

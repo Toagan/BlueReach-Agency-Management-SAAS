@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
+import { getUserSubscription, isSuperAdmin } from "@/lib/stripe/helpers";
 
 function getSupabase() {
   return createClient(
@@ -27,6 +28,24 @@ export async function POST(request: Request) {
     const supabase = getSupabase();
 
     const ownerId = await getEffectiveOwnerId(auth);
+
+    // Enforce subscription client limit (skip for super admins)
+    if (!isSuperAdmin(auth.user.email)) {
+      const subscription = await getUserSubscription(ownerId);
+      if (subscription?.client_limit) {
+        const { count } = await supabase
+          .from("clients")
+          .select("id", { count: "exact", head: true })
+          .eq("owner_id", ownerId);
+
+        if ((count || 0) >= subscription.client_limit) {
+          return NextResponse.json(
+            { error: `Client limit reached (${subscription.client_limit} max for your plan). Please upgrade to add more clients.` },
+            { status: 403 }
+          );
+        }
+      }
+    }
 
     const { data: client, error } = await supabase
       .from("clients")

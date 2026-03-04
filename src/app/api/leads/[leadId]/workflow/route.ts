@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, requireCampaignAccess } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -36,6 +36,12 @@ export async function POST(
 
     if (leadError || !lead) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
+    // Verify user has access to this lead's campaign
+    if (lead.campaign_id) {
+      const access = await requireCampaignAccess(lead.campaign_id);
+      if (access.error) return access.error;
     }
 
     const now = new Date().toISOString();

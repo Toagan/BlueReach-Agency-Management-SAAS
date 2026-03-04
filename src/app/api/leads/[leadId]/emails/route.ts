@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getProviderForCampaign } from "@/lib/providers";
 import type { ProviderEmail } from "@/lib/providers/types";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, requireCampaignAccess } from "@/lib/auth";
 
 function getSupabase() {
   return createClient(
@@ -21,6 +21,23 @@ export async function GET(
     if (auth.error) return auth.error;
     const { leadId } = await params;
     const supabase = getSupabase();
+
+    // Get lead to verify access
+    const { data: lead } = await supabase
+      .from("leads")
+      .select("campaign_id")
+      .eq("id", leadId)
+      .single();
+
+    if (!lead) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
+    // Verify user has access to this lead's campaign
+    if (lead.campaign_id) {
+      const access = await requireCampaignAccess(lead.campaign_id);
+      if (access.error) return access.error;
+    }
 
     // Fetch emails from database
     const { data: emails, error: emailsError } = await supabase
@@ -67,6 +84,12 @@ export async function POST(
 
     if (leadError || !lead) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
+    // Verify user has access to this lead's campaign
+    if (lead.campaign_id) {
+      const access = await requireCampaignAccess(lead.campaign_id);
+      if (access.error) return access.error;
     }
 
     // Get campaign info from the joined data
