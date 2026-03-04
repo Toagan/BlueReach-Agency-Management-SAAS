@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import Image from "next/image";
 import { MarketingHeader } from "@/components/marketing/header";
 import { MarketingFooter } from "@/components/marketing/footer";
 import type { Metadata } from "next";
@@ -604,24 +605,21 @@ export default async function Home() {
                   author: "Marcus Chen",
                   role: "Founder",
                   company: "Pipeline Pros",
-                  initials: "MC",
-                  gradient: "from-blue-500 to-blue-600",
+                  image: "/testimonial-1.jpg",
                 },
                 {
                   quote: "The Slack + HubSpot automation alone saved us. Every positive reply used to mean 10 minutes of manual CRM entry. Now it happens before I even open the notification.",
                   author: "Jessica Walters",
                   role: "CEO",
                   company: "Outbound Studio",
-                  initials: "JW",
-                  gradient: "from-purple-500 to-purple-600",
+                  image: "/testimonial-2.jpg",
                 },
                 {
                   quote: "Our clients kept asking 'how's the campaign going?' Now they just log in. Churn dropped, upsells went up, and I stopped dreading Friday report day.",
                   author: "Daniel Okafor",
                   role: "Agency Owner",
                   company: "RevenueFlow Agency",
-                  initials: "DO",
-                  gradient: "from-emerald-500 to-emerald-600",
+                  image: "/testimonial-3.jpg",
                 },
               ].map((testimonial, i) => (
                 <article key={i} className="p-8 rounded-2xl bg-white/[0.02] border border-white/5">
@@ -634,9 +632,7 @@ export default async function Home() {
                   </div>
                   <p className="text-zinc-300 leading-relaxed mb-6">&ldquo;{testimonial.quote}&rdquo;</p>
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${testimonial.gradient} flex items-center justify-center flex-shrink-0`}>
-                      <span className="text-xs font-bold text-white">{testimonial.initials}</span>
-                    </div>
+                    <Image src={testimonial.image} alt={testimonial.author} width={40} height={40} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
                     <div>
                       <p className="font-semibold text-white">{testimonial.author}</p>
                       <p className="text-sm text-zinc-500">{testimonial.role}, {testimonial.company}</p>
