@@ -1,5 +1,14 @@
 import { Suspense } from "react";
 import { LoginClient } from "./login-client";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Sign In",
+  description:
+    "Sign in to your Blue Reach account to access your client dashboard, campaign analytics, and lead management.",
+  robots: { index: false, follow: false },
+  alternates: { canonical: "/login" },
+};
 
 // Loading fallback for Suspense
 function LoginFallback() {

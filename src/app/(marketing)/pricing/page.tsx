@@ -97,24 +97,50 @@ export default function PricingPage() {
     },
   ];
 
-  const faqJsonLd = {
+  const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: faqs.map((faq) => ({
-      "@type": "Question",
-      name: faq.question,
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: faq.answer,
+    "@graph": [
+      {
+        "@type": "FAQPage",
+        mainEntity: faqs.map((faq) => ({
+          "@type": "Question",
+          name: faq.question,
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: faq.answer,
+          },
+        })),
       },
-    })),
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: "https://blue-reach.com" },
+          { "@type": "ListItem", position: 2, name: "Pricing", item: "https://blue-reach.com/pricing" },
+        ],
+      },
+      {
+        "@type": "Product",
+        name: "Blue Reach",
+        description: "Client reporting dashboard for outbound agencies",
+        offers: plans.map((plan) => ({
+          "@type": "Offer",
+          name: plan.name,
+          description: plan.description,
+          price: String(plan.price),
+          priceCurrency: "USD",
+          priceValidUntil: new Date(new Date().getFullYear() + 1, 0, 1).toISOString().split("T")[0],
+          availability: "https://schema.org/InStock",
+          url: "https://blue-reach.com/pricing",
+        })),
+      },
+    ],
   };
 
   return (
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       {/* Hero Section */}
       <section className="relative overflow-hidden py-20 lg:py-28">
@@ -177,6 +203,7 @@ export default function PricingPage() {
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
+                        aria-hidden="true"
                       >
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
@@ -229,12 +256,13 @@ export default function PricingPage() {
 
           <div className="overflow-x-auto">
             <table className="w-full min-w-[600px]">
+              <caption className="sr-only">Feature comparison across Starter, Growth, and Agency plans</caption>
               <thead>
                 <tr className="border-b border-white/10">
-                  <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">Feature</th>
-                  <th className="text-center py-4 px-4 text-sm font-medium text-zinc-400">Starter</th>
-                  <th className="text-center py-4 px-4 text-sm font-medium text-blue-400">Growth</th>
-                  <th className="text-center py-4 px-4 text-sm font-medium text-zinc-400">Agency</th>
+                  <th scope="col" className="text-left py-4 px-4 text-sm font-medium text-zinc-400">Feature</th>
+                  <th scope="col" className="text-center py-4 px-4 text-sm font-medium text-zinc-400">Starter</th>
+                  <th scope="col" className="text-center py-4 px-4 text-sm font-medium text-blue-400">Growth</th>
+                  <th scope="col" className="text-center py-4 px-4 text-sm font-medium text-zinc-400">Agency</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -258,11 +286,13 @@ export default function PricingPage() {
                       <td key={j} className="py-4 px-4 text-center">
                         {typeof value === "boolean" ? (
                           value ? (
-                            <svg className="w-5 h-5 text-emerald-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5 text-emerald-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" role="img">
+                              <title>Included</title>
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
                           ) : (
-                            <svg className="w-5 h-5 text-zinc-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5 text-zinc-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" role="img">
+                              <title>Not included</title>
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>
                           )
@@ -280,7 +310,7 @@ export default function PricingPage() {
       </section>
 
       {/* FAQ Section */}
-      <section className="py-20 lg:py-28">
+      <section id="faq" className="py-20 lg:py-28">
         <div className="max-w-3xl mx-auto px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-2xl lg:text-3xl font-bold mb-4">Frequently asked questions</h2>

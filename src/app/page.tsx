@@ -6,14 +6,14 @@ import { MarketingFooter } from "@/components/marketing/footer";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Blue Reach — Client Reporting Dashboard for Outbound Agencies",
+  title: "Blue Reach — Campaign Dashboard for Outbound Agencies",
   description:
     "Stop sending spreadsheet reports. Give your outbound agency clients a branded, real-time portal to track campaigns, leads, and results — synced live from Instantly & Smartlead. 14-day free trial.",
   alternates: {
     canonical: "/",
   },
   openGraph: {
-    title: "Blue Reach — Client Reporting Dashboard for Outbound Agencies",
+    title: "Blue Reach — Campaign Dashboard for Outbound Agencies",
     description:
       "Give your agency clients a branded, real-time dashboard to track campaigns, leads, and results. Synced from Instantly & Smartlead. White-label ready. 14-day free trial.",
     url: "/",
@@ -315,13 +315,13 @@ export default async function Home() {
               {/* Trust indicators */}
               <div className="mt-12 flex flex-wrap items-center justify-center gap-8 text-sm text-zinc-500">
                 <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   <span>No credit card required</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   <span>14-day free trial</span>
@@ -346,7 +346,7 @@ export default async function Home() {
               ].map((stat, i) => (
                 <div key={i} className="text-center">
                   <div className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-blue-500/10 mb-3">
-                    <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={stat.icon} />
                     </svg>
                   </div>
@@ -386,7 +386,7 @@ export default async function Home() {
                       <div className="w-16 h-0.5 bg-red-500/80 rotate-45" />
                     </div>
                   </div>
-                  <svg className="w-5 h-5 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                   </svg>
                   {/* Mini dashboard */}
@@ -409,7 +409,7 @@ export default async function Home() {
                 <div className="mb-5 h-24 flex items-center justify-center">
                   <div className="relative">
                     <div className="w-14 h-14 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-                      <svg className="w-7 h-7 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-7 h-7 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                       </svg>
                     </div>
@@ -566,7 +566,7 @@ export default async function Home() {
                   className="group p-6 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-white/10 hover:bg-white/[0.04] transition-all"
                 >
                   <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg`}>
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={feature.iconPath} />
                     </svg>
                   </div>
@@ -582,7 +582,7 @@ export default async function Home() {
                 className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 font-medium transition-colors"
               >
                 See all features
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </Link>
@@ -653,13 +653,13 @@ export default async function Home() {
                   gradient: "from-cyan-500 to-cyan-600",
                 },
               ].map((testimonial, i) => (
-                <div
+                <article
                   key={i}
                   className="p-8 rounded-2xl bg-white/[0.02] border border-white/5"
                 >
-                  <div className="flex gap-1 mb-4">
+                  <div className="flex gap-1 mb-4" aria-label="5 out of 5 stars">
                     {[...Array(5)].map((_, j) => (
-                      <svg key={j} className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                      <svg key={j} className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                         <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                       </svg>
                     ))}
@@ -674,7 +674,7 @@ export default async function Home() {
                       <p className="text-sm text-zinc-500">{testimonial.role}, {testimonial.company}</p>
                     </div>
                   </div>
-                </div>
+                </article>
               ))}
             </div>
           </div>

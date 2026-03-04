@@ -17,7 +17,7 @@ const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://blue-reach.com";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Blue Reach — Client Reporting Dashboard for Outbound Agencies",
+    default: "Blue Reach — Campaign Dashboard for Outbound Agencies",
     template: "%s | Blue Reach",
   },
   description:
@@ -55,7 +55,7 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: siteUrl,
     siteName: "Blue Reach",
-    title: "Blue Reach — Client Reporting Dashboard for Outbound Agencies",
+    title: "Blue Reach — Campaign Dashboard for Outbound Agencies",
     description:
       "Give your agency clients a branded, real-time dashboard to track campaigns, leads, and results. Synced from Instantly & Smartlead. White-label ready.",
     images: [
@@ -69,7 +69,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Blue Reach — Client Reporting Dashboard for Outbound Agencies",
+    title: "Blue Reach — Campaign Dashboard for Outbound Agencies",
     description:
       "Give your agency clients a branded, real-time dashboard to track campaigns, leads, and results. Synced from Instantly & Smartlead.",
     images: [`${siteUrl}/og-image.png`],
