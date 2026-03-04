@@ -4,25 +4,33 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+type SelectedRole = "agency" | "client" | null;
+
 export function LoginClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const inviteToken = searchParams.get("invite");
   const redirectPath = searchParams.get("redirect");
   const errorParam = searchParams.get("error");
+  const roleParam = searchParams.get("role");
 
+  const [selectedRole, setSelectedRole] = useState<SelectedRole>(
+    roleParam === "agency" || roleParam === "client" ? roleParam : null
+  );
   const [loadingProvider, setLoadingProvider] = useState<"google" | "azure" | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const getRedirectUrl = () => {
-    let redirectUrl = `${window.location.origin}/auth/callback`;
     if (inviteToken) {
-      redirectUrl = `${window.location.origin}/auth/accept-invite?token=${inviteToken}`;
-    } else if (redirectPath) {
-      redirectUrl = `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectPath)}`;
+      return `${window.location.origin}/auth/accept-invite?token=${inviteToken}`;
     }
-    return redirectUrl;
+
+    const params = new URLSearchParams();
+    if (redirectPath) params.set("redirect", redirectPath);
+    if (selectedRole) params.set("role", selectedRole);
+    const qs = params.toString();
+    return `${window.location.origin}/auth/callback${qs ? `?${qs}` : ""}`;
   };
 
   useEffect(() => {
@@ -108,6 +116,9 @@ export function LoginClient() {
       </div>
     );
   }
+
+  // Determine whether to show role selection or OAuth buttons
+  const showRoleSelection = !selectedRole && !inviteToken;
 
   return (
     <div className="min-h-screen flex bg-[#050508] overflow-hidden">
@@ -279,37 +290,6 @@ export function LoginClient() {
             <span className="text-2xl font-bold text-white tracking-tight">Blue Reach</span>
           </div>
 
-          {/* Header */}
-          <div className="text-center lg:text-left space-y-3">
-            <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
-              {inviteToken ? "You're invited!" : "Welcome back"}
-            </h2>
-            <p className="text-zinc-400 text-lg">
-              {inviteToken
-                ? "Sign in to access your outreach dashboard"
-                : "Sign in to view your campaign results"
-              }
-            </p>
-          </div>
-
-          {/* Invite Banner */}
-          {inviteToken && (
-            <div className="relative overflow-hidden bg-gradient-to-r from-emerald-500/10 via-cyan-500/10 to-emerald-500/10 border border-emerald-500/20 rounded-2xl p-5">
-              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-transparent animate-shimmer" />
-              <div className="relative flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/30 to-cyan-500/20 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="font-semibold text-white">Your dashboard is ready</p>
-                  <p className="text-sm text-zinc-400">Sign in to see your campaign performance</p>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Error Message */}
           {message && message.type === "error" && (
             <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 relative">
@@ -340,63 +320,185 @@ export function LoginClient() {
             </div>
           )}
 
-          {/* Sign In Buttons */}
-          <div className="space-y-4">
-            {/* Google Button */}
-            <button
-              onClick={handleGoogleLogin}
-              disabled={loadingProvider !== null}
-              className="group w-full flex items-center justify-center gap-3 px-6 py-4 bg-white hover:bg-zinc-50 rounded-2xl font-semibold text-zinc-900 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-black/25 hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-1 active:translate-y-0 active:shadow-lg"
-            >
-              {loadingProvider === "google" ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
-                  <span>Signing in...</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                  </svg>
-                  <span>Continue with Google</span>
-                </>
-              )}
-            </button>
+          {showRoleSelection ? (
+            <>
+              {/* Header - Role Selection */}
+              <div className="text-center lg:text-left space-y-3">
+                <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
+                  Welcome
+                </h2>
+                <p className="text-zinc-400 text-lg">
+                  How are you using Blue Reach?
+                </p>
+              </div>
 
-            {/* Divider */}
-            <div className="relative flex items-center gap-4">
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-zinc-700 to-transparent" />
-              <span className="text-xs text-zinc-600 uppercase tracking-wider">or</span>
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-zinc-700 to-transparent" />
-            </div>
+              {/* Role Selection Cards */}
+              <div className="space-y-4">
+                {/* Agency Owner Card */}
+                <button
+                  onClick={() => setSelectedRole("agency")}
+                  className="group w-full text-left p-5 rounded-2xl bg-white/[0.03] border border-blue-500/20 hover:bg-blue-500/10 hover:border-blue-500/40 transition-all duration-300 hover:-translate-y-0.5"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-600/10 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                      {/* Briefcase icon */}
+                      <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-white group-hover:text-blue-300 transition-colors">
+                        Agency Owner
+                      </h3>
+                      <p className="text-sm text-zinc-400 mt-1">
+                        Manage clients, campaigns & billing
+                      </p>
+                    </div>
+                    <svg className="w-5 h-5 text-zinc-600 group-hover:text-blue-400 transition-colors mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </button>
 
-            {/* Microsoft Button */}
-            <button
-              onClick={handleMicrosoftLogin}
-              disabled={loadingProvider !== null}
-              className="group w-full flex items-center justify-center gap-3 px-6 py-4 bg-zinc-800/80 hover:bg-zinc-700/80 rounded-2xl font-semibold text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed border border-zinc-700/50 hover:border-zinc-600 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
-            >
-              {loadingProvider === "azure" ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
-                  <span>Signing in...</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5 transition-transform group-hover:scale-110" viewBox="0 0 23 23">
-                    <path fill="#f35325" d="M1 1h10v10H1z" />
-                    <path fill="#81bc06" d="M12 1h10v10H12z" />
-                    <path fill="#05a6f0" d="M1 12h10v10H1z" />
-                    <path fill="#ffba08" d="M12 12h10v10H12z" />
-                  </svg>
-                  <span>Continue with Microsoft</span>
-                </>
+                {/* Client Card */}
+                <button
+                  onClick={() => setSelectedRole("client")}
+                  className="group w-full text-left p-5 rounded-2xl bg-white/[0.03] border border-cyan-500/20 hover:bg-cyan-500/10 hover:border-cyan-500/40 transition-all duration-300 hover:-translate-y-0.5"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                      {/* BarChart3 icon */}
+                      <svg className="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-white group-hover:text-cyan-300 transition-colors">
+                        Client
+                      </h3>
+                      <p className="text-sm text-zinc-400 mt-1">
+                        View your campaign results & analytics
+                      </p>
+                    </div>
+                    <svg className="w-5 h-5 text-zinc-600 group-hover:text-cyan-400 transition-colors mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Header - OAuth Step */}
+              <div className="text-center lg:text-left space-y-3">
+                <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
+                  {inviteToken
+                    ? "You're invited!"
+                    : selectedRole === "client"
+                      ? "Client sign in"
+                      : "Agency sign in"
+                  }
+                </h2>
+                <p className="text-zinc-400 text-lg">
+                  {inviteToken
+                    ? "Sign in to access your outreach dashboard"
+                    : selectedRole === "client"
+                      ? "Sign in to view your campaign results"
+                      : "Sign in to manage your agency"
+                  }
+                </p>
+              </div>
+
+              {/* Invite Banner */}
+              {inviteToken && (
+                <div className="relative overflow-hidden bg-gradient-to-r from-emerald-500/10 via-cyan-500/10 to-emerald-500/10 border border-emerald-500/20 rounded-2xl p-5">
+                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-transparent animate-shimmer" />
+                  <div className="relative flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/30 to-cyan-500/20 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-white">Your dashboard is ready</p>
+                      <p className="text-sm text-zinc-400">Sign in to see your campaign performance</p>
+                    </div>
+                  </div>
+                </div>
               )}
-            </button>
-          </div>
+
+              {/* Back link (only when not invite flow) */}
+              {!inviteToken && (
+                <button
+                  onClick={() => setSelectedRole(null)}
+                  className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back
+                </button>
+              )}
+
+              {/* Sign In Buttons */}
+              <div className="space-y-4">
+                {/* Google Button */}
+                <button
+                  onClick={handleGoogleLogin}
+                  disabled={loadingProvider !== null}
+                  className="group w-full flex items-center justify-center gap-3 px-6 py-4 bg-white hover:bg-zinc-50 rounded-2xl font-semibold text-zinc-900 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-black/25 hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-1 active:translate-y-0 active:shadow-lg"
+                >
+                  {loadingProvider === "google" ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
+                      <span>Signing in...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                      </svg>
+                      <span>Continue with Google</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Divider */}
+                <div className="relative flex items-center gap-4">
+                  <div className="flex-1 h-px bg-gradient-to-r from-transparent via-zinc-700 to-transparent" />
+                  <span className="text-xs text-zinc-600 uppercase tracking-wider">or</span>
+                  <div className="flex-1 h-px bg-gradient-to-r from-transparent via-zinc-700 to-transparent" />
+                </div>
+
+                {/* Microsoft Button */}
+                <button
+                  onClick={handleMicrosoftLogin}
+                  disabled={loadingProvider !== null}
+                  className="group w-full flex items-center justify-center gap-3 px-6 py-4 bg-zinc-800/80 hover:bg-zinc-700/80 rounded-2xl font-semibold text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed border border-zinc-700/50 hover:border-zinc-600 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  {loadingProvider === "azure" ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
+                      <span>Signing in...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5 transition-transform group-hover:scale-110" viewBox="0 0 23 23">
+                        <path fill="#f35325" d="M1 1h10v10H1z" />
+                        <path fill="#81bc06" d="M12 1h10v10H12z" />
+                        <path fill="#05a6f0" d="M1 12h10v10H1z" />
+                        <path fill="#ffba08" d="M12 12h10v10H12z" />
+                      </svg>
+                      <span>Continue with Microsoft</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </>
+          )}
 
           {/* Trust Indicators */}
           <div className="pt-6 space-y-5">

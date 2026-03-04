@@ -45,6 +45,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     redirect(`/admin/clients/${clients[0].id}`);
   }
 
+  // No linked clients - redirect to branded waiting page
+  if (clients.length === 0) {
+    redirect("/client/not-assigned");
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-8">
@@ -63,39 +68,25 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         </div>
       )}
 
-      {clients.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="py-12 text-center">
-            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Building2 className="h-6 w-6 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No client access yet</h3>
-            <p className="text-gray-500 max-w-sm mx-auto">
-              You haven&apos;t been assigned to any clients. Please contact your administrator to request access.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {clients.map((client) => (
-            <Link key={client.id} href={`/admin/clients/${client.id}`}>
-              <Card className="hover:shadow-lg hover:border-blue-200 transition-all cursor-pointer group">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                      <Building2 className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <CardTitle className="text-lg">{client.name}</CardTitle>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {clients.map((client) => (
+          <Link key={client.id} href={`/admin/clients/${client.id}`}>
+            <Card className="hover:shadow-lg hover:border-blue-200 transition-all cursor-pointer group">
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                    <Building2 className="h-5 w-5 text-blue-600" />
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-gray-500">View campaigns, leads, and analytics</p>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      )}
+                  <CardTitle className="text-lg">{client.name}</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-500">View campaigns, leads, and analytics</p>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

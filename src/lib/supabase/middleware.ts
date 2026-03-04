@@ -43,7 +43,8 @@ export async function updateSession(request: NextRequest) {
     pathname === "/choose-plan" ||
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/api/webhooks/") ||
-    pathname.startsWith("/api/stripe/");
+    pathname.startsWith("/api/stripe/") ||
+    pathname === "/client/not-assigned";
 
   if (isPublicRoute) {
     // For login page, redirect logged-in users with profiles to their dashboard
@@ -71,7 +72,8 @@ export async function updateSession(request: NextRequest) {
   // Protected routes
   const isProtectedRoute =
     pathname.startsWith("/dashboard") ||
-    pathname.startsWith("/admin");
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/client");
 
   // Redirect unauthenticated users to login
   if (isProtectedRoute && !user) {
