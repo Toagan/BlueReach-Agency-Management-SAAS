@@ -114,12 +114,20 @@ export default async function AdminLayout({
             </Link>
             <div className="flex items-center gap-4">
               {isAdmin && (
-                <Link
-                  href="/admin/billing"
-                  className="text-sm text-muted-foreground hover:text-foreground"
-                >
-                  Billing
-                </Link>
+                <>
+                  <Link
+                    href="/admin/settings"
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    Settings
+                  </Link>
+                  <Link
+                    href="/admin/billing"
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    Billing
+                  </Link>
+                </>
               )}
               <ThemeToggle />
               <span className="text-sm text-muted-foreground">{user.email}</span>
