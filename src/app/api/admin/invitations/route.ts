@@ -107,7 +107,7 @@ export async function POST(request: Request) {
     // Send invitation email using Supabase Auth
     // This sends a magic link that allows the user to sign in
     const baseUrl = await getServerUrl();
-    const inviteUrl = `${baseUrl}/auth/invite?token=${token}`;
+    const inviteUrl = `${baseUrl}/auth/accept-invite?token=${token}`;
 
     // Check if user already exists
     const { data: existingUsers } = await serviceSupabase.auth.admin.listUsers();
@@ -205,7 +205,7 @@ export async function POST(request: Request) {
     // New user - send invite email
     console.log("[Invitation] Sending invite email to:", email);
     const { data: inviteData, error: inviteError } = await serviceSupabase.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${baseUrl}/auth/callback?next=/dashboard&client_id=${client_id}`,
+      redirectTo: `${baseUrl}/auth/callback?next=/admin/clients/${client_id}&client_id=${client_id}`,
       data: {
         first_name: first_name || "",
         client_id: client_id,

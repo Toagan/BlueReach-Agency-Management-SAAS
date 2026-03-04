@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { getServerUrl } from "@/utils/get-url";
 
 function getSupabaseAdmin() {
   return createClient(
@@ -10,7 +11,8 @@ function getSupabaseAdmin() {
 }
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  const origin = await getServerUrl();
   const token = searchParams.get("token");
   const code = searchParams.get("code");
 
@@ -48,18 +50,18 @@ export async function GET(request: Request) {
     .single();
 
   if (inviteError || !invitation) {
-    return NextResponse.redirect(`${origin}/dashboard?error=Invalid or expired invitation`);
+    return NextResponse.redirect(`${origin}/login?error=Invalid or expired invitation`);
   }
 
   // Check if invitation has expired
   if (new Date(invitation.expires_at) < new Date()) {
-    return NextResponse.redirect(`${origin}/dashboard?error=Invitation has expired`);
+    return NextResponse.redirect(`${origin}/login?error=Invitation has expired`);
   }
 
   // Check if user email matches invitation
   if (user.email?.toLowerCase() !== invitation.email.toLowerCase()) {
     return NextResponse.redirect(
-      `${origin}/dashboard?error=This invitation was sent to a different email address`
+      `${origin}/login?error=This invitation was sent to a different email address`
     );
   }
 
@@ -92,7 +94,7 @@ export async function GET(request: Request) {
 
   if (linkError) {
     console.error("Error linking user to client:", linkError);
-    return NextResponse.redirect(`${origin}/dashboard?error=Failed to accept invitation`);
+    return NextResponse.redirect(`${origin}/login?error=Failed to accept invitation`);
   }
 
   // Mark invitation as accepted
@@ -102,5 +104,5 @@ export async function GET(request: Request) {
     .eq("id", invitation.id);
 
   // Redirect to the client dashboard
-  return NextResponse.redirect(`${origin}/dashboard/${invitation.client_id}`);
+  return NextResponse.redirect(`${origin}/admin/clients/${invitation.client_id}`);
 }
