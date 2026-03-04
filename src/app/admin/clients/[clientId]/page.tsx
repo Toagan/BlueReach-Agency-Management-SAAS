@@ -1837,10 +1837,11 @@ function CampaignCard({
     }
   };
 
-  // Generate webhook URL
+  // Generate webhook URL based on provider type
+  const webhookProvider = campaign.provider_type || "instantly";
   const webhookUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/api/webhooks/instantly/${campaign.id}`
-    : `/api/webhooks/instantly/${campaign.id}`;
+    ? `${window.location.origin}/api/webhooks/${webhookProvider}/${campaign.id}`
+    : `/api/webhooks/${webhookProvider}/${campaign.id}`;
 
   const copyWebhookUrl = async () => {
     try {
@@ -1985,7 +1986,7 @@ function CampaignCard({
             className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <Webhook className="h-4 w-4" />
-            <span>Webhook for Instantly</span>
+            <span>Webhook</span>
             {/* Webhook Status Indicator - only show for active campaigns */}
             {!isCompleted && !webhookStatus.loading && (
               <span
@@ -2025,30 +2026,16 @@ function CampaignCard({
             </div>
 
             <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs">
-              <p className="font-medium text-amber-800 dark:text-amber-200 mb-2">Setup in Instantly:</p>
+              <p className="font-medium text-amber-800 dark:text-amber-200 mb-2">Setup in your email sending provider:</p>
               <ol className="list-decimal list-inside space-y-1 text-amber-700 dark:text-amber-300">
-                <li>Open this campaign in Instantly</li>
+                <li>Open this campaign in your provider dashboard</li>
                 <li>Go to <span className="font-medium">Campaign Settings</span> → <span className="font-medium">Webhooks</span></li>
                 <li>Click <span className="font-medium">Add Webhook</span></li>
                 <li>Paste the URL above</li>
-                <li>Select these events:</li>
+                <li>Enable all available events (replies, sends, opens, bounces, category changes)</li>
               </ol>
-              <div className="mt-2 ml-4 space-y-1">
-                <p className="text-amber-700 dark:text-amber-300">
-                  <span className="font-medium text-green-700 dark:text-green-400">Positive:</span>{" "}
-                  <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">lead_interested</code>,{" "}
-                  <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">lead_meeting_booked</code>,{" "}
-                  <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">lead_meeting_completed</code>,{" "}
-                  <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">lead_closed</code>
-                </p>
-                <p className="text-amber-700 dark:text-amber-300">
-                  <span className="font-medium text-red-700 dark:text-red-400">Negative:</span>{" "}
-                  <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">lead_not_interested</code>,{" "}
-                  <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">lead_neutral</code>
-                </p>
-              </div>
               <p className="mt-3 text-amber-600 dark:text-amber-400 italic">
-                When Instantly fires these events, positive replies will sync automatically in real-time.
+                When your provider fires these events, positive replies will sync automatically in real-time.
               </p>
             </div>
 

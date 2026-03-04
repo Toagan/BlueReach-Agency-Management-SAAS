@@ -62,13 +62,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // If webhook_configured is manually set to true, trust that
+    const providerType = campaign.provider_type || "instantly";
     if (campaign.webhook_configured === true) {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bluereach-agency-management-saas-production.up.railway.app";
       return NextResponse.json({
         configured: true,
         reason: "Manually confirmed",
-        expectedUrl: `${baseUrl}/api/webhooks/instantly/${campaignId}`,
-        alternativeUrl: `${baseUrl}/api/webhooks/instantly`,
+        expectedUrl: `${baseUrl}/api/webhooks/${providerType}/${campaignId}`,
         isCompleted,
         isActive: campaign.is_active,
       });
@@ -117,10 +117,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         });
       }
 
-      // For other providers, assume not configured
+      // For Smartlead and other providers, check webhook_logs for recent activity
+      const { count } = await supabase
+        .from("webhook_logs")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", campaignId);
+
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bluereach-agency-management-saas-production.up.railway.app";
       return NextResponse.json({
-        configured: false,
-        reason: "Provider does not support webhook status check",
+        configured: (count || 0) > 0 || campaign.webhook_configured === true,
+        reason: (count || 0) > 0 ? "Webhook events received" : "No webhook events yet - configure in provider",
+        expectedUrl: `${baseUrl}/api/webhooks/${providerType}/${campaignId}`,
+        webhookEvents: count || 0,
         isCompleted,
       });
     } catch (providerError) {
