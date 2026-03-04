@@ -2,9 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { getServerUrl } from "@/utils/get-url";
-
-// Admin email(s) - these users get admin role automatically
-const ADMIN_EMAILS = ["tilman@blue-reach.com"];
+import { isSuperAdmin } from "@/lib/stripe/helpers";
+import { hasActiveSubscription } from "@/lib/stripe/helpers";
 
 // Service role client for operations that bypass RLS
 function getServiceSupabase() {
@@ -62,11 +61,9 @@ export async function GET(request: Request) {
       if (!existingProfile) {
         console.log("[Auth Callback] New user, checking access for:", userEmail);
 
-        // Check 1: Is this an admin email?
-        const isAdminEmail = ADMIN_EMAILS.includes(userEmail);
-
-        if (isAdminEmail) {
-          console.log("[Auth Callback] Admin email detected, creating admin profile");
+        // Check 1: Is this a super-admin email?
+        if (isSuperAdmin(userEmail)) {
+          console.log("[Auth Callback] Super-admin email detected, creating admin profile");
           const { error: profileError } = await serviceSupabase.from("profiles").insert({
             id: userId,
             email: userEmail,
@@ -91,59 +88,68 @@ export async function GET(request: Request) {
             .limit(1)
             .single();
 
-          if (!invitation) {
-            // NO INVITATION = ACCESS DENIED
-            console.log("[Auth Callback] Access denied - no invitation for:", userEmail);
+          if (invitation) {
+            // Has invitation - create client profile and link
+            console.log("[Auth Callback] Found invitation for client:", invitation.client_id);
 
-            // Sign out the user since they shouldn't have access
-            await supabase.auth.signOut();
+            const { error: profileError } = await serviceSupabase.from("profiles").insert({
+              id: userId,
+              email: userEmail,
+              first_name: userMetadata.first_name || userMetadata.name?.split(" ")[0] || null,
+              role: "client",
+            });
 
-            return NextResponse.redirect(
-              `${origin}/access-denied?email=${encodeURIComponent(userEmail)}`
-            );
+            if (profileError) {
+              console.error("[Auth Callback] Error creating client profile:", profileError);
+              return NextResponse.redirect(`${origin}/login?error=Failed to create profile`);
+            }
+
+            console.log("[Auth Callback] Created client profile for:", userEmail);
+            userRole = "client";
+
+            // Link user to the client from invitation
+            const { error: linkError } = await serviceSupabase
+              .from("client_users")
+              .upsert({
+                user_id: userId,
+                client_id: invitation.client_id,
+                role: "viewer",
+              }, { onConflict: "client_id,user_id" });
+
+            if (linkError) {
+              console.error("[Auth Callback] Error linking user to client:", linkError);
+            } else {
+              console.log("[Auth Callback] Linked user to client from invitation");
+            }
+
+            // Mark invitation as accepted
+            await serviceSupabase
+              .from("client_invitations")
+              .update({ accepted_at: new Date().toISOString() })
+              .eq("id", invitation.id);
+
+            // Redirect directly to their client dashboard
+            return NextResponse.redirect(`${origin}/admin/clients/${invitation.client_id}`);
           }
 
-          // Has invitation - create profile and link to client
-          console.log("[Auth Callback] Found invitation for client:", invitation.client_id);
+          // Check 3: No invitation — new agency owner signup
+          // Create admin profile and redirect to plan selection
+          console.log("[Auth Callback] New agency owner signup for:", userEmail);
 
           const { error: profileError } = await serviceSupabase.from("profiles").insert({
             id: userId,
             email: userEmail,
             first_name: userMetadata.first_name || userMetadata.name?.split(" ")[0] || null,
-            role: "client",
+            role: "admin",
           });
 
           if (profileError) {
-            console.error("[Auth Callback] Error creating client profile:", profileError);
+            console.error("[Auth Callback] Error creating admin profile:", profileError);
             return NextResponse.redirect(`${origin}/login?error=Failed to create profile`);
           }
 
-          console.log("[Auth Callback] Created client profile for:", userEmail);
-          userRole = "client";
-
-          // Link user to the client from invitation
-          const { error: linkError } = await serviceSupabase
-            .from("client_users")
-            .upsert({
-              user_id: userId,
-              client_id: invitation.client_id,
-              role: "viewer",
-            }, { onConflict: "client_id,user_id" });
-
-          if (linkError) {
-            console.error("[Auth Callback] Error linking user to client:", linkError);
-          } else {
-            console.log("[Auth Callback] Linked user to client from invitation");
-          }
-
-          // Mark invitation as accepted
-          await serviceSupabase
-            .from("client_invitations")
-            .update({ accepted_at: new Date().toISOString() })
-            .eq("id", invitation.id);
-
-          // Redirect directly to their client dashboard
-          return NextResponse.redirect(`${origin}/admin/clients/${invitation.client_id}`);
+          console.log("[Auth Callback] Created admin profile, redirecting to choose-plan");
+          return NextResponse.redirect(`${origin}/choose-plan`);
         }
       }
 
@@ -151,6 +157,15 @@ export async function GET(request: Request) {
       // EXISTING USER LOGIN
       // ========================================
       console.log("[Auth Callback] Existing user, role:", userRole);
+
+      // For existing admins (not super-admin), check subscription
+      if (userRole === "admin" && !isSuperAdmin(userEmail)) {
+        const hasSub = await hasActiveSubscription(userId);
+        if (!hasSub) {
+          console.log("[Auth Callback] Admin without subscription, redirecting to choose-plan");
+          return NextResponse.redirect(`${origin}/choose-plan`);
+        }
+      }
 
       // If client_id is provided, link the user to that client
       if (clientId) {

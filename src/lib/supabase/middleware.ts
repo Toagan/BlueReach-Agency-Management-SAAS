@@ -40,8 +40,10 @@ export async function updateSession(request: NextRequest) {
     pathname === "/" ||
     pathname === "/login" ||
     pathname === "/access-denied" ||
+    pathname === "/choose-plan" ||
     pathname.startsWith("/auth/") ||
-    pathname.startsWith("/api/webhooks/");
+    pathname.startsWith("/api/webhooks/") ||
+    pathname.startsWith("/api/stripe/");
 
   if (isPublicRoute) {
     // For login page, redirect logged-in users with profiles to their dashboard
@@ -100,6 +102,25 @@ export async function updateSession(request: NextRequest) {
 
     // Admin route protection
     if (pathname.startsWith("/admin")) {
+      // Subscription check for admin users (skip for super-admin)
+      const SUPER_ADMIN_EMAILS = ["tilman@blue-reach.com"];
+      if (isAdmin && !SUPER_ADMIN_EMAILS.includes(user.email?.toLowerCase() || "")) {
+        const { data: subscription } = await supabase
+          .from("stripe_subscriptions")
+          .select("status")
+          .eq("user_id", user.id)
+          .in("status", ["trialing", "active", "past_due"])
+          .limit(1)
+          .single();
+
+        if (!subscription) {
+          console.log("[Middleware] Admin without active subscription, redirecting to choose-plan");
+          const url = request.nextUrl.clone();
+          url.pathname = "/choose-plan";
+          return NextResponse.redirect(url);
+        }
+      }
+
       // Check if this is a client-specific route that client users can access
       const clientRouteMatch = pathname.match(/^\/admin\/clients\/([a-f0-9-]+)/);
 

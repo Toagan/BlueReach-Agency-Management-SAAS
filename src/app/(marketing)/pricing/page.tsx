@@ -155,7 +155,7 @@ export default function PricingPage() {
             Plans that scale with your agency
           </h1>
           <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
-            Start free for 14 days. No credit card required. Upgrade when you&apos;re ready.
+            Start your 14-day free trial. Upgrade when you&apos;re ready.
           </p>
         </div>
       </section>
@@ -213,7 +213,7 @@ export default function PricingPage() {
                 </ul>
 
                 <Link
-                  href="/login"
+                  href={`/login?plan=${plan.name.toLowerCase()}`}
                   className={`block w-full py-3 rounded-xl font-semibold text-center transition-all ${
                     plan.popular
                       ? "bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:-translate-y-0.5"
@@ -340,10 +340,10 @@ export default function PricingPage() {
             Start your free trial today
           </h2>
           <p className="text-xl text-zinc-400 mb-10 max-w-2xl mx-auto">
-            14 days free. No credit card required. Cancel anytime.
+            14 days free. Cancel anytime.
           </p>
           <Link
-            href="/login"
+            href="/login?plan=growth"
             className="inline-flex px-8 py-4 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold rounded-xl transition-all shadow-xl shadow-blue-500/25 hover:shadow-blue-500/40 hover:-translate-y-0.5"
           >
             Get Started Free

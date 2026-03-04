@@ -20,6 +20,37 @@ export interface Profile {
   email: string | null;
   role: UserRole;
   full_name: string | null;
+  stripe_customer_id?: string | null;
+}
+
+// Stripe billing types
+export type SubscriptionPlan = "starter" | "growth" | "agency";
+export type SubscriptionStatus =
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "unpaid"
+  | "incomplete"
+  | "incomplete_expired"
+  | "paused";
+
+export interface StripeSubscription {
+  id: string;
+  user_id: string;
+  stripe_subscription_id: string;
+  stripe_customer_id: string;
+  plan: SubscriptionPlan;
+  status: SubscriptionStatus;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  trial_start: string | null;
+  trial_end: string | null;
+  cancel_at: string | null;
+  canceled_at: string | null;
+  client_limit: number | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Client {
@@ -391,6 +422,82 @@ export interface EmailAccountWithHealth extends EmailAccount {
 export interface DomainSummary extends DomainHealth {
   account_count: number;
   client_count: number;
+}
+
+// ============================================
+// AI CAMPAIGN BUILDER TABLES
+// ============================================
+
+export interface MethodologyDocument {
+  id: string;
+  slug: string;
+  title: string;
+  content: string;
+  version: number;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MethodologyDocumentVersion {
+  id: string;
+  document_id: string;
+  version: number;
+  content: string;
+  updated_by: string | null;
+  created_at: string;
+}
+
+export type AiCampaignStatus = "pending" | "generating" | "completed" | "error";
+
+export interface AiCampaignSession {
+  id: string;
+  client_domain: string | null;
+  offer_description: string | null;
+  ai_provider: string;
+  model_used: string | null;
+  status: string;
+  error_message: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AiCampaignIdea {
+  id: string;
+  session_id: string;
+  rank: number;
+  title: string;
+  signal_type: string | null;
+  angle: string | null;
+  target_persona: string | null;
+  reasoning: string | null;
+  is_expanded: boolean;
+  created_at: string;
+}
+
+export interface AiCampaignDraft {
+  id: string;
+  idea_id: string;
+  session_id: string;
+  name: string;
+  status: string;
+  qa_score: number | null;
+  qa_results: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiCampaignDraftEmail {
+  id: string;
+  draft_id: string;
+  step_number: number;
+  variant: string;
+  subject: string | null;
+  body_text: string;
+  word_count: number | null;
+  delay_days: number;
+  created_at: string;
+  updated_at: string;
 }
 
 // ============================================

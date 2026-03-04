@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { isSuperAdmin, getUserSubscription } from "@/lib/stripe/helpers";
 
 export default async function AdminLayout({
   children,
@@ -26,12 +27,50 @@ export default async function AdminLayout({
     .single();
 
   const isAdmin = profile?.role === "admin";
+  const superAdmin = isSuperAdmin(user.email);
+
+  // Get subscription for banner display (non-super-admin admins only)
+  let subscription: Awaited<ReturnType<typeof getUserSubscription>> = null;
+  if (isAdmin && !superAdmin) {
+    subscription = await getUserSubscription(user.id);
+  }
+
+  const isTrialing = subscription?.status === "trialing";
+  const isPastDue = subscription?.status === "past_due";
+  const trialEnd = subscription?.trial_end
+    ? new Date(subscription.trial_end)
+    : null;
+  const trialDaysLeft = trialEnd
+    ? Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : 0;
 
   // Non-admins can only access their specific client pages
   // The middleware handles the detailed access control
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Subscription banners */}
+      {isTrialing && trialDaysLeft > 0 && (
+        <div className="bg-blue-500/10 border-b border-blue-500/20 px-4 py-2 text-center">
+          <p className="text-sm text-blue-300">
+            Free trial: <strong>{trialDaysLeft} days remaining</strong>.{" "}
+            <Link href="/admin/billing" className="underline hover:text-blue-200">
+              View billing
+            </Link>
+          </p>
+        </div>
+      )}
+      {isPastDue && (
+        <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-2 text-center">
+          <p className="text-sm text-red-300">
+            Payment failed.{" "}
+            <Link href="/admin/billing" className="underline hover:text-red-200 font-medium">
+              Update your payment method
+            </Link>
+          </p>
+        </div>
+      )}
+
       {/* Simple top nav */}
       <header className="bg-card border-b border-border sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -43,6 +82,14 @@ export default async function AdminLayout({
               </span>
             </Link>
             <div className="flex items-center gap-4">
+              {isAdmin && (
+                <Link
+                  href="/admin/billing"
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Billing
+                </Link>
+              )}
               <ThemeToggle />
               <span className="text-sm text-muted-foreground">{user.email}</span>
               <form action="/auth/signout" method="post">
