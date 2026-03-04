@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { getSmartleadClient } from "@/lib/smartlead";
 import type { SmartleadCampaign } from "@/lib/smartlead";
-import { requireAuth } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 // GET - Test SmartLead API connection
 export async function GET() {
   try {
-    const auth = await requireAuth();
+    const auth = await requireAdmin();
     if (auth.error) return auth.error;
-    const client = getSmartleadClient();
+    const ownerId = await getEffectiveOwnerId(auth);
+    const client = getSmartleadClient(ownerId);
 
     const isConfigured = await client.isConfiguredAsync();
     if (!isConfigured) {

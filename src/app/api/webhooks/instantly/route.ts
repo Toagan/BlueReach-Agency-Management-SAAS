@@ -11,14 +11,35 @@ function getSupabase() {
   );
 }
 
-// Verify webhook signature from Instantly
-async function verifySignature(payload: string, signature: string | null): Promise<{ valid: boolean; secretConfigured: boolean }> {
+// Look up owner_id from a campaign's instantly_campaign_id
+async function getOwnerFromInstantlyCampaign(instantlyCampaignId: string): Promise<string | null> {
   const supabase = getSupabase();
-  const { data: setting } = await supabase
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .select("client_id")
+    .eq("instantly_campaign_id", instantlyCampaignId)
+    .single();
+  if (!campaign?.client_id) return null;
+  const { data: client } = await supabase
+    .from("clients")
+    .select("owner_id")
+    .eq("id", campaign.client_id)
+    .single();
+  return client?.owner_id || null;
+}
+
+// Verify webhook signature from Instantly
+async function verifySignature(payload: string, signature: string | null, ownerId?: string | null): Promise<{ valid: boolean; secretConfigured: boolean }> {
+  const supabase = getSupabase();
+
+  let query = supabase
     .from("settings")
     .select("value")
-    .eq("key", "instantly_webhook_secret")
-    .single();
+    .eq("key", "instantly_webhook_secret");
+  if (ownerId) {
+    query = query.eq("owner_id", ownerId);
+  }
+  const { data: setting } = await query.single();
 
   const secret = setting?.value;
   if (!secret) {
@@ -132,14 +153,19 @@ export async function POST(request: Request) {
     const headersList = await headers();
     const signature = headersList.get("x-instantly-signature");
     const rawBody = await request.text();
-    
+
+    const payload: InstantlyWebhookPayload = JSON.parse(rawBody);
+
+    // Derive owner from campaign for scoped webhook secret lookup
+    const ownerId = payload.campaign_id
+      ? await getOwnerFromInstantlyCampaign(payload.campaign_id)
+      : null;
+
     // Verify webhook signature
-    const { valid: isValid } = await verifySignature(rawBody, signature);
+    const { valid: isValid } = await verifySignature(rawBody, signature, ownerId);
     if (!isValid) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
-    
-    const payload: InstantlyWebhookPayload = JSON.parse(rawBody);
     const supabase = getSupabase();
     
     console.log("Received webhook:", payload.event_type, payload);

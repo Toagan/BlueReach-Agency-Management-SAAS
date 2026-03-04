@@ -101,7 +101,6 @@ async function fetchInfrastructureData(params: Record<string, string | string[] 
     accounts?.map((a) => a.domain).filter((d): d is string => Boolean(d)) || [];
   const uniqueDomains = [...new Set(domains)];
 
-  let domainHealth: typeof domainHealthData = [];
   let domainHealthData: Array<{ domain: string; health_score: number; [key: string]: unknown }> = [];
   if (uniqueDomains.length > 0) {
     const { data } = await supabase

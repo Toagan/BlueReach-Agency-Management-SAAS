@@ -168,12 +168,31 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Verify signature if configured
     const signature = request.headers.get("x-smartlead-signature");
 
-    // Check for webhook secret in settings
-    const { data: secretSetting } = await supabase
+    // Derive owner from campaign for scoped webhook secret lookup
+    const { data: campaignForOwner } = await supabase
+      .from("campaigns")
+      .select("client_id")
+      .eq("id", campaignId)
+      .single();
+    let webhookOwnerId: string | null = null;
+    if (campaignForOwner?.client_id) {
+      const { data: clientForOwner } = await supabase
+        .from("clients")
+        .select("owner_id")
+        .eq("id", campaignForOwner.client_id)
+        .single();
+      webhookOwnerId = clientForOwner?.owner_id || null;
+    }
+
+    // Check for webhook secret in settings (scoped by owner)
+    let secretQuery = supabase
       .from("settings")
       .select("value")
-      .eq("key", "smartlead_webhook_secret")
-      .single();
+      .eq("key", "smartlead_webhook_secret");
+    if (webhookOwnerId) {
+      secretQuery = secretQuery.eq("owner_id", webhookOwnerId);
+    }
+    const { data: secretSetting } = await secretQuery.single();
 
     const webhookSecret = secretSetting?.value || null;
 

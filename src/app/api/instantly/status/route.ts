@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { getInstantlyClient } from "@/lib/instantly";
-import { requireAuth } from "@/lib/auth";
+import { requireAdmin, getEffectiveOwnerId } from "@/lib/auth";
 
 // Lightweight status check - just verify API is configured and working
 export async function GET() {
   try {
-    const auth = await requireAuth();
+    const auth = await requireAdmin();
     if (auth.error) return auth.error;
-    const client = getInstantlyClient();
+    const ownerId = await getEffectiveOwnerId(auth);
+    const client = getInstantlyClient(ownerId);
 
     if (!client.isConfigured()) {
       return NextResponse.json({

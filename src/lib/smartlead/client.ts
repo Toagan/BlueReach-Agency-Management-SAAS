@@ -5,9 +5,8 @@ import type { SmartleadApiError } from "./types";
 
 const SMARTLEAD_API_BASE = "https://server.smartlead.ai/api/v1";
 
-// Cache for API key from database
-let cachedApiKey: string | null = null;
-let cacheTimestamp: number = 0;
+// Cache for API key from database (keyed by ownerId)
+const apiKeyCache = new Map<string, { key: string; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 interface RequestOptions {
@@ -16,11 +15,12 @@ interface RequestOptions {
   params?: Record<string, string | number | boolean | undefined>;
 }
 
-// Fetch API key from database settings
-async function getApiKeyFromDatabase(): Promise<string | null> {
-  // Return cached value if still valid
-  if (cachedApiKey && Date.now() - cacheTimestamp < CACHE_DURATION) {
-    return cachedApiKey;
+// Fetch API key from database settings (scoped by owner)
+async function getApiKeyFromDatabase(ownerId?: string): Promise<string | null> {
+  const cacheKey = ownerId || "_default";
+  const cached = apiKeyCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.key;
   }
 
   try {
@@ -38,19 +38,23 @@ async function getApiKeyFromDatabase(): Promise<string | null> {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("settings")
       .select("value")
-      .eq("key", "smartlead_api_key")
-      .single();
+      .eq("key", "smartlead_api_key");
+
+    if (ownerId) {
+      query = query.eq("owner_id", ownerId);
+    }
+
+    const { data, error } = await query.single();
 
     if (error || !data?.value) {
       return null;
     }
 
     // Update cache
-    cachedApiKey = data.value;
-    cacheTimestamp = Date.now();
+    apiKeyCache.set(cacheKey, { key: data.value, timestamp: Date.now() });
 
     return data.value;
   } catch {
@@ -60,15 +64,16 @@ async function getApiKeyFromDatabase(): Promise<string | null> {
 
 // Clear the cache (useful when settings are updated)
 export function clearApiKeyCache(): void {
-  cachedApiKey = null;
-  cacheTimestamp = 0;
+  apiKeyCache.clear();
 }
 
 class SmartleadApiClient {
   private apiKey: string;
+  private ownerId?: string;
 
-  constructor(apiKey?: string) {
+  constructor(apiKey?: string, ownerId?: string) {
     this.apiKey = apiKey || process.env.SMARTLEAD_API_KEY || "";
+    this.ownerId = ownerId;
   }
 
   // Lazy load API key from database if not set
@@ -78,7 +83,7 @@ class SmartleadApiClient {
     }
 
     // Try to get from database
-    const dbKey = await getApiKeyFromDatabase();
+    const dbKey = await getApiKeyFromDatabase(this.ownerId);
     if (dbKey) {
       this.apiKey = dbKey;
       return dbKey;
@@ -240,10 +245,14 @@ export class SmartleadError extends Error {
   }
 }
 
-// Singleton instance
+// Singleton instance (used when no ownerId needed, e.g. env-based key)
 let clientInstance: SmartleadApiClient | null = null;
 
-export function getSmartleadClient(): SmartleadApiClient {
+export function getSmartleadClient(ownerId?: string): SmartleadApiClient {
+  // Per-owner: always create a fresh instance (no singleton)
+  if (ownerId) {
+    return new SmartleadApiClient(undefined, ownerId);
+  }
   if (!clientInstance) {
     clientInstance = new SmartleadApiClient();
   }

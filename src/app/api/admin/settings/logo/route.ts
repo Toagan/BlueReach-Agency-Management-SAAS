@@ -112,7 +112,7 @@ export async function POST(request: Request) {
       .upsert({
         key: "agency_logo_url",
         value: logoUrl,
-        owner_id: auth.user.id,
+        owner_id: ownerId,
         is_encrypted: false,
         updated_at: new Date().toISOString(),
       }, {

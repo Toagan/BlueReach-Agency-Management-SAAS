@@ -24,7 +24,7 @@ async function syncInstantlyAccounts(supabase: ReturnType<typeof getSupabase>, o
   const stats: SyncStats = { added: 0, updated: 0, removed: 0, errors: [] };
 
   try {
-    const client = getInstantlyClient();
+    const client = getInstantlyClient(ownerId);
     if (!client.isConfigured()) {
       stats.errors.push("Instantly API not configured");
       return stats;
@@ -101,7 +101,7 @@ async function syncSmartleadAccounts(supabase: ReturnType<typeof getSupabase>, o
   const stats: SyncStats = { added: 0, updated: 0, removed: 0, errors: [] };
 
   try {
-    const client = getSmartleadClient();
+    const client = getSmartleadClient(ownerId);
     if (!client.isConfigured()) {
       stats.errors.push("Smartlead API not configured");
       return stats;
