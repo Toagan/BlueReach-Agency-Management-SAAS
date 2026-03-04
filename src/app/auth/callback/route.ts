@@ -79,11 +79,12 @@ export async function GET(request: Request) {
           console.log("[Auth Callback] Created admin profile for:", userEmail);
           userRole = "admin";
         } else {
-          // Check 2: Does this email have an invitation?
+          // Check 2: Does this email have a pending invitation?
           const { data: invitation } = await serviceSupabase
             .from("client_invitations")
             .select("id, client_id")
             .eq("email", userEmail)
+            .is("accepted_at", null)
             .order("created_at", { ascending: false })
             .limit(1)
             .single();
