@@ -480,10 +480,6 @@ function CustomerRow({ customer, onRefresh }: { customer: Customer; onRefresh: (
               Settings
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleArchive} className="flex items-center gap-2">
-            <Archive className="h-4 w-4" />
-            {customer.is_active ? "Archive" : "Restore"}
-          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => setIsDeleteDialogOpen(true)}
             className="flex items-center gap-2 text-red-600 focus:text-red-600"
