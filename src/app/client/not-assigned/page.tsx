@@ -12,6 +12,17 @@ export default async function NotAssignedPage() {
     redirect("/login");
   }
 
+  // Admin users should never be on this page - redirect them appropriately
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.role === "admin") {
+    redirect("/admin");
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#050508] p-6">
       {/* Background effects - blue/cyan gradient orbs */}
