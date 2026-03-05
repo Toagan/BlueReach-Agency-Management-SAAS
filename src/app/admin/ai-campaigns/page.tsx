@@ -125,12 +125,12 @@ function KnowledgeBaseStep() {
 // ─── Step 2: Campaign Selector ───
 function CampaignSelectorStep() {
   const mockCampaigns = [
-    { name: "Scaile - SaaS Decision Makers", replies: 142, rate: "4.8%", positive: 34, selected: true },
-    { name: "Digital Bude - E-Commerce Founders", replies: 89, rate: "3.2%", positive: 21, selected: true },
-    { name: "Almaron - FinTech CFOs", replies: 67, rate: "5.1%", positive: 18, selected: false },
-    { name: "BlueReach - Agency Owners", replies: 203, rate: "6.3%", positive: 52, selected: false },
-    { name: "Palantir Agency - Enterprise IT", replies: 45, rate: "2.1%", positive: 8, selected: false },
-    { name: "RemixDynamics - Startup CTOs", replies: 156, rate: "4.5%", positive: 41, selected: true },
+    { name: "Scaile - SaaS Decision Makers", replies: 142, replyRate: "4.8%", positive: 34, positiveRate: "1.2%", selected: true },
+    { name: "Digital Bude - E-Commerce Founders", replies: 89, replyRate: "3.2%", positive: 21, positiveRate: "0.8%", selected: true },
+    { name: "Almaron - FinTech CFOs", replies: 67, replyRate: "5.1%", positive: 18, positiveRate: "1.4%", selected: false },
+    { name: "BlueReach - Agency Owners", replies: 203, replyRate: "6.3%", positive: 52, positiveRate: "1.6%", selected: false },
+    { name: "Palantir Agency - Enterprise IT", replies: 45, replyRate: "2.1%", positive: 8, positiveRate: "0.4%", selected: false },
+    { name: "RemixDynamics - Startup CTOs", replies: 156, replyRate: "4.5%", positive: 41, positiveRate: "1.3%", selected: true },
   ];
 
   return (
@@ -170,12 +170,19 @@ function CampaignSelectorStep() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <div className="text-right">
-                <p className="text-sm font-semibold text-primary">{campaign.rate}</p>
+                <p className="text-sm font-semibold text-emerald-500">{campaign.positive}</p>
+                <p className="text-[10px] text-muted-foreground">positive</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-semibold text-primary">{campaign.positiveRate}</p>
+                <p className="text-[10px] text-muted-foreground">pos. rate</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-semibold text-muted-foreground">{campaign.replyRate}</p>
                 <p className="text-[10px] text-muted-foreground">reply rate</p>
               </div>
-              <BarChart3 className="w-4 h-4 text-muted-foreground/40" />
             </div>
           </div>
         ))}
