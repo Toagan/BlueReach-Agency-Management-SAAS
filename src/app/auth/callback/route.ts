@@ -56,27 +56,47 @@ export async function GET(request: Request) {
       let userRole = existingProfile?.role || "client";
 
       // ========================================
-      // NEW USER REGISTRATION (No existing profile)
+      // NEW USER REGISTRATION (No existing profile, OR trigger-created profile)
       // ========================================
-      if (!existingProfile) {
+      // The Supabase trigger `handle_new_user()` auto-creates profiles with role='client'.
+      // We detect this by checking: profile exists with role='client' but has no client_users
+      // links and no invitations → this is actually a new agency owner signup.
+      let isTriggerCreatedProfile = false;
+      if (existingProfile && existingProfile.role === "client") {
+        const { data: clientLinks } = await serviceSupabase
+          .from("client_users")
+          .select("client_id")
+          .eq("user_id", userId)
+          .limit(1);
+        const { data: invitations } = await serviceSupabase
+          .from("client_invitations")
+          .select("id")
+          .eq("email", userEmail)
+          .limit(1);
+        if ((!clientLinks || clientLinks.length === 0) && (!invitations || invitations.length === 0)) {
+          isTriggerCreatedProfile = true;
+        }
+      }
+
+      if (!existingProfile || isTriggerCreatedProfile) {
         console.log("[Auth Callback] New user, checking access for:", userEmail);
 
         // Check 1: Is this a super-admin email?
         if (isSuperAdmin(userEmail)) {
-          console.log("[Auth Callback] Super-admin email detected, creating admin profile");
-          const { error: profileError } = await serviceSupabase.from("profiles").insert({
+          console.log("[Auth Callback] Super-admin email detected, setting admin profile");
+          const { error: profileError } = await serviceSupabase.from("profiles").upsert({
             id: userId,
             email: userEmail,
-            first_name: userMetadata.first_name || userMetadata.name?.split(" ")[0] || null,
+            full_name: userMetadata.full_name || userMetadata.name || null,
             role: "admin",
-          });
+          }, { onConflict: "id" });
 
           if (profileError) {
             console.error("[Auth Callback] Error creating admin profile:", profileError);
             return NextResponse.redirect(`${origin}/login?error=Failed to create profile`);
           }
 
-          console.log("[Auth Callback] Created admin profile for:", userEmail);
+          console.log("[Auth Callback] Set admin profile for:", userEmail);
           userRole = "admin";
         } else {
           // Check 2: Does this email have a pending invitation?
@@ -90,22 +110,22 @@ export async function GET(request: Request) {
             .single();
 
           if (invitation) {
-            // Has invitation - create client profile and link
+            // Has invitation - set client profile and link
             console.log("[Auth Callback] Found invitation for client:", invitation.client_id);
 
-            const { error: profileError } = await serviceSupabase.from("profiles").insert({
+            const { error: profileError } = await serviceSupabase.from("profiles").upsert({
               id: userId,
               email: userEmail,
-              first_name: userMetadata.first_name || userMetadata.name?.split(" ")[0] || null,
+              full_name: userMetadata.full_name || userMetadata.name || null,
               role: "client",
-            });
+            }, { onConflict: "id" });
 
             if (profileError) {
-              console.error("[Auth Callback] Error creating client profile:", profileError);
+              console.error("[Auth Callback] Error setting client profile:", profileError);
               return NextResponse.redirect(`${origin}/login?error=Failed to create profile`);
             }
 
-            console.log("[Auth Callback] Created client profile for:", userEmail);
+            console.log("[Auth Callback] Set client profile for:", userEmail);
             userRole = "client";
 
             // Link user to the client from invitation
@@ -136,12 +156,12 @@ export async function GET(request: Request) {
           // Check 3: No invitation — new agency owner signup
           console.log("[Auth Callback] New agency owner signup for:", userEmail);
 
-          const { error: profileError } = await serviceSupabase.from("profiles").insert({
+          const { error: profileError } = await serviceSupabase.from("profiles").upsert({
             id: userId,
             email: userEmail,
-            first_name: userMetadata.first_name || userMetadata.name?.split(" ")[0] || null,
+            full_name: userMetadata.full_name || userMetadata.name || null,
             role: "admin",
-          });
+          }, { onConflict: "id" });
 
           if (profileError) {
             console.error("[Auth Callback] Error creating admin profile:", profileError);
