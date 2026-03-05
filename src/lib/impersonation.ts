@@ -7,7 +7,7 @@ export async function setImpersonation(ownerId: string): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, ownerId, {
     httpOnly: true,
-    path: "/admin",
+    path: "/",
     maxAge: COOKIE_MAX_AGE,
     sameSite: "lax",
   });
