@@ -1,6 +1,6 @@
 # BlueReach Agency Management Dashboard
 
-A white-label SaaS platform for lead generation agencies to manage clients, campaigns, leads, and email infrastructure. Integrates with [Instantly.ai](https://instantly.ai), [Smartlead](https://smartlead.ai), and [HubSpot](https://hubspot.com). Built with Next.js, Supabase, and TypeScript.
+A white-label, multi-tenant SaaS platform for lead generation agencies to manage clients, campaigns, leads, and email infrastructure. Integrates with [Instantly.ai](https://instantly.ai), [Smartlead](https://smartlead.ai), and [HubSpot](https://hubspot.com). Billing powered by [Stripe](https://stripe.com). Built with Next.js, Supabase, and TypeScript.
 
 ## Table of Contents
 
@@ -17,6 +17,8 @@ A white-label SaaS platform for lead generation agencies to manage clients, camp
 - [Cron Jobs](#cron-jobs)
 - [Infrastructure Health Monitoring](#infrastructure-health-monitoring)
 - [Email Notifications](#email-notifications)
+- [Billing & Subscriptions](#billing--subscriptions)
+- [Multi-Tenancy & Impersonation](#multi-tenancy--impersonation)
 - [SEO](#seo-1)
 - [Deployment](#deployment)
 - [Project Structure](#project-structure)
@@ -26,7 +28,7 @@ A white-label SaaS platform for lead generation agencies to manage clients, camp
 
 ## Overview
 
-BlueReach is a multi-tenant agency management platform designed for cold email outreach agencies. It provides:
+BlueReach is a multi-tenant agency management platform designed for cold email outreach agencies. Each agency owner signs up, selects a plan, and gets their own fully isolated workspace. A platform admin can oversee all agencies via impersonation.
 
 - **Admin Portal**: Full control over clients, campaigns, leads, analytics, infrastructure, and settings
 - **Client Portal**: Role-restricted dashboard for clients to view campaigns, manage lead workflows, and track results
@@ -34,6 +36,9 @@ BlueReach is a multi-tenant agency management platform designed for cold email o
 - **Infrastructure Monitoring**: Email account health tracking, DNS validation (SPF/DKIM/DMARC), and warmup monitoring
 - **Real-time Updates**: Webhook-driven data sync from email providers with auto-refreshing dashboards
 - **Email Notifications**: Automated alerts for positive replies and weekly stats reports via Resend
+- **Multi-Tenancy**: Full data isolation between agency owners via `owner_id` scoping on all tables
+- **Stripe Billing**: 3-tier subscription plans with 14-day free trial, billing portal, and webhook-driven sync
+- **Platform Admin**: Impersonation system to view any agency's workspace as they see it
 
 ---
 
@@ -42,18 +47,18 @@ BlueReach is a multi-tenant agency management platform designed for cold email o
 ### Admin Dashboard (`/admin`)
 
 #### Command Center
-- Real-time analytics filtered by time period (this week, this month, this quarter)
+- Real-time analytics filtered by time period (this week, this month, this quarter, all time)
   - Leads contacted, emails sent, replies received, positive replies (opportunities)
-  - Bounced emails, meetings held, deals closed (cumulative)
+  - Reply rate calculation
 - Clickable stats that drill down into the detailed leads view
 - Auto-refresh every 30 seconds
+- All data scoped to the current agency owner
 
-#### Client Management (`/admin/clients`)
-- Create, edit, and delete clients
-- Configure client details: name, website, logo, notes, product/service, ACV/TCV, target verticals, TAM, daily email targets
-- Invite client users via email (OAuth-based access with Google/Microsoft)
-- Assign roles to client users: owner, manager, member, viewer
-- View all campaigns and metrics per client
+#### Client Management (`/admin` — customer cards)
+- Create and delete clients (enforced by subscription plan limits)
+- View details, settings per client
+- Search and filter customers (active, archived, demo)
+- Customer cards showing campaign count and key metrics
 
 #### Campaign Management (`/admin/clients/[clientId]`)
 - Link campaigns from Instantly or Smartlead to clients
@@ -73,7 +78,7 @@ BlueReach is a multi-tenant agency management platform designed for cold email o
 - Campaign diagnostics
 
 #### Lead Management (`/admin/leads`)
-- View all leads across all clients (48,000+ supported)
+- View all leads across all clients (132,000+ supported)
 - Server-side filtering by client, status, and positive reply flag
 - Lead statuses: `contacted`, `opened`, `clicked`, `replied`, `booked`, `won`, `lost`, `not_interested`
 - Pagination: 100 leads per page with navigation
@@ -105,10 +110,18 @@ BlueReach is a multi-tenant agency management platform designed for cold email o
 - Live sync of remaining credits
 
 #### AI Campaigns (`/admin/ai-campaigns`)
-- AI-assisted campaign creation and management
+- Interactive 5-step campaign builder mockup (coming soon):
+  1. **Knowledge Base** — Upload/toggle MD files with best practices
+  2. **Reference Campaigns** — Select top-performing campaigns with positive reply stats
+  3. **Campaign Builder** — Chat-style Q&A with Fireflies call recording integration
+  4. **Copy Generation** — Iterative V1→V2→V3 with feedback loop and follow-up sequences
+  5. **A/B Testing Matrix** — 5 categories (Offer, Subject, CTA, First Line, Follow-up) × 3 variants
 
 #### Scraping (`/admin/scraping`)
-- Lead scraping and enrichment tools
+- Coming soon placeholder cards for:
+  - **Google Maps** — Local business scraping by category and location
+  - **LinkedIn Sales Navigator** — B2B decision-maker extraction
+  - **Blitz API** — Bulk lead enrichment from domain/CSV uploads
 
 #### Infrastructure Health (`/admin/infrastructure`)
 - Monitor email account health across Instantly and Smartlead
@@ -120,21 +133,22 @@ BlueReach is a multi-tenant agency management platform designed for cold email o
 - Auto-refresh every 30 seconds
 
 #### Agency Settings (`/admin/settings`)
+- **Agency Owners** (platform admin only): List all agency owners with client counts, "View Dashboard" button for impersonation
 - Agency logo upload
+- Agency branding (name, primary color, sender name/email)
 - API key management (Instantly, Smartlead)
-- Webhook configuration
-- Notification preferences
+- Email service configuration (Resend)
 
-#### Instantly Integration Page (`/admin/instantly`)
-- Connection status and API health
-- Campaign sync and management
-- Lead sync (bidirectional)
-- Email account management with warmup status
-- Provider-specific analytics
+#### Billing (`/admin/billing`)
+- Current subscription plan display
+- Trial days remaining indicator
+- "Manage Billing" button → Stripe customer portal
+- Trial and past-due banners in admin layout
 
 ### Client Portal (`/admin/clients/[clientId]` with client role)
 
 - OAuth login via Google or Microsoft
+- Context-aware login page (recognizes invitation tokens)
 - View all campaigns assigned to their account
 - Lead statistics: contacted, replied, positive replies, meetings, deals
 - Lead workflow management (respond, schedule meetings, close deals)
@@ -144,15 +158,17 @@ BlueReach is a multi-tenant agency management platform designed for cold email o
 ### Authentication
 
 - **OAuth**: Google and Microsoft sign-in via Supabase Auth
-- **Role-Based Access**: Admin (full access) and Client (restricted to linked clients)
+- **Role-Based Access**: Platform Admin → Admin → Client (Owner/Manager/Member/Viewer)
 - **Client Invitations**: Admin invites client users by email; auto-linked on first login
 - **Middleware Protection**: All `/admin/*` routes protected; client users restricted to their linked client pages
+- **Context-Aware Login**: Agency owners see social proof + free trial CTA; invited clients see a tailored "Your dashboard is ready" view
 
 ### Marketing Pages
 
-- **Landing Page** (`/`): Hero with CSS dashboard mockup, stats bar (4+ hrs saved, 87% retention, etc.), problem/solution cards with mini visuals, "See it in Action" showcase (client dashboard, lead pipeline, Slack notifications), 7-feature grid (including Slack), 6 testimonials with avatar initials, and CTA
+- **Landing Page** (`/`): Hero with CSS dashboard mockup, stats bar, problem/solution cards, "See it in Action" showcase, 7-feature grid, 6 testimonials with professional headshot photos, and CTA
 - **Features Page** (`/features`): Detailed breakdown of client portals, analytics, and lead management with mock UI visuals
 - **Pricing Page** (`/pricing`): 3-tier plan comparison (Starter $49, Growth $99, Agency $249), feature comparison table, FAQ section
+- **Plan Selection** (`/choose-plan`): Post-signup plan selection with 14-day free trial on all plans
 
 ### SEO
 
@@ -162,7 +178,7 @@ BlueReach is a multi-tenant agency management platform designed for cold email o
 - **Robots** (`/robots.txt`): Auto-generated from `robots.ts` — allows marketing pages, blocks `/admin`, `/dashboard`, `/api`, `/auth`
 - **JSON-LD structured data**:
   - Homepage: `Organization`, `SoftwareApplication` (with pricing and rating), `WebSite` schemas
-  - Pricing: `FAQPage` schema for Google rich snippet eligibility
+  - Pricing: `FAQPage` schema for Google rich snippet FAQ accordion
 
 ---
 
@@ -174,6 +190,7 @@ BlueReach is a multi-tenant agency management platform designed for cold email o
 | **React** | 19.x | UI framework |
 | **TypeScript** | 5.x | Type-safe development |
 | **Supabase** | Latest | PostgreSQL database, Auth (OAuth), Row Level Security |
+| **Stripe** | Latest | Subscription billing, checkout, customer portal |
 | **Tailwind CSS** | 4.x | Utility-first styling |
 | **shadcn/ui** | Latest | UI component library (Radix UI primitives) |
 | **Lucide React** | Latest | Icon library |
@@ -211,13 +228,13 @@ BlueReach is a multi-tenant agency management platform designed for cold email o
           │                    │                       │
           ▼                    ▼                       ▼
 ┌──────────────────┐  ┌────────────────┐  ┌──────────────────────────┐
-│    Supabase      │  │  Email         │  │   External Providers     │
-│  ┌────────────┐  │  │  Providers     │  │  ┌────────────────────┐  │
-│  │ PostgreSQL │  │  │  ┌──────────┐  │  │  │   Instantly API    │  │
-│  │ + RLS      │  │  │  │  Resend  │  │  │  │   Smartlead API   │  │
-│  ├────────────┤  │  │  └──────────┘  │  │  │   HubSpot API     │  │
-│  │ Auth       │  │  └────────────────┘  │  └────────────────────┘  │
-│  │ (OAuth)    │  │                      │  ┌────────────────────┐  │
+│    Supabase      │  │  Email / Pay   │  │   External Providers     │
+│  ┌────────────┐  │  │  ┌──────────┐  │  │  ┌────────────────────┐  │
+│  │ PostgreSQL │  │  │  │  Resend  │  │  │  │   Instantly API    │  │
+│  │ + RLS      │  │  │  ├──────────┤  │  │  │   Smartlead API   │  │
+│  ├────────────┤  │  │  │  Stripe  │  │  │  │   HubSpot API     │  │
+│  │ Auth       │  │  │  └──────────┘  │  │  └────────────────────┘  │
+│  │ (OAuth)    │  │  └────────────────┘  │  ┌────────────────────┐  │
 │  ├────────────┤  │                      │  │  Google DoH (DNS)  │  │
 │  │ Storage    │  │                      │  └────────────────────┘  │
 │  └────────────┘  │                      └──────────────────────────┘
@@ -233,8 +250,10 @@ Supabase OAuth redirect
     ↓
 /auth/callback
     ↓
-Check profiles table for role
+Check profiles table for role + pending invitations
     ↓
+├── New user with invitation → Link to client, redirect to client dashboard
+├── New admin (no subscription) → Redirect to /choose-plan
 ├── role = 'admin'  → Redirect to /admin (Command Center)
 └── role = 'client' → Redirect to /admin/clients/[clientId] (restricted view)
 ```
@@ -246,7 +265,9 @@ Admin creates invitation (email)
     ↓
 Invitation stored in client_invitations table
     ↓
-Invited user signs in via OAuth
+Invited user clicks login link (/login?inviteToken=...)
+    ↓
+Context-aware login page shows client-specific messaging
     ↓
 /auth/callback checks for pending invitation matching email
     ↓
@@ -255,26 +276,34 @@ Auto-links user to client via client_users table
 Invitation marked as accepted
 ```
 
-### Data Flow
+### Multi-Tenancy Data Flow
 
-1. **Instantly/Smartlead → Supabase**: Campaigns and leads sync via API calls or real-time webhooks
-2. **Supabase → Next.js**: Server components fetch data directly with RLS enforcement
-3. **Next.js → Browser**: React renders the UI with auto-refresh every 30 seconds
-4. **Browser → API Routes**: Client-side actions (status updates, workflow changes, exports)
-5. **Webhooks → Supabase**: Real-time lead status updates from email providers
-6. **Cron → API Routes**: Scheduled analytics snapshots and stats reports
+```
+API Request → requireAdmin() → getEffectiveOwnerId()
+    ↓
+├── Platform admin + impersonation cookie → returns impersonated owner UUID
+├── Platform admin (no impersonation) → returns admin's own UUID
+└── Regular admin → returns their own UUID
+    ↓
+All queries filter by .eq("owner_id", effectiveOwnerId)
+    ↓
+Complete data isolation between agency owners
+```
 
 ### Role-Based Access Control
 
-| Feature | Admin | Client (Owner/Manager) | Client (Member/Viewer) |
-|---------|-------|----------------------|----------------------|
-| View client dashboard | All clients | Linked clients only | Linked clients only |
-| Manage lead workflow | Yes | Yes | View only |
-| Link/delete campaigns | Yes | No | No |
-| Access other admin routes | Yes | No | No |
-| Invite client users | Yes | No | No |
-| Manage settings | Yes | No | No |
-| Infrastructure monitoring | Yes | No | No |
+| Feature | Platform Admin | Admin (Agency Owner) | Client (Owner/Manager) | Client (Member/Viewer) |
+|---------|---------------|---------------------|----------------------|----------------------|
+| View own dashboard | Yes | Yes | N/A | N/A |
+| Impersonate other agencies | Yes | No | No | No |
+| Manage clients | Own + impersonated | Own only | No | No |
+| View client dashboard | All (via impersonation) | Own clients | Linked clients only | Linked clients only |
+| Manage lead workflow | Yes | Yes | Yes | View only |
+| Link/delete campaigns | Yes | Yes | No | No |
+| Infrastructure monitoring | Yes | Yes | No | No |
+| Manage settings | Yes | Yes | No | No |
+| Agency Owners list | Yes | No | No | No |
+| Billing management | Exempt (free) | Yes | No | No |
 
 ---
 
@@ -285,6 +314,7 @@ Invitation marked as accepted
 - Node.js 18+
 - npm or yarn
 - Supabase account (with Google and/or Microsoft OAuth configured)
+- Stripe account (for billing — optional in development)
 - Instantly.ai account with API access (optional)
 - Smartlead account with API access (optional)
 - Resend account for email notifications (optional)
@@ -304,12 +334,18 @@ cp .env.example .env.local
 # Edit .env.local with your credentials (see Environment Variables section)
 
 # Run database migrations in Supabase SQL Editor (in order):
-# 1. supabase-schema.sql       — Core tables: clients, campaigns, leads
-# 2. supabase-schema-v2.sql    — Denormalized fields, multi-provider support
-# 3. supabase-settings.sql     — Settings table
-# 4. supabase-preserve-leads.sql — Triggers to preserve lead data on deletion
-# 5. supabase-analytics.sql    — Analytics views, snapshots, and functions
-# 6. supabase-add-icp.sql      — ICP (Ideal Customer Profile) fields
+# 1. supabase-schema.sql             — Core tables: clients, campaigns, leads
+# 2. supabase-schema-v2.sql          — Denormalized fields, multi-provider support
+# 3. supabase-settings.sql           — Settings table
+# 4. supabase-preserve-leads.sql     — Triggers to preserve lead data on deletion
+# 5. supabase-analytics.sql          — Analytics views, snapshots, and functions
+# 6. supabase-add-icp.sql            — ICP (Ideal Customer Profile) fields
+#
+# Then run the numbered migrations in supabase/migrations/:
+# 7. 20260303_add_reply_tokens.sql   — Reply token table for smart email redirects
+# 8. 20260304_add_stripe_billing.sql — Stripe subscriptions table + profile fields
+# 9. 20260304_add_multi_tenancy.sql  — owner_id on clients/settings, is_platform_admin
+# 10. 20260305_add_owner_scoping.sql — owner_id on subscriptions, lead_sources, email_accounts
 
 # Start development server
 npm run dev
@@ -339,6 +375,13 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 # App URL (Required)
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
+# Stripe Billing (Required for subscriptions)
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_STARTER=price_...
+STRIPE_PRICE_GROWTH=price_...
+STRIPE_PRICE_AGENCY=price_...
+
 # Email Notifications (Required for notifications)
 RESEND_API_KEY=re_your-resend-api-key
 
@@ -358,6 +401,11 @@ SMARTLEAD_API_KEY=your-smartlead-api-key
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anonymous/public key (client-side) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key (server-side only, bypasses RLS) |
 | `NEXT_PUBLIC_APP_URL` | Yes | Your app's public URL (used for links in emails, webhooks) |
+| `STRIPE_SECRET_KEY` | Yes | Stripe secret key for server-side API calls |
+| `STRIPE_WEBHOOK_SECRET` | Yes | Secret for validating Stripe webhook payloads |
+| `STRIPE_PRICE_STARTER` | Yes | Stripe Price ID for Starter plan ($49/mo) |
+| `STRIPE_PRICE_GROWTH` | Yes | Stripe Price ID for Growth plan ($99/mo) |
+| `STRIPE_PRICE_AGENCY` | Yes | Stripe Price ID for Agency plan ($249/mo) |
 | `RESEND_API_KEY` | No | Resend API key for sending email notifications |
 | `INSTANTLY_API_KEY` | No | Instantly API key (Settings → Integrations → API) |
 | `INSTANTLY_WEBHOOK_SECRET` | No | Secret for validating Instantly webhook payloads |
@@ -378,13 +426,16 @@ User profiles linked to Supabase Auth.
 | `email` | text | User email |
 | `role` | text | `'admin'` or `'client'` |
 | `full_name` | text | Display name |
+| `is_platform_admin` | boolean | Whether user is the platform super-admin (default `false`) |
+| `stripe_customer_id` | text | Stripe customer ID (unique) |
 
 #### `clients`
-Agency clients (companies being served).
+Agency clients (companies being served). Scoped by `owner_id`.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | uuid | Primary key |
+| `owner_id` | uuid | FK → `auth.users` — the agency owner who created this client |
 | `name` | text | Client company name |
 | `logo_url` | text | Client logo URL |
 | `website` | text | Client website |
@@ -436,6 +487,12 @@ Email campaigns linked to external providers.
 | `copy_body` | text | Email template/copy |
 | `is_active` | boolean | Active flag |
 | `last_synced_at` | timestamptz | Last sync timestamp |
+| `cached_emails_sent` | integer | Cached total emails sent |
+| `cached_reply_count` | integer | Cached total replies |
+| `cached_emails_bounced` | integer | Cached bounced count |
+| `cached_leads_count` | integer | Cached total leads |
+| `sync_in_progress` | boolean | Whether a sync is currently running |
+| `sync_started_at` | timestamptz | When the current sync started (5-min timeout) |
 
 #### `campaign_sequences`
 Email sequence steps with A/B/C variants.
@@ -562,6 +619,42 @@ Multi-provider API key storage (per-client or global).
 | `is_active` | boolean | Active flag |
 | `label` | text | Display label |
 
+### Billing Tables
+
+#### `stripe_subscriptions`
+Subscription records synced from Stripe.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `user_id` | uuid | FK → `auth.users(id)` |
+| `stripe_subscription_id` | text | Stripe subscription ID (unique) |
+| `stripe_customer_id` | text | Stripe customer ID |
+| `plan` | text | `'starter'`, `'growth'`, or `'agency'` |
+| `status` | text | `'active'`, `'trialing'`, `'past_due'`, `'canceled'`, `'incomplete'` |
+| `current_period_start` | timestamptz | Current billing period start |
+| `current_period_end` | timestamptz | Current billing period end |
+| `trial_start` | timestamptz | Trial start date |
+| `trial_end` | timestamptz | Trial end date |
+| `cancel_at_period_end` | boolean | Whether subscription cancels at period end |
+| `created_at` | timestamptz | Record creation timestamp |
+| `updated_at` | timestamptz | Last update timestamp |
+
+### Reply Token Tables
+
+#### `reply_tokens`
+Short-lived tokens for smart email reply redirects.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key (used as the token) |
+| `lead_email` | text | The lead's email address |
+| `subject` | text | Email subject for reply |
+| `body` | text | Quoted thread body |
+| `lead_id` | uuid | FK → `leads(id)` |
+| `created_at` | timestamptz | Creation timestamp (72-hour TTL) |
+| `used_at` | timestamptz | First access timestamp |
+
 ### Infrastructure Health Tables
 
 #### `email_accounts`
@@ -570,6 +663,7 @@ Central registry of email accounts from Instantly and Smartlead.
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | uuid | Primary key |
+| `owner_id` | uuid | FK → `auth.users` — the agency owner |
 | `provider_type` | text | `'instantly'` or `'smartlead'` |
 | `provider_account_id` | text | Provider-specific account ID |
 | `email` | text | Email address |
@@ -625,19 +719,23 @@ DNS validation cache for SPF/DKIM/DMARC.
 ### Settings Table
 
 #### `settings`
-Application settings (singleton, `id` always = 1).
+Per-owner application settings (keyed by `owner_id` + `key`).
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `id` | integer | Always 1 |
-| `webhook_url` | text | Instantly webhook URL |
-| `sync_interval` | integer | Auto-sync interval (minutes) |
+| `id` | integer | Auto-increment primary key |
+| `owner_id` | uuid | FK → `auth.users` — the agency owner |
+| `key` | text | Setting key (e.g., `instantly_api_key`, `agency_logo_url`) |
+| `value` | text | Setting value |
 | `updated_at` | timestamptz | Last update timestamp |
+
+Unique constraint: `(key, owner_id)`
 
 ### Row Level Security (RLS)
 
-All tables have RLS enabled:
-- **Admin users** can access all data
+All tables have RLS enabled with owner-scoped policies:
+- **Platform admin users** can access all data across all owners
+- **Admin users** can only access data where `owner_id` matches their user ID
 - **Client users** can only access data for clients linked via `client_users`
 - **Service role key** bypasses RLS for webhook handlers and cron jobs
 
@@ -653,6 +751,10 @@ Run these in order in the Supabase SQL Editor:
 | `supabase-preserve-leads.sql` | Triggers to preserve lead data when clients/campaigns are deleted |
 | `supabase-analytics.sql` | Analytics views, snapshot tables, and aggregation functions |
 | `supabase-add-icp.sql` | ICP fields on clients (product_service, acv, tcv, verticals, tam) |
+| `supabase/migrations/20260303_add_reply_tokens.sql` | Reply tokens table for smart email redirects |
+| `supabase/migrations/20260304_add_stripe_billing.sql` | Stripe subscriptions table, stripe_customer_id on profiles |
+| `supabase/migrations/20260304_add_multi_tenancy.sql` | owner_id on clients/settings, is_platform_admin on profiles |
+| `supabase/migrations/20260305_add_owner_scoping.sql` | owner_id on subscriptions, lead_sources, email_accounts |
 
 ---
 
@@ -675,19 +777,18 @@ POST   /api/admin/analytics/sync        # Trigger analytics sync from providers
 ```
 
 **Query Parameters:**
-- `period`: `this_week` | `this_month` | `this_quarter`
+- `period`: `all_time` | `this_week` | `this_month` | `this_quarter`
 
 **Response:**
 ```json
 {
-  "leads_contacted": 150,
-  "emails_sent": 500,
-  "replies": 25,
-  "opportunities": 10,
-  "bounced_cumulative": 15,
-  "meetings_held_cumulative": 5,
-  "deals_closed_cumulative": 2,
-  "reply_rate": 5.0
+  "period": "all_time",
+  "leads_contacted": 132589,
+  "emails_sent": 132189,
+  "replies": 4218,
+  "opportunities": 322,
+  "reply_rate": 3.19,
+  "data_source": "campaigns_cached"
 }
 ```
 
@@ -705,11 +806,22 @@ GET    /api/admin/leads/export?export=positive
 
 #### Customers (Clients)
 ```
-GET    /api/admin/customers             # List all clients
-POST   /api/admin/customers             # Create client
+GET    /api/admin/customers             # List all clients (scoped by owner)
+POST   /api/admin/customers             # Create client (enforces plan limit)
 GET    /api/admin/customers/[id]        # Get client details
 PUT    /api/admin/customers/[id]        # Update client
 DELETE /api/admin/customers/[id]        # Delete client
+```
+
+#### Agencies (Platform Admin Only)
+```
+GET    /api/admin/agencies              # List all agency owners with client counts
+```
+
+#### Impersonation (Platform Admin Only)
+```
+POST   /api/admin/impersonate           # Start impersonating an agency owner
+DELETE /api/admin/impersonate           # Stop impersonating
 ```
 
 #### Invitations
@@ -739,6 +851,21 @@ GET    /api/admin/subscriptions         # Get subscription/credit status
 ```
 GET    /api/admin/notification-preferences
 POST   /api/admin/notification-preferences
+```
+
+### Stripe APIs
+
+```
+POST   /api/stripe/checkout             # Create Stripe checkout session (14-day trial)
+POST   /api/stripe/portal               # Create Stripe billing portal session
+GET    /api/stripe/subscription          # Get current subscription status + client limit
+```
+
+### Reply Token APIs
+
+```
+POST   /api/reply-tokens                # Create a reply token (stores compose data)
+GET    /api/reply-tokens/[token]        # Fetch token data (72-hour TTL)
 ```
 
 ### Client APIs
@@ -930,7 +1057,7 @@ Configure in Instantly to send events to this URL for each campaign.
 
 | Event | Action |
 |-------|--------|
-| `lead_interested` | Set `is_positive_reply = true` |
+| `lead_interested` | Set `is_positive_reply = true`, send notification email |
 | `lead_not_interested` | Set `is_positive_reply = false` |
 | `email_sent` | Increment `emails_sent` counter |
 | `email_opened` | Increment open count |
@@ -941,16 +1068,6 @@ Configure in Instantly to send events to this URL for each campaign.
 | `lead_won` | Update lead status to `won` |
 | `lead_lost` | Update lead status to `lost` |
 
-**Payload Example:**
-```json
-{
-  "event_type": "reply_received",
-  "campaign_id": "abc123",
-  "lead_email": "lead@example.com",
-  "timestamp": "2024-01-15T10:30:00Z"
-}
-```
-
 **Security:** Webhook payloads are validated using `INSTANTLY_WEBHOOK_SECRET`.
 
 ### Smartlead Webhooks
@@ -958,6 +1075,20 @@ Configure in Instantly to send events to this URL for each campaign.
 **Endpoint:** `POST /api/webhooks/smartlead/[campaignId]`
 
 Handles similar events from Smartlead campaigns.
+
+### Stripe Webhooks
+
+**Endpoint:** `POST /api/webhooks/stripe`
+
+**Events Handled:**
+
+| Event | Action |
+|-------|--------|
+| `checkout.session.completed` | Create subscription record in database |
+| `customer.subscription.updated` | Sync plan/status changes |
+| `customer.subscription.deleted` | Mark subscription as canceled |
+| `invoice.payment_failed` | Update status to `past_due` |
+| `invoice.payment_succeeded` | Update status to `active` |
 
 ---
 
@@ -997,7 +1128,7 @@ Scheduled endpoints for automated data syncing:
 
 ### Overview
 
-Monitor email account health across all providers with DNS validation. Accessible at `/admin/infrastructure`.
+Monitor email account health across all providers with DNS validation. Accessible at `/admin/infrastructure`. All data scoped to the agency owner's email accounts.
 
 ### Features
 
@@ -1028,8 +1159,73 @@ Built with [React Email](https://react.email) and sent via [Resend](https://rese
 | Template | Trigger | Description |
 |----------|---------|-------------|
 | `Invitation.tsx` | Admin invites client user | Welcome email with login link |
-| `PositiveReplyNotification.tsx` | Webhook: positive reply | Alert admin/client about interested lead |
+| `PositiveReplyNotification.tsx` | Webhook: positive reply | Alert with "Reply to Lead" and "View in Dashboard" buttons |
 | `StatsReport.tsx` | Weekly cron job | Summary of campaign performance |
+
+### Smart Reply System
+
+When a positive reply notification is sent, the "Reply to Lead" button uses a **reply token** system:
+1. Server creates a short-lived token storing the lead's email, subject, and quoted thread
+2. Notification email links to `/reply?token=...`
+3. First visit: user chooses Gmail or Outlook
+4. Preference saved to localStorage for auto-redirect on future clicks
+5. Tokens expire after 72 hours
+
+---
+
+## Billing & Subscriptions
+
+### Plans
+
+| Plan | Price | Client Limit | Features |
+|------|-------|-------------|----------|
+| **Starter** | $49/mo | 3 clients | All features |
+| **Growth** | $99/mo | 10 clients | All features |
+| **Agency** | $249/mo | Unlimited | All features |
+
+All plans include a **14-day free trial** with no credit card required upfront.
+
+### How It Works
+
+1. New agency owner signs up → redirected to `/choose-plan`
+2. Selects a plan → Stripe Checkout with 14-day trial
+3. Subscription synced to `stripe_subscriptions` table via webhook
+4. Client creation enforced against plan limits
+5. Trial/past-due banners shown in admin layout
+6. "Manage Billing" in `/admin/billing` opens Stripe customer portal
+
+### Super Admin
+
+Platform super admins (configured in `src/lib/stripe/helpers.ts`) get free unlimited access without needing a subscription.
+
+---
+
+## Multi-Tenancy & Impersonation
+
+### Owner Scoping
+
+Every agency owner's data is fully isolated:
+
+- `clients.owner_id` — each client belongs to exactly one agency
+- `settings.owner_id` — API keys, branding per agency
+- `email_accounts.owner_id` — infrastructure per agency
+- `subscriptions.owner_id` — credit tracking per agency
+- `lead_sources.owner_id` — lead database per agency
+- Campaigns, leads, analytics all chain through `client_id → clients.owner_id`
+
+The `getEffectiveOwnerId()` helper ensures every API route and server component filters by the correct owner, with no unscoped code paths.
+
+### Impersonation (Platform Admin)
+
+Platform admins can view any agency's workspace exactly as the agency owner sees it:
+
+1. Go to **Settings → Agency Owners**
+2. Click **"View Dashboard"** on any agency
+3. An amber banner appears: "Viewing as: Agency Name (email) · Stop Viewing"
+4. All data (clients, campaigns, leads, infrastructure, settings) is scoped to that agency
+5. Click **"Stop Viewing"** to return to the platform admin's own dashboard
+
+Implementation uses an httpOnly cookie (`x-view-as-owner`) with 8-hour expiry, read by `getEffectiveOwnerId()` in every API route.
 
 ---
 
@@ -1109,6 +1305,8 @@ services:
       - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - INSTANTLY_API_KEY=${INSTANTLY_API_KEY}
       - INSTANTLY_WEBHOOK_SECRET=${INSTANTLY_WEBHOOK_SECRET}
       - SMARTLEAD_API_KEY=${SMARTLEAD_API_KEY}
@@ -1136,14 +1334,15 @@ volumes:
 2. Add all environment variables in the Vercel dashboard
 3. Deploy
 4. Configure cron jobs in `vercel.json` (see [Cron Jobs](#cron-jobs))
+5. Set up Stripe webhook endpoint pointing to your Vercel URL
 
 ### Environment-Specific Configuration
 
-| Environment | Database | Providers | Email |
-|-------------|----------|-----------|-------|
-| Development | Supabase Dev Project | Instantly/Smartlead Sandbox | Resend Test |
-| Staging | Supabase Staging Project | Instantly/Smartlead Sandbox | Resend Test |
-| Production | Supabase Production Project | Instantly/Smartlead Production | Resend Production |
+| Environment | Database | Providers | Billing | Email |
+|-------------|----------|-----------|---------|-------|
+| Development | Supabase Dev Project | Instantly/Smartlead Sandbox | Stripe Test Mode | Resend Test |
+| Staging | Supabase Staging Project | Instantly/Smartlead Sandbox | Stripe Test Mode | Resend Test |
+| Production | Supabase Production Project | Instantly/Smartlead Production | Stripe Live Mode | Resend Production |
 
 ---
 
@@ -1159,17 +1358,16 @@ src/
 │   │
 │   ├── admin/                          # Admin portal
 │   │   ├── page.tsx                    # Command center dashboard
-│   │   ├── layout.tsx                  # Admin layout (sidebar, header)
+│   │   ├── layout.tsx                  # Admin layout (header, banners)
+│   │   ├── billing/                    # Subscription billing
+│   │   │   ├── page.tsx                # Billing overview
+│   │   │   └── billing-actions.tsx     # Manage billing button
 │   │   ├── clients/                    # Client management
-│   │   │   ├── page.tsx                # Client list
-│   │   │   ├── add-client-dialog.tsx   # New client dialog
 │   │   │   └── [clientId]/             # Individual client
 │   │   │       ├── page.tsx            # Client dashboard + lead workflow
 │   │   │       ├── settings/page.tsx   # Client settings
 │   │   │       └── campaigns/          # Campaign management
 │   │   │           ├── page.tsx        # Campaign list
-│   │   │           ├── add-campaign-dialog.tsx
-│   │   │           ├── sync-button.tsx
 │   │   │           └── [campaignId]/page.tsx  # Campaign details
 │   │   ├── leads/                      # Lead management
 │   │   │   ├── page.tsx
@@ -1183,16 +1381,18 @@ src/
 │   │   ├── infrastructure/             # Infrastructure health
 │   │   │   ├── page.tsx
 │   │   │   └── infrastructure-view.tsx
-│   │   ├── ai-campaigns/page.tsx       # AI campaign tools
-│   │   ├── scraping/page.tsx           # Lead scraping
+│   │   ├── ai-campaigns/page.tsx       # AI campaign builder (5-step wizard)
+│   │   ├── scraping/page.tsx           # Lead scraping (coming soon)
 │   │   ├── notes/page.tsx              # Internal notes
 │   │   ├── subscriptions/page.tsx      # Subscription tracking
-│   │   └── settings/page.tsx           # Agency settings
+│   │   └── settings/page.tsx           # Agency settings + agency owners list
 │   │
 │   ├── api/                            # API routes
 │   │   ├── admin/                      # Admin-only endpoints
+│   │   │   ├── agencies/route.ts       # List agency owners (platform admin)
 │   │   │   ├── analytics/              # Analytics + sync
 │   │   │   ├── customers/              # Client CRUD
+│   │   │   ├── impersonate/route.ts    # Impersonation start/stop
 │   │   │   ├── infrastructure/         # Infrastructure health
 │   │   │   ├── invitations/            # Client invitations
 │   │   │   ├── lead-database/          # Lead database queries
@@ -1201,6 +1401,13 @@ src/
 │   │   │   ├── notification-preferences/
 │   │   │   ├── settings/               # App settings + logo
 │   │   │   └── subscriptions/          # Subscription info
+│   │   ├── stripe/                     # Stripe billing endpoints
+│   │   │   ├── checkout/route.ts       # Create checkout session
+│   │   │   ├── portal/route.ts         # Create billing portal session
+│   │   │   └── subscription/route.ts   # Get subscription status
+│   │   ├── reply-tokens/               # Smart reply token system
+│   │   │   ├── route.ts                # Create token
+│   │   │   └── [token]/route.ts        # Fetch token data
 │   │   ├── campaigns/[campaignId]/     # Campaign operations
 │   │   │   ├── details/                # Stats + details
 │   │   │   ├── leads/                  # Campaign leads
@@ -1230,7 +1437,8 @@ src/
 │   │   │   └── workflow/               # Workflow updates
 │   │   ├── webhooks/                   # Webhook handlers
 │   │   │   ├── instantly/[campaignId]/ # Instantly webhooks
-│   │   │   └── smartlead/[campaignId]/ # Smartlead webhooks
+│   │   │   ├── smartlead/[campaignId]/ # Smartlead webhooks
+│   │   │   └── stripe/route.ts         # Stripe webhooks
 │   │   ├── cron/                       # Scheduled jobs
 │   │   │   ├── analytics-snapshot/
 │   │   │   ├── smartlead-weekly/
@@ -1242,20 +1450,15 @@ src/
 │   │   ├── signout/                    # Sign out
 │   │   └── accept-invite/              # Accept client invitation
 │   │
-│   ├── dashboard/                      # Client portal
-│   │   ├── page.tsx                    # Dashboard landing
-│   │   ├── layout.tsx                  # Dashboard layout
-│   │   └── [clientId]/                 # Client-specific views
-│   │       ├── page.tsx
-│   │       ├── client-leads-view.tsx
-│   │       └── client-info-tooltip.tsx
+│   ├── choose-plan/page.tsx            # Post-signup plan selection
+│   ├── reply/page.tsx                  # Smart email reply redirect (Gmail/Outlook)
 │   │
 │   ├── login/                          # Login page
 │   │   ├── page.tsx
-│   │   └── login-client.tsx
+│   │   └── login-client.tsx            # Context-aware login (agency vs client)
 │   ├── access-denied/page.tsx          # Access denied page
-│   ├── page.tsx                        # Landing page (CSS dashboard mockups, stats, testimonials)
-│   ├── layout.tsx                      # Root layout (SEO metadata, OG tags, Twitter cards)
+│   ├── page.tsx                        # Landing page (testimonials with photos)
+│   ├── layout.tsx                      # Root layout (SEO metadata)
 │   ├── sitemap.ts                      # Auto-generated /sitemap.xml
 │   ├── robots.ts                       # Auto-generated /robots.txt
 │   └── globals.css                     # Global styles
@@ -1263,7 +1466,8 @@ src/
 ├── components/
 │   ├── admin/                          # Admin-specific components
 │   │   ├── add-customer-dialog.tsx
-│   │   └── delete-customer-dialog.tsx
+│   │   ├── delete-customer-dialog.tsx
+│   │   └── impersonation-banner.tsx    # Amber "Viewing as" banner
 │   ├── campaigns/
 │   │   └── variant-analytics.tsx       # A/B variant display
 │   ├── layout/
@@ -1295,13 +1499,21 @@ src/
 │   │   └── textarea.tsx
 │   └── theme-toggle.tsx                # Dark/light theme toggle
 │
+├── hooks/
+│   └── useVisibilityPolling.ts         # Auto-refresh hook (30s polling)
+│
 ├── lib/
-│   ├── auth.ts                         # Auth helper utilities
+│   ├── auth.ts                         # Auth helpers (requireAdmin, getEffectiveOwnerId, etc.)
+│   ├── impersonation.ts                # Impersonation cookie helpers (set/clear/get)
 │   ├── utils.ts                        # General utilities (cn, etc.)
 │   ├── supabase/                       # Supabase clients
 │   │   ├── client.ts                   # Browser client
 │   │   ├── server.ts                   # Server client
 │   │   └── middleware.ts               # Auth middleware
+│   ├── stripe/                         # Stripe billing
+│   │   ├── client.ts                   # Stripe instance singleton
+│   │   ├── config.ts                   # Plan definitions (Starter/Growth/Agency)
+│   │   └── helpers.ts                  # isSuperAdmin(), getUserSubscription()
 │   ├── queries/                        # Database query functions
 │   │   ├── analytics.ts
 │   │   ├── campaigns.ts
@@ -1339,7 +1551,7 @@ src/
 │   │   └── index.ts                    # Module exports
 │   └── email/                          # Email notification service
 │       ├── index.ts                    # Module exports
-│       ├── send.ts                     # Resend send wrapper
+│       ├── send.ts                     # Resend send wrapper + reply URL builders
 │       └── templates/                  # React Email templates
 │           ├── Invitation.tsx          # Client invitation email
 │           ├── PositiveReplyNotification.tsx  # Positive reply alert
@@ -1361,21 +1573,24 @@ src/
 ├── CLAUDE.md                   # Claude AI project context
 ├── CRON_SETUP.md               # Cron job setup guide
 ├── README.md                   # This file
-├── check-positive.mjs          # Utility: check positive replies
-├── check_db.mjs                # Utility: database health check
 ├── components.json             # shadcn/ui config
 ├── docker-compose.yml          # Docker multi-service config
 ├── Dockerfile                  # Container build config
 ├── eslint.config.mjs           # ESLint configuration
 ├── next.config.ts              # Next.js configuration
 ├── package.json                # Dependencies and scripts
+├── tsconfig.json               # TypeScript configuration
 ├── supabase-schema.sql         # Migration 1: Core schema
 ├── supabase-schema-v2.sql      # Migration 2: Multi-provider + denormalization
 ├── supabase-settings.sql       # Migration 3: Settings table
 ├── supabase-preserve-leads.sql # Migration 4: Lead preservation triggers
 ├── supabase-analytics.sql      # Migration 5: Analytics views + functions
 ├── supabase-add-icp.sql        # Migration 6: ICP fields
-└── tsconfig.json               # TypeScript configuration
+└── supabase/migrations/        # Numbered migrations
+    ├── 20260303_add_reply_tokens.sql
+    ├── 20260304_add_stripe_billing.sql
+    ├── 20260304_add_multi_tenancy.sql
+    └── 20260305_add_owner_scoping.sql
 ```
 
 ---
