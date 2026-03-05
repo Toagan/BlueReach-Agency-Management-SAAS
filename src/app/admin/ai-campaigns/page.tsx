@@ -259,6 +259,57 @@ function CampaignBuilderStep() {
         </p>
       </div>
 
+      {/* Fireflies recording input */}
+      <div className="border border-border/50 rounded-xl overflow-hidden">
+        <div className="bg-muted/30 px-4 py-3 border-b border-border/30 flex items-center gap-2">
+          <svg className="w-4 h-4 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" y1="19" x2="12" y2="23" />
+            <line x1="8" y1="23" x2="16" y2="23" />
+          </svg>
+          <span className="text-sm font-medium">Client Call Recording</span>
+          <span className="text-[10px] text-muted-foreground ml-1">(optional)</span>
+        </div>
+        <div className="p-4 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Upload a Fireflies transcript or paste a recording URL. The AI extracts pain points,
+            goals, and language the client actually uses — for more authentic, relevant copy.
+          </p>
+          <div className="flex gap-3">
+            <div className="flex-1 h-10 rounded-lg bg-muted/30 border border-border/50 flex items-center px-3">
+              <span className="text-sm text-muted-foreground/50">https://app.fireflies.ai/view/...</span>
+            </div>
+            <button className="px-4 h-10 rounded-lg border border-border/50 bg-muted/20 text-sm font-medium text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors flex items-center gap-2">
+              <Upload className="w-4 h-4" />
+              Transcript
+            </button>
+          </div>
+          {/* Demo: show extracted context */}
+          <div className="rounded-lg bg-purple-500/5 border border-purple-500/15 p-3">
+            <p className="text-xs font-medium text-purple-400 mb-2">Extracted from call (demo)</p>
+            <div className="space-y-1.5 text-xs text-muted-foreground">
+              <div className="flex gap-2">
+                <span className="text-purple-400/70 font-medium w-20 flex-shrink-0">Pain point:</span>
+                <span>&quot;We&apos;ve been trying to hire SDRs for 3 months, can&apos;t find anyone good&quot;</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-purple-400/70 font-medium w-20 flex-shrink-0">Goal:</span>
+                <span>&quot;Need 30 qualified meetings per month by Q3&quot;</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-purple-400/70 font-medium w-20 flex-shrink-0">Language:</span>
+                <span>&quot;pipeline velocity&quot;, &quot;ramp time&quot;, &quot;cost per meeting&quot;</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-purple-400/70 font-medium w-20 flex-shrink-0">Objection:</span>
+                <span>&quot;We tried outsourcing before and the quality was terrible&quot;</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Chat interface */}
       <div className="border border-border/50 rounded-xl overflow-hidden">
         <div className="bg-muted/30 px-4 py-3 border-b border-border/50 flex items-center gap-2">
