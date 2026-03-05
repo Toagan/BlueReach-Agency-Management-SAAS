@@ -1868,7 +1868,7 @@ function CampaignCard({
               variant={campaign.is_active ? "default" : "secondary"}
               className={campaign.is_active ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : ""}
             >
-              {campaign.is_active ? "Active" : "Paused"}
+              {campaign.is_active ? "Active" : progress >= 99 ? "Completed" : "Paused"}
             </Badge>
           </div>
 
