@@ -178,6 +178,7 @@ export async function POST(
       .from("subscriptions")
       .update(updateData)
       .eq("id", id)
+      .eq("owner_id", ownerId)
       .select()
       .single();
 
