@@ -198,6 +198,7 @@ export default function ClientDashboardPage() {
   const [deletingCampaignId, setDeletingCampaignId] = useState<string | null>(null);
   const [positiveLeads, setPositiveLeads] = useState<Lead[]>([]);
   const [showWorkflow, setShowWorkflow] = useState(true);
+  const [workflowFilter, setWorkflowFilter] = useState<"responded" | "meetings" | "won" | "lost" | null>(null);
   const [loadingLeads, setLoadingLeads] = useState(false);
   const [updatingLeadId, setUpdatingLeadId] = useState<string | null>(null);
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
@@ -660,6 +661,7 @@ export default function ClientDashboardPage() {
   // Scroll to highlighted lead once positiveLeads are loaded
   useEffect(() => {
     if (!highlightLeadId || positiveLeads.length === 0) return;
+    setWorkflowFilter(null);
     const el = document.getElementById(`lead-card-${highlightLeadId}`);
     if (el) {
       // Small delay to ensure DOM is rendered
@@ -1178,35 +1180,63 @@ export default function ClientDashboardPage() {
           </div>
           {/* Stats Summary */}
           {positiveLeads.length > 0 && (
-            <div className="flex flex-wrap gap-4 mt-3 text-sm">
-              <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap gap-2 mt-3 text-sm">
+              <button
+                onClick={() => setWorkflowFilter(workflowFilter === "responded" ? null : "responded")}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  workflowFilter === "responded"
+                    ? "bg-green-100 dark:bg-green-900/50 ring-1 ring-green-400"
+                    : "hover:bg-muted"
+                }`}
+              >
                 <CheckCircle className="h-4 w-4 text-green-500" />
                 <span className="text-muted-foreground">Responded:</span>
                 <span className="font-medium">
                   {positiveLeads.filter(l => l.responded_at).length}
                 </span>
-              </div>
-              <div className="flex items-center gap-1.5">
+              </button>
+              <button
+                onClick={() => setWorkflowFilter(workflowFilter === "meetings" ? null : "meetings")}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  workflowFilter === "meetings"
+                    ? "bg-blue-100 dark:bg-blue-900/50 ring-1 ring-blue-400"
+                    : "hover:bg-muted"
+                }`}
+              >
                 <Calendar className="h-4 w-4 text-blue-500" />
                 <span className="text-muted-foreground">Meetings:</span>
                 <span className="font-medium">
                   {positiveLeads.filter(l => l.status === "booked" || l.meeting_at).length}
                 </span>
-              </div>
-              <div className="flex items-center gap-1.5">
+              </button>
+              <button
+                onClick={() => setWorkflowFilter(workflowFilter === "won" ? null : "won")}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  workflowFilter === "won"
+                    ? "bg-green-100 dark:bg-green-900/50 ring-1 ring-green-500"
+                    : "hover:bg-muted"
+                }`}
+              >
                 <Trophy className="h-4 w-4 text-green-600" />
                 <span className="text-muted-foreground">Won:</span>
                 <span className="font-medium text-green-600">
                   {positiveLeads.filter(l => l.status === "won").length}
                 </span>
-              </div>
-              <div className="flex items-center gap-1.5">
+              </button>
+              <button
+                onClick={() => setWorkflowFilter(workflowFilter === "lost" ? null : "lost")}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  workflowFilter === "lost"
+                    ? "bg-red-100 dark:bg-red-900/50 ring-1 ring-red-400"
+                    : "hover:bg-muted"
+                }`}
+              >
                 <XCircle className="h-4 w-4 text-red-500" />
                 <span className="text-muted-foreground">Lost:</span>
                 <span className="font-medium text-red-500">
                   {positiveLeads.filter(l => l.status === "lost").length}
                 </span>
-              </div>
+              </button>
             </div>
           )}
         </CardHeader>
@@ -1226,7 +1256,39 @@ export default function ClientDashboardPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {positiveLeads.map((lead) => (
+                {(() => {
+                  const filteredLeads = workflowFilter
+                    ? positiveLeads.filter((l) => {
+                        switch (workflowFilter) {
+                          case "responded":
+                            return l.responded_at && l.status !== "booked" && l.status !== "won" && l.status !== "lost";
+                          case "meetings":
+                            return l.status === "booked" || l.meeting_at;
+                          case "won":
+                            return l.status === "won";
+                          case "lost":
+                            return l.status === "lost";
+                          default:
+                            return true;
+                        }
+                      })
+                    : positiveLeads;
+
+                  if (filteredLeads.length === 0) {
+                    return (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <p className="text-sm">No leads matching this filter.</p>
+                        <button
+                          onClick={() => setWorkflowFilter(null)}
+                          className="text-sm text-primary hover:underline mt-1"
+                        >
+                          Clear filter
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return filteredLeads.map((lead) => (
                   <div
                     key={lead.id}
                     id={`lead-card-${lead.id}`}
@@ -1613,7 +1675,8 @@ export default function ClientDashboardPage() {
                       </div>
                     )}
                   </div>
-                ))}
+                ));
+                })()}
               </div>
             )}
           </CardContent>
