@@ -262,40 +262,52 @@ export async function GET(
       }
     } else {
       // For Instantly or when Smartlead API not available, use lead_emails table
-      const { data: emailStats, error: emailError } = await supabase
-        .from("lead_emails")
-        .select("sequence_step, sequence_variant, sequence_variant_label")
-        .eq("campaign_id", campaignId)
-        .eq("direction", "outbound")
-        .not("sequence_step", "is", null);
+      // Paginate to avoid Supabase's default 1000 row limit
+      const pageSize = 1000;
+      let offset = 0;
+      let hasMore = true;
 
-      if (emailError) {
-        console.error("[VariantAnalytics] Error fetching email stats:", emailError);
-      }
+      while (hasMore) {
+        const { data: emailStats, error: emailError } = await supabase
+          .from("lead_emails")
+          .select("sequence_step, sequence_variant, sequence_variant_label")
+          .eq("campaign_id", campaignId)
+          .eq("direction", "outbound")
+          .not("sequence_step", "is", null)
+          .range(offset, offset + pageSize - 1);
 
-      // Count emails sent per step/variant
-      (emailStats || []).forEach((email) => {
-        if (email.sequence_step === null) return;
-
-        const step = email.sequence_step;
-        const variant = email.sequence_variant_label || "Unknown";
-        const variantId = email.sequence_variant;
-        const key = `${step}-${variant}`;
-
-        const existing = variantMap.get(key);
-        if (existing) {
-          existing.sent++;
-        } else {
-          variantMap.set(key, {
-            step,
-            variant,
-            variantId,
-            sent: 1,
-            replies: 0,
-            positiveReplies: 0,
-          });
+        if (emailError) {
+          console.error("[VariantAnalytics] Error fetching email stats:", emailError);
+          break;
         }
-      });
+
+        // Count emails sent per step/variant
+        (emailStats || []).forEach((email) => {
+          if (email.sequence_step === null) return;
+
+          const step = email.sequence_step;
+          const variant = email.sequence_variant_label || "Unknown";
+          const variantId = email.sequence_variant;
+          const key = `${step}-${variant}`;
+
+          const existing = variantMap.get(key);
+          if (existing) {
+            existing.sent++;
+          } else {
+            variantMap.set(key, {
+              step,
+              variant,
+              variantId,
+              sent: 1,
+              replies: 0,
+              positiveReplies: 0,
+            });
+          }
+        });
+
+        hasMore = (emailStats?.length || 0) === pageSize;
+        offset += pageSize;
+      }
     }
 
     // Query reply tracking from leads table (works for both providers)
