@@ -1994,7 +1994,7 @@ function CampaignCard({
                 </span>
               )}
               {!syncResult && !syncing && (
-                <span className="text-sm text-muted-foreground">Click to fetch data from Instantly</span>
+                <span className="text-sm text-muted-foreground">Click to sync leads and analytics</span>
               )}
             </div>
           )}
