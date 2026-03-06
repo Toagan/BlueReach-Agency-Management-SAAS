@@ -164,9 +164,11 @@ async function getClientStats(
       emailsSent += day.emails_sent || 0;
       replies += day.emails_replied || 0;
     }
-  } else {
-    // FALLBACK: If campaign_analytics_daily is empty, use cached values from campaigns
-    // This ensures reports work even before the daily analytics cron has run
+  }
+
+  // FALLBACK: If no daily data or all zeros, use cached values from campaigns
+  // This handles Smartlead campaigns where daily analytics aren't populated
+  if (emailsSent === 0 && replies === 0) {
     console.log(`[Stats Report] No daily analytics data, falling back to cached campaign stats`);
     for (const campaign of campaigns) {
       emailsSent += campaign.cached_emails_sent || 0;
