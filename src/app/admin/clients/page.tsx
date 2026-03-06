@@ -1,14 +1,41 @@
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getImpersonatedOwnerId } from "@/lib/impersonation";
 import { AddClientDialog } from "./add-client-dialog";
 
 export default async function ClientsPage() {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-  const { data: clients } = await supabase
+  // Get effective owner ID (handles impersonation for platform admins)
+  const serviceSupabase = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data: profile } = await serviceSupabase
+    .from("profiles")
+    .select("role, is_platform_admin")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || profile.role !== "admin") redirect("/login");
+
+  let ownerId = user.id;
+  if (profile.is_platform_admin) {
+    const impersonatedId = await getImpersonatedOwnerId();
+    if (impersonatedId) ownerId = impersonatedId;
+  }
+
+  // Always scope by owner_id — defense in depth beyond RLS
+  const { data: clients } = await serviceSupabase
     .from("clients")
     .select("*, campaigns(count)")
+    .eq("owner_id", ownerId)
     .order("created_at", { ascending: false });
 
   return (
