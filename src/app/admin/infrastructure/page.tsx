@@ -1,215 +1,174 @@
-import { Suspense } from "react";
-import { createClient } from "@/lib/supabase/server";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
-import { redirect } from "next/navigation";
-import { getImpersonatedOwnerId } from "@/lib/impersonation";
-import { InfrastructureView } from "./infrastructure-view";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Globe,
+  Shield,
+  Mail,
+  Activity,
+  ArrowRightLeft,
+  Flame,
+} from "lucide-react";
+import Image from "next/image";
 
-interface PageProps {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-}
-
-function getServiceSupabase() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
-
-async function getEffectiveOwner() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const serviceSupabase = getServiceSupabase();
-  const { data: profile } = await serviceSupabase
-    .from("profiles")
-    .select("role, is_platform_admin")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile || profile.role !== "admin") return null;
-
-  const isPlatformAdmin = profile.is_platform_admin === true;
-  let ownerId = user.id;
-  if (isPlatformAdmin) {
-    const impersonatedId = await getImpersonatedOwnerId();
-    if (impersonatedId) ownerId = impersonatedId;
-  }
-
-  return ownerId;
-}
-
-async function fetchInfrastructureData(params: Record<string, string | string[] | undefined>, ownerId: string) {
-  const supabase = getServiceSupabase();
-  const page = Number(params.page) || 1;
-  const limit = 20;
-  const offset = (page - 1) * limit;
-
-  // Fetch accounts scoped by owner
-  const { data: accounts, count: totalAccounts } = await supabase
-    .from("email_accounts")
-    .select("*", { count: "exact" })
-    .eq("owner_id", ownerId)
-    .range(offset, offset + limit - 1)
-    .order("email");
-
-  // Fetch clients for dropdown scoped by owner
-  const { data: clients } = await supabase
-    .from("clients")
-    .select("id, name, owner_id, created_at")
-    .eq("owner_id", ownerId)
-    .eq("is_active", true)
-    .order("name");
-
-  // Calculate stats scoped by owner
-  const { data: allAccounts } = await supabase
-    .from("email_accounts")
-    .select("status, warmup_reputation, provider_type, client_id")
-    .eq("owner_id", ownerId);
-
-  const byProvider: Record<string, number> = {};
-  const byStatus: Record<string, number> = {};
-  let assignedCount = 0;
-
-  (allAccounts || []).forEach((a) => {
-    byProvider[a.provider_type] = (byProvider[a.provider_type] || 0) + 1;
-    byStatus[a.status] = (byStatus[a.status] || 0) + 1;
-    if (a.client_id) assignedCount++;
-  });
-
-  const stats = {
-    total_accounts: allAccounts?.length || 0,
-    by_provider: byProvider,
-    by_status: byStatus,
-    assigned_accounts: assignedCount,
-    unassigned_accounts: (allAccounts?.length || 0) - assignedCount,
-    avg_warmup_reputation:
-      allAccounts && allAccounts.length > 0
-        ? Math.round(
-            allAccounts.reduce((sum, a) => sum + (a.warmup_reputation || 0), 0) / allAccounts.length
-          )
-        : 0,
-    domains_count: new Set(accounts?.map((a) => a.domain).filter(Boolean)).size,
-    domains_checked: 0,
-    domains_healthy: 0,
-    domains_issues: 0,
-  };
-
-  // Fetch domain health filtered by owner's account domains
-  const domains =
-    accounts?.map((a) => a.domain).filter((d): d is string => Boolean(d)) || [];
-  const uniqueDomains = [...new Set(domains)];
-
-  let domainHealthData: Array<{ domain: string; health_score: number; [key: string]: unknown }> = [];
-  if (uniqueDomains.length > 0) {
-    const { data } = await supabase
-      .from("domain_health")
-      .select("*")
-      .in("domain", uniqueDomains);
-    domainHealthData = (data || []) as typeof domainHealthData;
-  }
-
-  // Build domain summary with proper types
-  const domainSummary = domainHealthData.map((health) => ({
-    ...health,
-    account_count: accounts?.filter((a) => a.domain === health.domain).length || 0,
-    client_count: 0,
-  }));
-
-  // Update stats with domain health info
-  stats.domains_checked = domainSummary.length;
-  stats.domains_healthy = domainSummary.filter((d) => d.health_score >= 80).length;
-  stats.domains_issues = domainSummary.filter((d) => d.health_score < 80).length;
-
-  return {
-    accounts: accounts || [],
-    clients: clients || [],
-    stats,
-    domains: domainSummary,
-    totalAccounts: totalAccounts || 0,
-    currentPage: page,
-  };
-}
-
-export default async function InfrastructurePage({ searchParams }: PageProps) {
-  const ownerId = await getEffectiveOwner();
-  if (!ownerId) {
-    redirect("/login");
-  }
-
-  const params = await searchParams;
-
-  // Try to fetch data, provide defaults if tables don't exist yet
-  let data;
-  try {
-    data = await fetchInfrastructureData(params, ownerId);
-  } catch {
-    // Tables may not exist yet
-    data = {
-      accounts: [],
-      clients: [],
-      stats: {
-        total_accounts: 0,
-        by_provider: {},
-        by_status: {},
-        assigned_accounts: 0,
-        unassigned_accounts: 0,
-        avg_warmup_reputation: 0,
-        domains_count: 0,
-        domains_checked: 0,
-        domains_healthy: 0,
-        domains_issues: 0,
-      },
-      domains: [],
-      totalAccounts: 0,
-      currentPage: 1,
-    };
-  }
+export default function InfrastructurePage() {
+  const features = [
+    {
+      name: "Domain Purchase",
+      description:
+        "Buy and register sending domains directly from the dashboard. Bulk purchase across Namecheap and Cloudflare Registrar with auto-configuration for cold email infrastructure.",
+      icon: Globe,
+      iconBg: "bg-orange-500/15",
+      iconColor: "text-orange-400",
+      providers: [
+        { name: "Namecheap", logo: "/logos/namecheap.svg" },
+        { name: "Cloudflare", logo: "/logos/cloudflare.svg" },
+      ],
+      highlight: "Bulk domain registration",
+    },
+    {
+      name: "DNS Configuration",
+      description:
+        "Auto-configure SPF, DKIM, and DMARC records via the Cloudflare API. One-click DNS setup for all your sending domains — no manual record editing required.",
+      icon: Shield,
+      iconBg: "bg-blue-500/15",
+      iconColor: "text-blue-400",
+      providers: [{ name: "Cloudflare", logo: "/logos/cloudflare.svg" }],
+      highlight: "Auto SPF / DKIM / DMARC",
+    },
+    {
+      name: "Inbox Creation",
+      description:
+        "Spin up sending inboxes at scale via Purelymail and Zapmail. Create, configure, and connect email accounts to your campaigns — all from one place.",
+      icon: Mail,
+      iconBg: "bg-violet-500/15",
+      iconColor: "text-violet-400",
+      providers: [
+        { name: "Purelymail", logo: "/logos/purelymail.svg" },
+        { name: "Zapmail", logo: "/logos/zapmail.svg" },
+      ],
+      highlight: "Bulk inbox provisioning",
+    },
+    {
+      name: "Domain Monitoring",
+      description:
+        "Track DNS health, deliverability scores, and blacklist status across all your sending domains. Get alerts when records change or domains land on blocklists.",
+      icon: Activity,
+      iconBg: "bg-emerald-500/15",
+      iconColor: "text-emerald-400",
+      providers: [],
+      highlight: "Health scores & blacklist alerts",
+    },
+    {
+      name: "DNS Forwarding",
+      description:
+        "Set up email forwarding rules for your sending domains. Route replies and catch-all addresses to your team's inboxes without touching DNS panels.",
+      icon: ArrowRightLeft,
+      iconBg: "bg-cyan-500/15",
+      iconColor: "text-cyan-400",
+      providers: [{ name: "Cloudflare", logo: "/logos/cloudflare.svg" }],
+      highlight: "Reply routing & catch-all",
+    },
+    {
+      name: "Warmup Tracking",
+      description:
+        "Monitor inbox warmup reputation, emails sent and received, and daily sending limits. Track warmup progress across Instantly and Smartlead accounts.",
+      icon: Flame,
+      iconBg: "bg-amber-500/15",
+      iconColor: "text-amber-400",
+      providers: [
+        { name: "Instantly", logo: "/logos/instantly.svg" },
+        { name: "Smartlead", logo: "/logos/smartlead.svg" },
+      ],
+      highlight: "Reputation & deliverability",
+    },
+  ];
 
   return (
-    <Suspense fallback={<InfrastructureLoadingSkeleton />}>
-      <InfrastructureView
-        initialAccounts={data.accounts}
-        initialClients={data.clients}
-        initialStats={data.stats}
-        initialDomains={data.domains}
-        totalAccounts={data.totalAccounts}
-        currentPage={data.currentPage}
-      />
-    </Suspense>
-  );
-}
-
-function InfrastructureLoadingSkeleton() {
-  return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* Header */}
       <div>
-        <div className="h-4 w-40 bg-muted animate-pulse rounded mb-2" />
-        <div className="h-8 w-64 bg-muted animate-pulse rounded mb-1" />
-        <div className="h-4 w-80 bg-muted animate-pulse rounded" />
+        <h1 className="text-3xl font-bold tracking-tight">Infrastructure</h1>
+        <p className="text-muted-foreground mt-2 max-w-2xl">
+          Manage your entire cold email infrastructure from one place — domains,
+          DNS, inboxes, and deliverability monitoring.
+        </p>
       </div>
 
-      {/* Stats Cards Skeleton */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="border rounded-lg p-6">
-            <div className="h-4 w-24 bg-muted animate-pulse rounded mb-2" />
-            <div className="h-8 w-16 bg-muted animate-pulse rounded" />
-          </div>
+      {/* Feature Cards */}
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {features.map((feature) => (
+          <Card
+            key={feature.name}
+            className="relative overflow-hidden border-border/50 bg-card/50 hover:border-border transition-colors"
+          >
+            {/* Coming Soon Badge */}
+            <div className="absolute top-4 right-4">
+              <Badge
+                variant="secondary"
+                className="bg-primary/10 text-primary border-primary/20 text-xs font-medium"
+              >
+                Coming Soon
+              </Badge>
+            </div>
+
+            <CardContent className="p-6 pt-6">
+              {/* Icon */}
+              <div
+                className={`w-14 h-14 rounded-xl ${feature.iconBg} flex items-center justify-center mb-5`}
+              >
+                <feature.icon className={`w-7 h-7 ${feature.iconColor}`} />
+              </div>
+
+              {/* Content */}
+              <h3 className="text-lg font-semibold mb-2">{feature.name}</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+                {feature.description}
+              </p>
+
+              {/* Provider Logos */}
+              {feature.providers.length > 0 && (
+                <div className="flex items-center gap-3 mb-3">
+                  {feature.providers.map((provider) => (
+                    <div
+                      key={provider.name}
+                      className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2.5 py-1.5"
+                    >
+                      <Image
+                        src={provider.logo}
+                        alt={provider.name}
+                        width={16}
+                        height={16}
+                        className="opacity-70"
+                        onError={(e) => {
+                          // Hide broken images gracefully
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {provider.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Highlight */}
+              <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
+                {feature.highlight}
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
-      {/* Table Skeleton */}
-      <div className="border rounded-lg">
-        <div className="p-4 border-b">
-          <div className="h-6 w-40 bg-muted animate-pulse rounded" />
-        </div>
-        <div className="p-4 space-y-4">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-12 bg-muted animate-pulse rounded" />
-          ))}
-        </div>
+      {/* Bottom note */}
+      <div className="rounded-xl border border-border/50 bg-card/30 p-6">
+        <p className="text-sm text-muted-foreground">
+          All infrastructure tools are currently in development. When launched,
+          you&apos;ll be able to purchase domains, configure DNS, create inboxes,
+          and monitor deliverability — all without leaving Blue Reach.
+        </p>
       </div>
     </div>
   );
