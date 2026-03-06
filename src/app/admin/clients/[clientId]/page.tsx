@@ -1940,7 +1940,7 @@ function CampaignCard({
           {/* Campaign meta: start date + lead count */}
           <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
             {campaign.created_at && (
-              <span>Started {new Date(campaign.created_at).toLocaleDateString()}</span>
+              <span>{new Date(campaign.created_at) > new Date() ? "Starts" : "Started"} {new Date(campaign.created_at).toLocaleDateString()}</span>
             )}
             {analytics && analytics.leads_count > 0 && (
               <span>{analytics.leads_count.toLocaleString()} leads targeted</span>
