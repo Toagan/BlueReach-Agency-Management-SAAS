@@ -95,9 +95,11 @@ BlueReach is a multi-tenant agency management platform designed for cold email o
 #### Lead Workflow (`/admin/clients/[clientId]`)
 - Track positive replies through the sales funnel
 - Workflow states: Responded, Meeting Scheduled, Closed Won, Closed Lost
+- **Clickable status filter toggles**: Click any status badge (Responded, Meetings, Won, Lost) to filter the workflow view; click again to clear
 - Collapsible UI with summary stats in header
 - Quick one-click status updates with date/time selection for meetings
 - Notes per workflow stage
+- Reply date tracking: `responded_at` populated from Smartlead `reply_time` during sync
 
 #### Lead Database (`/admin/lead-database`)
 - Centralized lead database across all clients and campaigns
@@ -391,6 +393,9 @@ INSTANTLY_WEBHOOK_SECRET=your-webhook-secret
 
 # Smartlead API (Optional — can be configured via Admin Settings UI)
 SMARTLEAD_API_KEY=your-smartlead-api-key
+
+# Cron Jobs (Required for automated stats sync and reports)
+CRON_SECRET=your-random-secret-string
 ```
 
 ### Variable Reference
@@ -410,6 +415,7 @@ SMARTLEAD_API_KEY=your-smartlead-api-key
 | `INSTANTLY_API_KEY` | No | Instantly API key (Settings → Integrations → API) |
 | `INSTANTLY_WEBHOOK_SECRET` | No | Secret for validating Instantly webhook payloads |
 | `SMARTLEAD_API_KEY` | No | Smartlead API key for campaign and account sync |
+| `CRON_SECRET` | No | Shared secret for authenticating cron job endpoints (`?secret=...`) |
 
 ---
 
@@ -530,7 +536,7 @@ All leads with denormalized data for preservation.
 | `status` | text | See lead statuses below |
 | `is_positive_reply` | boolean | Whether reply was positive |
 | `has_replied` | boolean | Whether lead has replied |
-| `responded_at` | timestamptz | When marked as responded |
+| `responded_at` | timestamptz | When the lead replied (auto-populated from provider `reply_time` during sync, or set manually) |
 | `meeting_at` | timestamptz | Scheduled meeting date/time |
 | `closed_at` | timestamptz | When deal was closed |
 | `deal_value` | numeric | Value of the deal |
@@ -1016,6 +1022,18 @@ POST   /api/admin/infrastructure/history       # Create daily snapshot
 | `analytics.ts` | Campaign performance data |
 | `types.ts` | SmartleadAccount, SmartleadWarmupStats interfaces |
 
+**Key Smartlead API Endpoints Used:**
+- `GET /campaigns/{id}/analytics` — Lightweight aggregate stats (sent, opened, replied, bounced)
+- `GET /campaigns/{id}/statistics?limit=100&offset=0` — Per-lead engagement data with `reply_time`, `sent_time`, `open_time`, `lead_category`
+- `GET /campaigns/{id}/leads?limit=100&offset=0` — Lead list with status and category
+- `GET /campaigns/{id}/leads/{id}/message-history` — Email thread for a specific lead
+
+**Lead Sync with Statistics Enrichment:**
+During sync, `fetchAllLeadsWithStats()` merges the `/leads` and `/statistics` endpoints to:
+1. Set `is_positive_reply` from `lead_category` (Interested, Meeting Request)
+2. Track `emailReplyCount` from `reply_time` presence
+3. Populate `responded_at` from the Smartlead `reply_time` timestamp
+
 ### HubSpot
 
 **Setup:** Configure HubSpot API key per client via the client settings.
@@ -1033,15 +1051,23 @@ The `src/lib/providers/` directory provides a unified interface across providers
 
 ```
 src/lib/providers/
-├── types.ts              # Shared provider interface
-├── index.ts              # Provider factory/registry
+├── types.ts              # Shared interfaces: ProviderLead, ProviderCampaignAnalytics, etc.
+├── index.ts              # Provider factory (createProvider, getProviderForCampaign)
 ├── instantly/
-│   ├── client.ts         # Instantly adapter
-│   └── index.ts
+│   ├── client.ts         # Instantly HTTP client (Bearer auth)
+│   └── index.ts          # Instantly provider implementation
 └── smartlead/
-    ├── client.ts         # Smartlead adapter
-    └── index.ts
+    ├── client.ts         # Smartlead HTTP client (query param auth)
+    └── index.ts          # Smartlead provider implementation
 ```
+
+**`ProviderLead` Interface:**
+Normalized lead data shared across providers. Key fields:
+- `id`, `email`, `firstName`, `lastName`, `companyName`, `companyDomain`
+- `status`, `interestStatus` (interested, not_interested, meeting_booked, etc.)
+- `emailOpenCount`, `emailClickCount`, `emailReplyCount`
+- `repliedAt` — Reply timestamp from provider (e.g., Smartlead `reply_time`)
+- `rawData` — Full provider-specific data for export
 
 ---
 
@@ -1074,7 +1100,13 @@ Configure in Instantly to send events to this URL for each campaign.
 
 **Endpoint:** `POST /api/webhooks/smartlead/[campaignId]`
 
-Handles similar events from Smartlead campaigns.
+Handles similar events from Smartlead campaigns (EMAIL_SENT, EMAIL_REPLY, LEAD_CATEGORY_UPDATED, etc.).
+
+### Unified Provider Webhooks
+
+**Endpoint:** `POST /api/webhooks/[provider]/[campaignId]`
+
+Generic webhook handler that routes to the correct provider implementation based on the `[provider]` path parameter (`instantly` or `smartlead`).
 
 ### Stripe Webhooks
 
@@ -1094,33 +1126,60 @@ Handles similar events from Smartlead campaigns.
 
 ## Cron Jobs
 
-Scheduled endpoints for automated data syncing:
+Scheduled endpoints for automated data syncing. All cron endpoints require `?secret=CRON_SECRET` for authentication.
 
 | Endpoint | Purpose | Recommended Schedule |
 |----------|---------|---------------------|
-| `POST /api/cron/analytics-snapshot` | Create daily analytics snapshot | `0 6 * * *` (daily 6 AM UTC) |
-| `POST /api/cron/smartlead-weekly` | Weekly Smartlead data sync | `0 6 * * 1` (Monday 6 AM UTC) |
-| `POST /api/cron/stats-report` | Send weekly stats report emails | `0 9 * * 1` (Monday 9 AM UTC) |
-| `POST /api/admin/analytics/sync` | Sync analytics from all providers | `0 6 * * *` (daily 6 AM UTC) |
+| `GET /api/cron/smartlead-stats?secret=...` | Sync Smartlead campaign stats (lightweight: 2 API calls per campaign) | Every 4 hours |
+| `GET /api/cron/analytics-snapshot?secret=...` | Create daily analytics snapshot for Instantly campaigns | `0 6 * * *` (daily 6 AM UTC) |
+| `GET /api/cron/smartlead-weekly?secret=...` | Weekly Smartlead daily analytics backfill | `0 6 * * 1` (Monday 6 AM UTC) |
+| `GET /api/cron/stats-report?secret=...` | Send weekly/monthly stats report emails to configured recipients | `0 9 * * 1` (Monday 9 AM UTC) |
+| `GET /api/cron/backfill-reply-dates?secret=...` | One-time backfill of `responded_at` from Smartlead `reply_time` | Run manually as needed |
+
+### Smartlead Stats Cron (`/api/cron/smartlead-stats`)
+
+Lightweight cron that syncs cached dashboard stats for all Smartlead campaigns:
+- Fetches campaign analytics (2 API calls per campaign: `/analytics` + `/campaigns/{id}`)
+- Updates `cached_emails_sent`, `cached_reply_count`, `cached_emails_bounced`, `cached_leads_count`, `cached_contacted_count`
+- Compares provider reply count vs local DB reply count, uses the higher value
+- Supports `?campaign_id=UUID` param to sync a single campaign
+- 200ms delay between campaigns for rate limiting
+
+### Backfill Reply Dates (`/api/cron/backfill-reply-dates`)
+
+One-time utility to backfill `responded_at` timestamps for Smartlead leads:
+- Paginates through Smartlead `/statistics` endpoint for each campaign
+- Extracts `reply_time` per lead and updates `responded_at` in Supabase
+- Only updates leads where `responded_at` is currently NULL
+- Supports `?campaign_id=UUID` param for single-campaign backfill
+
+### Stats Report (`/api/cron/stats-report`)
+
+Sends HTML email reports to configured notification recipients:
+- Uses `campaign_analytics_daily` for date-filtered data (weekly/monthly periods)
+- Falls back to cached campaign stats when daily analytics data is unavailable or all zeros (common for Smartlead campaigns)
+- Recipients configured per client in notification settings
 
 ### Setup Options
 
-**Vercel Cron** (recommended for Vercel deployments):
+**cron-job.org** (recommended for Railway/Docker deployments):
+1. Create a free account at [cron-job.org](https://cron-job.org)
+2. Add jobs pointing to `https://your-domain.com/api/cron/{endpoint}?secret=YOUR_CRON_SECRET`
+3. Set schedule (e.g., every 4 hours for smartlead-stats, weekly for stats-report)
+
+**Vercel Cron** (for Vercel deployments):
 ```json
 // vercel.json
 {
   "crons": [
-    { "path": "/api/cron/analytics-snapshot", "schedule": "0 6 * * *" },
-    { "path": "/api/cron/stats-report", "schedule": "0 9 * * 1" }
+    { "path": "/api/cron/smartlead-stats?secret=...", "schedule": "0 */4 * * *" },
+    { "path": "/api/cron/analytics-snapshot?secret=...", "schedule": "0 6 * * *" },
+    { "path": "/api/cron/stats-report?secret=...", "schedule": "0 9 * * 1" }
   ]
 }
 ```
 
-**External Cron Services:** Use cron-job.org, EasyCron, or Upstash QStash to call the endpoints on schedule.
-
-**GitHub Actions:** See `CRON_SETUP.md` for a full GitHub Actions workflow example.
-
-**Supabase pg_cron:** Available on Supabase Pro plan. See `CRON_SETUP.md` for SQL setup.
+**GitHub Actions / Supabase pg_cron:** See `CRON_SETUP.md` for additional setup options.
 
 ---
 
@@ -1291,42 +1350,57 @@ docker-compose up -d
 ```
 
 **docker-compose.yml** includes:
-- `app` service: Next.js application on port 3000
+- `app` service: Next.js application (internal, not port-exposed)
 - `caddy` service: Reverse proxy with automatic HTTPS on ports 80/443
+- Shared `web` bridge network between services
 
 ```yaml
-version: '3.8'
 services:
   app:
-    build: .
-    ports:
-      - "3000:3000"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
     environment:
       - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
-      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
-      - INSTANTLY_API_KEY=${INSTANTLY_API_KEY}
       - INSTANTLY_WEBHOOK_SECRET=${INSTANTLY_WEBHOOK_SECRET}
-      - SMARTLEAD_API_KEY=${SMARTLEAD_API_KEY}
-      - RESEND_API_KEY=${RESEND_API_KEY}
-      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
-    restart: unless-stopped
+      - CRON_SECRET=${CRON_SECRET}
+    networks:
+      - web
 
   caddy:
-    image: caddy:2
+    image: caddy:2-alpine
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
-    restart: unless-stopped
+      - caddy_config:/config
+    networks:
+      - web
+    depends_on:
+      - app
+
+networks:
+  web:
+    driver: bridge
 
 volumes:
   caddy_data:
+  caddy_config:
 ```
+
+### Railway Deployment (Production)
+
+1. Connect your GitHub repository to Railway
+2. Add all environment variables in the Railway dashboard (including `CRON_SECRET`)
+3. Railway auto-deploys on push to `main`
+4. Set up external cron jobs via [cron-job.org](https://cron-job.org) (see [Cron Jobs](#cron-jobs))
+5. Set up Stripe webhook endpoint pointing to your Railway URL
 
 ### Vercel Deployment
 
@@ -1436,13 +1510,16 @@ src/
 │   │   ├── leads/[leadId]/             # Lead operations
 │   │   │   └── workflow/               # Workflow updates
 │   │   ├── webhooks/                   # Webhook handlers
+│   │   │   ├── [provider]/[campaignId]/ # Unified provider webhooks
 │   │   │   ├── instantly/[campaignId]/ # Instantly webhooks
 │   │   │   ├── smartlead/[campaignId]/ # Smartlead webhooks
 │   │   │   └── stripe/route.ts         # Stripe webhooks
 │   │   ├── cron/                       # Scheduled jobs
-│   │   │   ├── analytics-snapshot/
-│   │   │   ├── smartlead-weekly/
-│   │   │   └── stats-report/
+│   │   │   ├── analytics-snapshot/     # Daily Instantly analytics snapshot
+│   │   │   ├── smartlead-stats/        # Smartlead cached stats sync (every 4h)
+│   │   │   ├── smartlead-weekly/       # Weekly Smartlead daily analytics backfill
+│   │   │   ├── stats-report/           # Weekly/monthly stats email reports
+│   │   │   └── backfill-reply-dates/   # One-time reply date backfill from Smartlead
 │   │   └── demo/                       # Demo utilities
 │   │
 │   ├── auth/                           # Auth routes
