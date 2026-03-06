@@ -8,7 +8,7 @@ import {
   ArrowRightLeft,
   Flame,
 } from "lucide-react";
-import Image from "next/image";
+/* eslint-disable @next/next/no-img-element */
 
 export default function InfrastructurePage() {
   const features = [
@@ -133,16 +133,12 @@ export default function InfrastructurePage() {
                       key={provider.name}
                       className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2.5 py-1.5"
                     >
-                      <Image
+                      <img
                         src={provider.logo}
                         alt={provider.name}
                         width={16}
                         height={16}
                         className="opacity-70"
-                        onError={(e) => {
-                          // Hide broken images gracefully
-                          (e.target as HTMLImageElement).style.display = "none";
-                        }}
                       />
                       <span className="text-xs text-muted-foreground">
                         {provider.name}
