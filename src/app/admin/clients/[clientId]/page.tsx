@@ -70,6 +70,8 @@ interface Campaign {
   instantly_campaign_id: string | null;
   is_active: boolean;
   status?: string;
+  created_at?: string;
+  provider_type?: string;
   analytics?: CampaignAnalytics | null;
 }
 
@@ -1933,6 +1935,16 @@ function CampaignCard({
             >
               {campaign.is_active ? "Active" : progress >= 99 ? "Completed" : "Paused"}
             </Badge>
+          </div>
+
+          {/* Campaign meta: start date + lead count */}
+          <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+            {campaign.created_at && (
+              <span>Started {new Date(campaign.created_at).toLocaleDateString()}</span>
+            )}
+            {analytics && analytics.leads_count > 0 && (
+              <span>{analytics.leads_count.toLocaleString()} leads targeted</span>
+            )}
           </div>
 
           {hasAnalytics ? (
