@@ -226,7 +226,10 @@ export async function POST(
 
       if (replyCount > 0 || isRepliedStatus) {
         leadData.has_replied = true;
-        // Don't override status if already set by mapLeadStatus
+        // Set responded_at from provider reply timestamp if available
+        if (lead.repliedAt) {
+          leadData.responded_at = lead.repliedAt;
+        }
       }
 
       // NOTE: We do NOT set is_positive_reply here because the Instantly /leads/list endpoint

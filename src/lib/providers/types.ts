@@ -69,6 +69,8 @@ export interface ProviderLead {
   emailOpenCount?: number;
   emailClickCount?: number;
   emailReplyCount?: number;
+  // Reply timestamp from provider (e.g. Smartlead reply_time)
+  repliedAt?: string;
   // Raw provider data for export (stores all original fields)
   rawData?: Record<string, unknown>;
 }

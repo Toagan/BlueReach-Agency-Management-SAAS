@@ -862,9 +862,12 @@ export class SmartleadProvider implements EmailCampaignProvider {
         lead.emailOpenCount = stats.openCount;
         lead.emailClickCount = stats.clickCount;
 
-        // Set reply count based on whether they replied
+        // Set reply count and timestamp based on whether they replied
         if (stats.hasReplied) {
           lead.emailReplyCount = Math.max(lead.emailReplyCount || 0, 1);
+          if (stats.replyTime) {
+            lead.repliedAt = stats.replyTime;
+          }
         }
 
         // Map category to interest status
