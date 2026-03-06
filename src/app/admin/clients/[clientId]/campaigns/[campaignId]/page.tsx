@@ -31,6 +31,13 @@ import {
 import { createBrowserClient } from "@supabase/ssr";
 import { VariantAnalytics } from "@/components/campaigns/variant-analytics";
 import {
+  useCopyReview,
+  ReviewStatusBadge,
+  ReviewActions,
+  ReviewableBody,
+  CommentThread,
+} from "@/components/campaigns/copy-review";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -113,6 +120,7 @@ export default function CampaignDetailPage() {
   const [analytics, setAnalytics] = useState<CampaignAnalytics | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [sequences, setSequences] = useState<CampaignSequence[]>([]);
+  const copyReview = useCopyReview(campaignId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -1263,53 +1271,83 @@ export default function CampaignDetailPage() {
               {/* Group sequences by variant */}
               {(() => {
                 const variants = [...new Set(sequences.map(s => s.variant))].sort();
-                return variants.map((variant) => (
-                  <div key={variant} className="border border-border rounded-lg overflow-hidden">
-                    <div className="bg-muted px-4 py-2 font-medium">
-                      Version {variant}
-                    </div>
-                    <div className="divide-y divide-border">
-                      {sequences
-                        .filter(s => s.variant === variant)
-                        .sort((a, b) => a.step_number - b.step_number)
-                        .map((step) => (
-                          <div key={step.id} className="p-4">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Badge variant="outline">Step {step.step_number}</Badge>
-                              {step.delay_days > 0 && (
-                                <span className="text-xs text-muted-foreground">
-                                  +{step.delay_days} day{step.delay_days > 1 ? "s" : ""} delay
-                                </span>
+                return variants.map((variant) => {
+                  const steps = sequences
+                    .filter(s => s.variant === variant)
+                    .sort((a, b) => a.step_number - b.step_number);
+
+                  return (
+                    <div key={variant} className="border border-border rounded-lg overflow-hidden">
+                      <div className="bg-muted px-4 py-2 font-medium flex items-center justify-between">
+                        <span>Version {variant}</span>
+                        {steps.length > 0 && (
+                          <ReviewStatusBadge review={copyReview.getReview(steps[0].step_number, variant)} />
+                        )}
+                      </div>
+                      <div className="divide-y divide-border">
+                        {steps.map((step) => {
+                          const review = copyReview.getReview(step.step_number, variant);
+                          const variantComments = copyReview.getComments(step.step_number, variant);
+
+                          const showPreview = isPreviewMode && previewLead;
+                          const subject = showPreview
+                            ? replaceTemplateVariables(step.subject || "", previewLead)
+                            : step.subject;
+                          const body = showPreview
+                            ? replaceTemplateVariables(step.body_html || step.body_text || "", previewLead)
+                            : (step.body_html || step.body_text || "<p>(No content)</p>");
+                          const sanitizedBody = DOMPurify.sanitize(body, { ALLOWED_TAGS: ["p", "br", "strong", "em", "b", "i", "u", "a", "ul", "ol", "li", "blockquote", "div", "span", "h1", "h2", "h3", "table", "tr", "td", "th", "tbody", "thead"], ALLOWED_ATTR: ["href", "target", "rel", "style"], ALLOW_DATA_ATTR: false });
+
+                          return (
+                            <div key={step.id} className="p-4">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Badge variant="outline">Step {step.step_number}</Badge>
+                                {step.delay_days > 0 && (
+                                  <span className="text-xs text-muted-foreground">
+                                    +{step.delay_days} day{step.delay_days > 1 ? "s" : ""} delay
+                                  </span>
+                                )}
+                              </div>
+
+                              {subject && (
+                                <p className="font-medium text-sm mb-2">Subject: {subject}</p>
                               )}
+
+                              {/* Reviewable body with inline commenting */}
+                              <div className="bg-muted/50 rounded-lg p-3 max-h-64 overflow-y-auto">
+                                <ReviewableBody
+                                  bodyHtml={sanitizedBody}
+                                  comments={variantComments}
+                                  stepNumber={step.step_number}
+                                  variant={variant}
+                                  onAddComment={copyReview.addComment}
+                                />
+                              </div>
+
+                              {/* Comments thread */}
+                              <CommentThread
+                                comments={variantComments}
+                                onResolve={copyReview.resolveComment}
+                                onUnresolve={copyReview.unresolveComment}
+                                onDelete={copyReview.deleteComment}
+                              />
+
+                              {/* Approve / Reject actions */}
+                              <div className="mt-3">
+                                <ReviewActions
+                                  review={review}
+                                  onApprove={() => copyReview.submitReview(step.step_number, variant, "approved")}
+                                  onReject={(comment) => copyReview.submitReview(step.step_number, variant, "rejected", comment)}
+                                  onReset={() => copyReview.submitReview(step.step_number, variant, "pending")}
+                                />
+                              </div>
                             </div>
-
-                            {/* Show email content - either preview mode with lead data, or raw template */}
-                            {(() => {
-                              const showPreview = isPreviewMode && previewLead;
-                              const subject = showPreview
-                                ? replaceTemplateVariables(step.subject || "", previewLead)
-                                : step.subject;
-                              const body = showPreview
-                                ? replaceTemplateVariables(step.body_html || step.body_text || "", previewLead)
-                                : (step.body_html || step.body_text || "<p>(No content)</p>");
-
-                              return (
-                                <>
-                                  {subject && (
-                                    <p className="font-medium text-sm mb-2">Subject: {subject}</p>
-                                  )}
-                                  <div
-                                    className="bg-muted/50 rounded-lg p-3 text-sm max-h-64 overflow-y-auto [&_div]:mb-1 [&_br]:block [&_a]:text-blue-600 [&_a]:underline"
-                                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(body, { ALLOWED_TAGS: ["p", "br", "strong", "em", "b", "i", "u", "a", "ul", "ol", "li", "blockquote", "div", "span", "h1", "h2", "h3", "table", "tr", "td", "th", "tbody", "thead"], ALLOWED_ATTR: ["href", "target", "rel", "style"], ALLOW_DATA_ATTR: false }) }}
-                                  />
-                                </>
-                              );
-                            })()}
-                          </div>
-                        ))}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ));
+                  );
+                });
               })()}
             </div>
           )}
