@@ -99,7 +99,6 @@ export async function GET(request: NextRequest) {
     }
 
     // All analytics sourced from Supabase — provider-agnostic
-    // Uses: leads table (created_at, responded_at, updated_at), lead_emails table (sent_at)
     const startIso = dateRange?.startDate.toISOString();
     const endIso = dateRange?.endDate.toISOString();
 
@@ -107,15 +106,11 @@ export async function GET(request: NextRequest) {
     // 1. Total leads (contacted)
     let leadsQuery = supabase.from("leads").select("*", { count: "exact", head: true })
       .in("campaign_id", ownerCampaignIds);
-    // 2. Outbound emails sent
-    let sentQuery = supabase.from("lead_emails").select("*", { count: "exact", head: true })
-      .in("campaign_id", ownerCampaignIds)
-      .eq("direction", "outbound");
-    // 3. Replies
+    // 2. Replies
     let repliesQuery = supabase.from("leads").select("*", { count: "exact", head: true })
       .in("campaign_id", ownerCampaignIds)
       .eq("has_replied", true);
-    // 4. Positive replies
+    // 3. Positive replies
     let positiveQuery = supabase.from("leads").select("*", { count: "exact", head: true })
       .in("campaign_id", ownerCampaignIds)
       .eq("is_positive_reply", true);
@@ -123,17 +118,40 @@ export async function GET(request: NextRequest) {
     // Apply date filters if not all-time
     if (startIso && endIso) {
       leadsQuery = leadsQuery.gte("created_at", startIso).lte("created_at", endIso);
-      sentQuery = sentQuery.gte("sent_at", startIso).lte("sent_at", endIso);
       repliesQuery = repliesQuery.gte("responded_at", startIso).lte("responded_at", endIso);
       positiveQuery = positiveQuery.gte("updated_at", startIso).lte("updated_at", endIso);
     }
 
-    const [leadsResult, sentResult, repliesResult, positiveResult] = await Promise.all([
-      leadsQuery, sentQuery, repliesQuery, positiveQuery,
+    // For emails sent: use cached_emails_sent from campaigns (accurate total from provider APIs)
+    // For date-filtered periods, fall back to lead_emails table
+    let emailsSentPromise: PromiseLike<number>;
+    if (!startIso) {
+      // All time: sum cached_emails_sent from campaigns (this is the accurate count from providers)
+      emailsSentPromise = supabase
+        .from("campaigns")
+        .select("cached_emails_sent")
+        .in("id", ownerCampaignIds)
+        .then(({ data }) => {
+          return (data || []).reduce((sum: number, c: { cached_emails_sent: number | null }) =>
+            sum + (c.cached_emails_sent || 0), 0);
+        });
+    } else {
+      // Date-filtered: count from lead_emails (only partially populated, but best we have for date ranges)
+      emailsSentPromise = supabase
+        .from("lead_emails")
+        .select("*", { count: "exact", head: true })
+        .in("campaign_id", ownerCampaignIds)
+        .eq("direction", "outbound")
+        .gte("sent_at", startIso)
+        .lte("sent_at", endIso)
+        .then(({ count }) => count || 0);
+    }
+
+    const [leadsResult, repliesResult, positiveResult, emailsSent] = await Promise.all([
+      leadsQuery, repliesQuery, positiveQuery, emailsSentPromise,
     ]);
 
     const leadsContacted = leadsResult.count || 0;
-    const emailsSent = sentResult.count || 0;
     const replies = repliesResult.count || 0;
     const opportunities = positiveResult.count || 0;
 
