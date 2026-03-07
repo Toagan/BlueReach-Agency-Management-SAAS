@@ -21,94 +21,26 @@ export const metadata: Metadata = {
   },
 };
 
-function BrowserChrome({ children, title }: { children: React.ReactNode; title?: string }) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-[#0a1628] overflow-hidden shadow-2xl">
-      <div className="flex items-center gap-2 px-4 py-3 bg-[#0d1b2a] border-b border-white/5">
-        <div className="w-3 h-3 rounded-full bg-red-500/60" />
-        <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
-        <div className="w-3 h-3 rounded-full bg-green-500/60" />
-        {title && <span className="ml-3 text-[10px] text-zinc-500">{title}</span>}
-        <div className="flex-1 ml-2 h-6 bg-white/5 rounded-md" />
-      </div>
-      <div className="p-3 sm:p-6">{children}</div>
-    </div>
-  );
-}
-
 function CommandCenterMockup() {
   return (
     <div className="relative mt-8 sm:mt-16 mx-auto max-w-5xl">
       <div className="absolute -inset-4 bg-gradient-to-r from-blue-500/20 via-cyan-500/20 to-emerald-500/20 rounded-2xl blur-xl" />
-      <div className="relative">
-        <BrowserChrome title="app.youragency.com/admin">
-          {/* Top nav */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400" />
-              <span className="text-sm font-semibold text-zinc-300">Your Agency</span>
-            </div>
-            <div className="hidden sm:flex items-center gap-4 text-[10px] text-zinc-500">
-              <span>Clients</span>
-              <span>Infrastructure</span>
-              <span>Lead Database</span>
-              <span className="text-zinc-300">Settings</span>
-            </div>
-          </div>
-          {/* Stats row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">
-            {[
-              { label: "Active Clients", value: "47", change: "+3 this month", color: "text-blue-400" },
-              { label: "Emails Sent", value: "284,291", change: "across all campaigns", color: "text-cyan-400" },
-              { label: "Positive Replies", value: "1,847", change: "+127 this week", color: "text-emerald-400" },
-              { label: "Meetings Booked", value: "312", change: "+28 this week", color: "text-amber-400" },
-            ].map((s, i) => (
-              <div key={i} className="rounded-lg bg-white/[0.04] border border-white/5 p-2 sm:p-3">
-                <p className="text-[10px] text-zinc-500">{s.label}</p>
-                <p className={`text-base sm:text-xl font-bold ${s.color}`}>{s.value}</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5 hidden sm:block">{s.change}</p>
-              </div>
-            ))}
-          </div>
-          {/* Client table — hidden on very small screens for readability */}
-          <div className="hidden sm:block rounded-lg border border-white/5 overflow-hidden">
-            <div className="grid grid-cols-5 gap-3 px-4 py-2 bg-white/[0.02] text-[10px] text-zinc-500 font-medium">
-              <span>Client</span><span>Campaigns</span><span>Replies</span><span>Meetings</span><span>Status</span>
-            </div>
-            {[
-              { name: "Nexus AI", campaigns: 4, replies: 23, meetings: 8, status: "Active", statusColor: "text-emerald-400 bg-emerald-400/10" },
-              { name: "TechFlow Inc", campaigns: 3, replies: 18, meetings: 5, status: "Active", statusColor: "text-emerald-400 bg-emerald-400/10" },
-              { name: "ScaleUp Corp", campaigns: 2, replies: 12, meetings: 3, status: "Active", statusColor: "text-emerald-400 bg-emerald-400/10" },
-              { name: "Growth Labs", campaigns: 5, replies: 34, meetings: 11, status: "Active", statusColor: "text-emerald-400 bg-emerald-400/10" },
-              { name: "RevOps Co", campaigns: 2, replies: 9, meetings: 2, status: "Onboarding", statusColor: "text-amber-400 bg-amber-400/10" },
-            ].map((c, i) => (
-              <div key={i} className="grid grid-cols-5 gap-3 px-4 py-2.5 border-t border-white/5 text-xs">
-                <span className="text-zinc-300 font-medium">{c.name}</span>
-                <span className="text-zinc-500">{c.campaigns}</span>
-                <span className="text-zinc-500">{c.replies}</span>
-                <span className="text-zinc-500">{c.meetings}</span>
-                <span><span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${c.statusColor}`}>{c.status}</span></span>
-              </div>
-            ))}
-          </div>
-          {/* Simplified mobile client list */}
-          <div className="sm:hidden space-y-1.5">
-            {[
-              { name: "Nexus AI", replies: 23, status: "Active", statusColor: "text-emerald-400" },
-              { name: "TechFlow Inc", replies: 18, status: "Active", statusColor: "text-emerald-400" },
-              { name: "ScaleUp Corp", replies: 12, status: "Active", statusColor: "text-emerald-400" },
-              { name: "Growth Labs", replies: 34, status: "Active", statusColor: "text-emerald-400" },
-            ].map((c, i) => (
-              <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5 text-[11px]">
-                <span className="text-zinc-300 font-medium">{c.name}</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-zinc-500">{c.replies} replies</span>
-                  <span className={c.statusColor}>{c.status}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </BrowserChrome>
+      <div className="relative rounded-xl border border-white/10 bg-[#0a1628] overflow-hidden shadow-2xl">
+        <div className="flex items-center gap-2 px-4 py-3 bg-[#0d1b2a] border-b border-white/5">
+          <div className="w-3 h-3 rounded-full bg-red-500/60" />
+          <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
+          <div className="w-3 h-3 rounded-full bg-green-500/60" />
+          <span className="ml-3 text-[10px] text-zinc-500">app.youragency.com/admin</span>
+          <div className="flex-1 ml-2 h-6 bg-white/5 rounded-md" />
+        </div>
+        <Image
+          src="/screenshots/command-center.png"
+          alt="Blue Reach Command Center — overview dashboard with real-time stats"
+          width={1920}
+          height={600}
+          className="w-full h-auto"
+          quality={90}
+        />
       </div>
     </div>
   );
@@ -117,92 +49,23 @@ function CommandCenterMockup() {
 function AutomationFlowMockup() {
   return (
     <div className="relative">
-      <BrowserChrome title="Automation Flow">
-        <div className="space-y-4">
-          {/* Trigger */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-            </div>
-            <div className="flex-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-4 py-3">
-              <p className="text-xs font-semibold text-emerald-400">Positive reply detected</p>
-              <p className="text-[11px] text-zinc-400 mt-0.5">John at Acme Corp: &quot;Yes, let&apos;s set up a call this week.&quot;</p>
-            </div>
-          </div>
-          {/* Connector */}
-          <div className="flex items-center gap-3 pl-5">
-            <div className="w-px h-4 bg-zinc-700" />
-          </div>
-          {/* Slack */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-[#4A154B]/30 border border-[#4A154B]/50 flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 text-[#E01E5A]" viewBox="0 0 24 24" fill="currentColor"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z" /></svg>
-            </div>
-            <div className="flex-1 rounded-lg bg-white/[0.03] border border-white/10 px-4 py-3">
-              <p className="text-xs font-semibold text-zinc-300">Slack alert sent</p>
-              <p className="text-[11px] text-zinc-500 mt-0.5">#client-acme-corp: &quot;New positive reply from John at Acme Corp&quot;</p>
-            </div>
-            <div className="hidden sm:flex items-center gap-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span className="text-[10px] text-emerald-400">Sent</span>
-            </div>
-          </div>
-          {/* Connector */}
-          <div className="flex items-center gap-3 pl-5">
-            <div className="w-px h-4 bg-zinc-700" />
-          </div>
-          {/* HubSpot */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-orange-500/20 border border-orange-500/30 flex items-center justify-center flex-shrink-0">
-              <span className="text-sm font-bold text-orange-400">H</span>
-            </div>
-            <div className="flex-1 rounded-lg bg-white/[0.03] border border-white/10 px-4 py-3">
-              <p className="text-xs font-semibold text-zinc-300">HubSpot deal created</p>
-              <p className="text-[11px] text-zinc-500 mt-0.5">Contact: John (Acme Corp) &rarr; Pipeline: Sales &rarr; Stage: Qualified</p>
-            </div>
-            <div className="hidden sm:flex items-center gap-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span className="text-[10px] text-emerald-400">Synced</span>
-            </div>
-          </div>
-          {/* Connector */}
-          <div className="flex items-center gap-3 pl-5">
-            <div className="w-px h-4 bg-zinc-700" />
-          </div>
-          {/* Email notification */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-500/30 flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-            </div>
-            <div className="flex-1 rounded-lg bg-white/[0.03] border border-white/10 px-4 py-3">
-              <p className="text-xs font-semibold text-zinc-300">Email notification sent</p>
-              <p className="text-[11px] text-zinc-500 mt-0.5">Team notified with reply-to-lead button and full email thread</p>
-            </div>
-            <div className="hidden sm:flex items-center gap-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span className="text-[10px] text-emerald-400">Delivered</span>
-            </div>
-          </div>
-          {/* Connector */}
-          <div className="flex items-center gap-3 pl-5">
-            <div className="w-px h-4 bg-zinc-700" />
-          </div>
-          {/* Client portal */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7" /></svg>
-            </div>
-            <div className="flex-1 rounded-lg bg-white/[0.03] border border-white/10 px-4 py-3">
-              <p className="text-xs font-semibold text-zinc-300">Client portal updated</p>
-              <p className="text-[11px] text-zinc-500 mt-0.5">Acme Corp&apos;s dashboard now shows new reply in real-time pipeline</p>
-            </div>
-            <div className="hidden sm:flex items-center gap-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span className="text-[10px] text-emerald-400">Live</span>
-            </div>
-          </div>
+      <div className="rounded-xl border border-white/10 bg-[#0a1628] overflow-hidden shadow-2xl">
+        <div className="flex items-center gap-2 px-4 py-3 bg-[#0d1b2a] border-b border-white/5">
+          <div className="w-3 h-3 rounded-full bg-red-500/60" />
+          <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
+          <div className="w-3 h-3 rounded-full bg-green-500/60" />
+          <span className="ml-3 text-[10px] text-zinc-500">Lead Workflow</span>
+          <div className="flex-1 ml-2 h-6 bg-white/5 rounded-md" />
         </div>
-      </BrowserChrome>
+        <Image
+          src="/screenshots/lead-workflow.png"
+          alt="Lead workflow — manage positive replies with one-click actions"
+          width={1200}
+          height={600}
+          className="w-full h-auto"
+          quality={90}
+        />
+      </div>
     </div>
   );
 }
@@ -210,54 +73,23 @@ function AutomationFlowMockup() {
 function ClientPortalMockup() {
   return (
     <div className="relative">
-      <BrowserChrome title="portal.youragency.com — Acme Corp Dashboard">
-        {/* Custom brand bar */}
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-pink-500" />
-            <span className="text-xs font-semibold text-zinc-300">Your Agency Name</span>
-          </div>
-          <span className="text-[10px] text-zinc-500">Acme Corp Dashboard</span>
+      <div className="rounded-xl border border-white/10 bg-[#0a1628] overflow-hidden shadow-2xl">
+        <div className="flex items-center gap-2 px-4 py-3 bg-[#0d1b2a] border-b border-white/5">
+          <div className="w-3 h-3 rounded-full bg-red-500/60" />
+          <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
+          <div className="w-3 h-3 rounded-full bg-green-500/60" />
+          <span className="ml-3 text-[10px] text-zinc-500">portal.youragency.com — Client Dashboard</span>
+          <div className="flex-1 ml-2 h-6 bg-white/5 rounded-md" />
         </div>
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-5">
-          {[
-            { label: "Emails Sent", value: "2,847", color: "text-blue-400" },
-            { label: "Open Rate", value: "52.1%", color: "text-cyan-400" },
-            { label: "Replies", value: "34", color: "text-emerald-400" },
-            { label: "Meetings", value: "11", color: "text-amber-400" },
-          ].map((s, i) => (
-            <div key={i} className="rounded-lg bg-white/[0.04] border border-white/5 p-2 sm:p-3">
-              <p className="text-[10px] text-zinc-500">{s.label}</p>
-              <p className={`text-base sm:text-lg font-bold ${s.color}`}>{s.value}</p>
-            </div>
-          ))}
-        </div>
-        {/* Pipeline */}
-        <div className="rounded-lg bg-white/[0.02] border border-white/5 p-4">
-          <p className="text-[10px] text-zinc-500 mb-3 font-medium">Lead Pipeline</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {[
-              { stage: "Contacted", count: 142, color: "border-zinc-600", items: ["Lisa P.", "Tom G."] },
-              { stage: "Replied", count: 34, color: "border-emerald-500/40", items: ["Sarah C.", "James W."] },
-              { stage: "Booked", count: 11, color: "border-blue-500/40", items: ["Maria L."] },
-              { stage: "Won", count: 6, color: "border-amber-500/40", items: ["David K."] },
-            ].map((col, i) => (
-              <div key={i}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-medium text-zinc-400">{col.stage}</span>
-                  <span className="text-[9px] text-zinc-600 bg-white/5 px-1 rounded">{col.count}</span>
-                </div>
-                {col.items.map((name, j) => (
-                  <div key={j} className={`rounded bg-white/[0.03] border ${col.color} p-2 mb-1.5`}>
-                    <p className="text-[10px] text-zinc-400">{name}</p>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-      </BrowserChrome>
+        <Image
+          src="/screenshots/client-dashboard.png"
+          alt="Client dashboard — campaign stats, ICP, offer, and target market overview"
+          width={1920}
+          height={800}
+          className="w-full h-auto"
+          quality={90}
+        />
+      </div>
     </div>
   );
 }
@@ -265,48 +97,23 @@ function ClientPortalMockup() {
 function InfrastructureMockup() {
   return (
     <div className="relative">
-      <BrowserChrome title="Infrastructure Health Monitor">
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-5">
-          {[
-            { label: "Email Accounts", value: "186", color: "text-blue-400" },
-            { label: "Active", value: "172", color: "text-emerald-400" },
-            { label: "Avg Reputation", value: "94.2", color: "text-cyan-400" },
-            { label: "Domains", value: "48", color: "text-amber-400" },
-          ].map((s, i) => (
-            <div key={i} className="rounded-lg bg-white/[0.04] border border-white/5 p-2 sm:p-3">
-              <p className="text-[10px] text-zinc-500">{s.label}</p>
-              <p className={`text-base sm:text-lg font-bold ${s.color}`}>{s.value}</p>
-            </div>
-          ))}
+      <div className="rounded-xl border border-white/10 bg-[#0a1628] overflow-hidden shadow-2xl">
+        <div className="flex items-center gap-2 px-4 py-3 bg-[#0d1b2a] border-b border-white/5">
+          <div className="w-3 h-3 rounded-full bg-red-500/60" />
+          <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
+          <div className="w-3 h-3 rounded-full bg-green-500/60" />
+          <span className="ml-3 text-[10px] text-zinc-500">Campaign Performance</span>
+          <div className="flex-1 ml-2 h-6 bg-white/5 rounded-md" />
         </div>
-        {/* Domain health table */}
-        <div className="rounded-lg border border-white/5 overflow-hidden">
-          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3 px-3 py-2 bg-white/[0.02] text-[10px] text-zinc-500 font-medium">
-            <span>Domain</span><span className="hidden sm:block">SPF</span><span className="hidden sm:block">DKIM</span><span>DMARC</span><span>Score</span>
-          </div>
-          {[
-            { domain: "outreach-1.com", spf: true, dkim: true, dmarc: true, score: 100 },
-            { domain: "outreach-2.com", spf: true, dkim: true, dmarc: true, score: 100 },
-            { domain: "mail-3.io", spf: true, dkim: true, dmarc: false, score: 67 },
-            { domain: "send-4.com", spf: true, dkim: false, dmarc: false, score: 33 },
-          ].map((d, i) => (
-            <div key={i} className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3 px-3 py-2 border-t border-white/5 text-[11px]">
-              <span className="text-zinc-300 truncate">{d.domain}</span>
-              <span className="hidden sm:block">{d.spf ? <span className="text-emerald-400">Pass</span> : <span className="text-red-400">Fail</span>}</span>
-              <span className="hidden sm:block">{d.dkim ? <span className="text-emerald-400">Pass</span> : <span className="text-red-400">Fail</span>}</span>
-              <span>{d.dmarc ? <span className="text-emerald-400">Pass</span> : <span className="text-red-400">Fail</span>}</span>
-              <span>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                  d.score >= 80 ? "text-emerald-400 bg-emerald-400/10" :
-                  d.score >= 50 ? "text-amber-400 bg-amber-400/10" :
-                  "text-red-400 bg-red-400/10"
-                }`}>{d.score}/100</span>
-              </span>
-            </div>
-          ))}
-        </div>
-      </BrowserChrome>
+        <Image
+          src="/screenshots/campaign-performance.png"
+          alt="Campaign performance — search, filter, and track all campaigns"
+          width={1920}
+          height={900}
+          className="w-full h-auto"
+          quality={90}
+        />
+      </div>
     </div>
   );
 }
