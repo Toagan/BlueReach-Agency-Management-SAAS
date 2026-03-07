@@ -34,6 +34,8 @@ import {
   Settings,
   Sparkles,
   FileText,
+  BookOpen,
+  ExternalLink,
 } from "lucide-react";
 
 interface OverviewStats {
@@ -342,6 +344,59 @@ export default function AdminCommandCenter() {
           </Card>
         </div>
       )}
+
+      {/* Resources */}
+      <div className="border-t border-border pt-6">
+        <div className="flex items-center gap-2 mb-4">
+          <BookOpen className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-medium text-muted-foreground">Resources & Guides</h3>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            {
+              title: "DNS Setup for Cold Email",
+              description: "SPF, DKIM & DMARC configuration guide for maximum deliverability.",
+              href: "https://instantly.ai/blog/email-dns-setup",
+              tag: "Deliverability",
+            },
+            {
+              title: "Email Warmup Best Practices",
+              description: "How to properly warm up sending accounts and maintain reputation.",
+              href: "https://instantly.ai/blog/email-warm-up",
+              tag: "Warmup",
+            },
+            {
+              title: "Cold Email Copywriting",
+              description: "Writing emails that get replies — structure, personalization & CTAs.",
+              href: "https://instantly.ai/blog/cold-email-template",
+              tag: "Copywriting",
+            },
+            {
+              title: "Inbox Rotation & Sending Limits",
+              description: "Scale outreach safely with proper inbox rotation and daily limits.",
+              href: "https://instantly.ai/blog/email-sending-limits",
+              tag: "Scaling",
+            },
+          ].map((resource) => (
+            <a
+              key={resource.title}
+              href={resource.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group block rounded-lg border border-border/50 bg-card/50 p-3 hover:border-border hover:bg-accent/50 transition-colors"
+            >
+              <div className="flex items-start justify-between mb-1.5">
+                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                  {resource.tag}
+                </Badge>
+                <ExternalLink className="h-3 w-3 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
+              </div>
+              <h4 className="text-sm font-medium mb-1">{resource.title}</h4>
+              <p className="text-xs text-muted-foreground leading-relaxed">{resource.description}</p>
+            </a>
+          ))}
+        </div>
+      </div>
 
       {/* Footer info */}
       {lastUpdated && (
