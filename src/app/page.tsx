@@ -31,14 +31,14 @@ function BrowserChrome({ children, title }: { children: React.ReactNode; title?:
         {title && <span className="ml-3 text-[10px] text-zinc-500">{title}</span>}
         <div className="flex-1 ml-2 h-6 bg-white/5 rounded-md" />
       </div>
-      <div className="p-6">{children}</div>
+      <div className="p-3 sm:p-6">{children}</div>
     </div>
   );
 }
 
 function CommandCenterMockup() {
   return (
-    <div className="relative mt-16 mx-auto max-w-5xl">
+    <div className="relative mt-8 sm:mt-16 mx-auto max-w-5xl">
       <div className="absolute -inset-4 bg-gradient-to-r from-blue-500/20 via-cyan-500/20 to-emerald-500/20 rounded-2xl blur-xl" />
       <div className="relative">
         <BrowserChrome title="app.youragency.com/admin">
@@ -48,7 +48,7 @@ function CommandCenterMockup() {
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400" />
               <span className="text-sm font-semibold text-zinc-300">Your Agency</span>
             </div>
-            <div className="flex items-center gap-4 text-[10px] text-zinc-500">
+            <div className="hidden sm:flex items-center gap-4 text-[10px] text-zinc-500">
               <span>Clients</span>
               <span>Infrastructure</span>
               <span>Lead Database</span>
@@ -56,22 +56,22 @@ function CommandCenterMockup() {
             </div>
           </div>
           {/* Stats row */}
-          <div className="grid grid-cols-4 gap-3 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">
             {[
               { label: "Active Clients", value: "47", change: "+3 this month", color: "text-blue-400" },
               { label: "Emails Sent", value: "284,291", change: "across all campaigns", color: "text-cyan-400" },
               { label: "Positive Replies", value: "1,847", change: "+127 this week", color: "text-emerald-400" },
               { label: "Meetings Booked", value: "312", change: "+28 this week", color: "text-amber-400" },
             ].map((s, i) => (
-              <div key={i} className="rounded-lg bg-white/[0.04] border border-white/5 p-3">
+              <div key={i} className="rounded-lg bg-white/[0.04] border border-white/5 p-2 sm:p-3">
                 <p className="text-[10px] text-zinc-500">{s.label}</p>
-                <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">{s.change}</p>
+                <p className={`text-base sm:text-xl font-bold ${s.color}`}>{s.value}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5 hidden sm:block">{s.change}</p>
               </div>
             ))}
           </div>
-          {/* Client table */}
-          <div className="rounded-lg border border-white/5 overflow-hidden">
+          {/* Client table — hidden on very small screens for readability */}
+          <div className="hidden sm:block rounded-lg border border-white/5 overflow-hidden">
             <div className="grid grid-cols-5 gap-3 px-4 py-2 bg-white/[0.02] text-[10px] text-zinc-500 font-medium">
               <span>Client</span><span>Campaigns</span><span>Replies</span><span>Meetings</span><span>Status</span>
             </div>
@@ -88,6 +88,23 @@ function CommandCenterMockup() {
                 <span className="text-zinc-500">{c.replies}</span>
                 <span className="text-zinc-500">{c.meetings}</span>
                 <span><span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${c.statusColor}`}>{c.status}</span></span>
+              </div>
+            ))}
+          </div>
+          {/* Simplified mobile client list */}
+          <div className="sm:hidden space-y-1.5">
+            {[
+              { name: "Nexus AI", replies: 23, status: "Active", statusColor: "text-emerald-400" },
+              { name: "TechFlow Inc", replies: 18, status: "Active", statusColor: "text-emerald-400" },
+              { name: "ScaleUp Corp", replies: 12, status: "Active", statusColor: "text-emerald-400" },
+              { name: "Growth Labs", replies: 34, status: "Active", statusColor: "text-emerald-400" },
+            ].map((c, i) => (
+              <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5 text-[11px]">
+                <span className="text-zinc-300 font-medium">{c.name}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-zinc-500">{c.replies} replies</span>
+                  <span className={c.statusColor}>{c.status}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -125,7 +142,7 @@ function AutomationFlowMockup() {
               <p className="text-xs font-semibold text-zinc-300">Slack alert sent</p>
               <p className="text-[11px] text-zinc-500 mt-0.5">#client-acme-corp: &quot;New positive reply from John at Acme Corp&quot;</p>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="hidden sm:flex items-center gap-1">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               <span className="text-[10px] text-emerald-400">Sent</span>
             </div>
@@ -143,7 +160,7 @@ function AutomationFlowMockup() {
               <p className="text-xs font-semibold text-zinc-300">HubSpot deal created</p>
               <p className="text-[11px] text-zinc-500 mt-0.5">Contact: John (Acme Corp) &rarr; Pipeline: Sales &rarr; Stage: Qualified</p>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="hidden sm:flex items-center gap-1">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               <span className="text-[10px] text-emerald-400">Synced</span>
             </div>
@@ -161,7 +178,7 @@ function AutomationFlowMockup() {
               <p className="text-xs font-semibold text-zinc-300">Email notification sent</p>
               <p className="text-[11px] text-zinc-500 mt-0.5">Team notified with reply-to-lead button and full email thread</p>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="hidden sm:flex items-center gap-1">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               <span className="text-[10px] text-emerald-400">Delivered</span>
             </div>
@@ -179,7 +196,7 @@ function AutomationFlowMockup() {
               <p className="text-xs font-semibold text-zinc-300">Client portal updated</p>
               <p className="text-[11px] text-zinc-500 mt-0.5">Acme Corp&apos;s dashboard now shows new reply in real-time pipeline</p>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="hidden sm:flex items-center gap-1">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               <span className="text-[10px] text-emerald-400">Live</span>
             </div>
@@ -203,23 +220,23 @@ function ClientPortalMockup() {
           <span className="text-[10px] text-zinc-500">Acme Corp Dashboard</span>
         </div>
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-3 mb-5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-5">
           {[
             { label: "Emails Sent", value: "2,847", color: "text-blue-400" },
             { label: "Open Rate", value: "52.1%", color: "text-cyan-400" },
             { label: "Replies", value: "34", color: "text-emerald-400" },
             { label: "Meetings", value: "11", color: "text-amber-400" },
           ].map((s, i) => (
-            <div key={i} className="rounded-lg bg-white/[0.04] border border-white/5 p-3">
+            <div key={i} className="rounded-lg bg-white/[0.04] border border-white/5 p-2 sm:p-3">
               <p className="text-[10px] text-zinc-500">{s.label}</p>
-              <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
+              <p className={`text-base sm:text-lg font-bold ${s.color}`}>{s.value}</p>
             </div>
           ))}
         </div>
         {/* Pipeline */}
         <div className="rounded-lg bg-white/[0.02] border border-white/5 p-4">
           <p className="text-[10px] text-zinc-500 mb-3 font-medium">Lead Pipeline</p>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
               { stage: "Contacted", count: 142, color: "border-zinc-600", items: ["Lisa P.", "Tom G."] },
               { stage: "Replied", count: 34, color: "border-emerald-500/40", items: ["Sarah C.", "James W."] },
@@ -250,23 +267,23 @@ function InfrastructureMockup() {
     <div className="relative">
       <BrowserChrome title="Infrastructure Health Monitor">
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-3 mb-5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-5">
           {[
             { label: "Email Accounts", value: "186", color: "text-blue-400" },
             { label: "Active", value: "172", color: "text-emerald-400" },
             { label: "Avg Reputation", value: "94.2", color: "text-cyan-400" },
             { label: "Domains", value: "48", color: "text-amber-400" },
           ].map((s, i) => (
-            <div key={i} className="rounded-lg bg-white/[0.04] border border-white/5 p-3">
+            <div key={i} className="rounded-lg bg-white/[0.04] border border-white/5 p-2 sm:p-3">
               <p className="text-[10px] text-zinc-500">{s.label}</p>
-              <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
+              <p className={`text-base sm:text-lg font-bold ${s.color}`}>{s.value}</p>
             </div>
           ))}
         </div>
         {/* Domain health table */}
         <div className="rounded-lg border border-white/5 overflow-hidden">
-          <div className="grid grid-cols-5 gap-3 px-3 py-2 bg-white/[0.02] text-[10px] text-zinc-500 font-medium">
-            <span>Domain</span><span>SPF</span><span>DKIM</span><span>DMARC</span><span>Score</span>
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3 px-3 py-2 bg-white/[0.02] text-[10px] text-zinc-500 font-medium">
+            <span>Domain</span><span className="hidden sm:block">SPF</span><span className="hidden sm:block">DKIM</span><span>DMARC</span><span>Score</span>
           </div>
           {[
             { domain: "outreach-1.com", spf: true, dkim: true, dmarc: true, score: 100 },
@@ -274,10 +291,10 @@ function InfrastructureMockup() {
             { domain: "mail-3.io", spf: true, dkim: true, dmarc: false, score: 67 },
             { domain: "send-4.com", spf: true, dkim: false, dmarc: false, score: 33 },
           ].map((d, i) => (
-            <div key={i} className="grid grid-cols-5 gap-3 px-3 py-2 border-t border-white/5 text-[11px]">
-              <span className="text-zinc-300">{d.domain}</span>
-              <span>{d.spf ? <span className="text-emerald-400">Pass</span> : <span className="text-red-400">Fail</span>}</span>
-              <span>{d.dkim ? <span className="text-emerald-400">Pass</span> : <span className="text-red-400">Fail</span>}</span>
+            <div key={i} className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3 px-3 py-2 border-t border-white/5 text-[11px]">
+              <span className="text-zinc-300 truncate">{d.domain}</span>
+              <span className="hidden sm:block">{d.spf ? <span className="text-emerald-400">Pass</span> : <span className="text-red-400">Fail</span>}</span>
+              <span className="hidden sm:block">{d.dkim ? <span className="text-emerald-400">Pass</span> : <span className="text-red-400">Fail</span>}</span>
               <span>{d.dmarc ? <span className="text-emerald-400">Pass</span> : <span className="text-red-400">Fail</span>}</span>
               <span>
                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
@@ -359,7 +376,7 @@ export default async function Home() {
                 </span>
               </h1>
 
-              <p className="text-xl text-zinc-400 leading-relaxed mb-10 max-w-2xl mx-auto">
+              <p className="text-base sm:text-xl text-zinc-400 leading-relaxed mb-8 sm:mb-10 max-w-2xl mx-auto">
                 Automate client reporting, reply routing, CRM syncing, and deliverability monitoring. All from one dashboard.
               </p>
 
@@ -524,7 +541,7 @@ export default async function Home() {
               </h2>
             </div>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               {[
                 {
                   title: "Multi-Provider Sync",
@@ -575,14 +592,14 @@ export default async function Home() {
                   iconPath: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z",
                 },
               ].map((feature, i) => (
-                <div key={i} className="group p-6 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-white/10 hover:bg-white/[0.04] transition-all">
-                  <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg`}>
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div key={i} className="group p-4 sm:p-6 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-white/10 hover:bg-white/[0.04] transition-all">
+                  <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-3 sm:mb-4 group-hover:scale-110 transition-transform shadow-lg`}>
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={feature.iconPath} />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-semibold mb-2">{feature.title}</h3>
-                  <p className="text-sm text-zinc-400 leading-relaxed">{feature.description}</p>
+                  <h3 className="text-sm sm:text-lg font-semibold mb-1 sm:mb-2">{feature.title}</h3>
+                  <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">{feature.description}</p>
                 </div>
               ))}
             </div>
@@ -598,7 +615,7 @@ export default async function Home() {
               </h2>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-8">
+            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8">
               {[
                 {
                   quote: "We went from 8 clients to 23 in four months without adding headcount. Before Blue Reach, scaling meant hiring another ops person just to handle reporting. Now it runs itself.",
@@ -622,7 +639,7 @@ export default async function Home() {
                   image: "/testimonial-3.jpg",
                 },
               ].map((testimonial, i) => (
-                <article key={i} className="p-8 rounded-2xl bg-white/[0.02] border border-white/5">
+                <article key={i} className="p-6 sm:p-8 rounded-2xl bg-white/[0.02] border border-white/5">
                   <div className="flex gap-1 mb-4">
                     {[...Array(5)].map((_, j) => (
                       <svg key={j} className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
@@ -656,7 +673,7 @@ export default async function Home() {
               </p>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-8 lg:gap-6 max-w-5xl mx-auto">
+            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6 lg:gap-6 max-w-5xl mx-auto">
               {[
                 {
                   name: "Starter",

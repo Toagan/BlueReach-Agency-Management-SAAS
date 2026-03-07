@@ -9,7 +9,7 @@ export function MarketingFooter() {
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
             <Link href="/" className="flex items-center mb-4" aria-label="Blue Reach home">
-              <Image src="/bluereach-logo.png" alt="Blue Reach" width={180} height={45} className="h-24 w-auto" />
+              <Image src="/bluereach-logo.png" alt="Blue Reach" width={180} height={45} className="h-14 sm:h-24 w-auto" />
             </Link>
             <p className="text-sm text-zinc-500 leading-relaxed">
               The command center for email outbound agencies. Manage campaigns, track leads, delight clients.

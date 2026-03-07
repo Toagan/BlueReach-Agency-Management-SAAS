@@ -18,7 +18,7 @@ export function MarketingHeader() {
         <div className="flex items-center justify-between h-16 lg:h-20">
           {/* Logo */}
           <Link href="/" className="flex items-center" aria-label="Blue Reach home">
-            <Image src="/bluereach-logo.png" alt="Blue Reach" width={200} height={50} className="h-32 w-auto" priority />
+            <Image src="/bluereach-logo.png" alt="Blue Reach" width={200} height={50} className="h-16 sm:h-32 w-auto" priority />
           </Link>
 
           {/* Desktop Navigation */}
