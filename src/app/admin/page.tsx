@@ -36,7 +36,6 @@ import {
   FileText,
   BookOpen,
   ExternalLink,
-  Trophy,
 } from "lucide-react";
 
 interface OverviewStats {
@@ -346,289 +345,54 @@ export default function AdminCommandCenter() {
         </div>
       )}
 
-      {/* Resources & Guides */}
-      <div className="border-t border-border pt-6 space-y-6">
-        <div className="flex items-center gap-2">
+      {/* Resources & Guides — compact single row */}
+      <div className="border-t border-border pt-6">
+        <div className="flex items-center gap-2 mb-3">
           <BookOpen className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-sm font-medium text-muted-foreground">Resources & Guides</h3>
         </div>
-
-        {/* 1. How to Use BlueReach for Email Outbound */}
-        <div>
-          <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-            <Send className="h-4 w-4 text-blue-500" />
-            1. How to Use BlueReach for Email Outbound
-          </h4>
-          <p className="text-xs text-muted-foreground mb-3">Step-by-step guide to running outbound campaigns from start to finish.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {[
-              {
-                title: "Getting Started with BlueReach",
-                description: "Create customers, link campaigns, sync leads, and manage your pipeline end-to-end.",
-                href: "https://instantly.ai/blog/cold-email-strategy",
-                tag: "Onboarding",
-              },
-              {
-                title: "Lead Workflow & Pipeline",
-                description: "Track leads from contacted → replied → booked → won. Manage deal flow per customer.",
-                href: "https://instantly.ai/blog/cold-email-lead-management",
-                tag: "Pipeline",
-              },
-              {
-                title: "Analytics & Reporting",
-                description: "Use the Command Center dashboard to monitor reply rates, positive replies, and conversion.",
-                href: "https://instantly.ai/blog/cold-email-analytics",
-                tag: "Analytics",
-              },
-            ].map((resource) => (
-              <a
-                key={resource.title}
-                href={resource.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group block rounded-lg border border-border/50 bg-card/50 p-3 hover:border-border hover:bg-accent/50 transition-colors"
-              >
-                <div className="flex items-start justify-between mb-1.5">
-                  <Badge variant="secondary" className="text-[10px] h-5 px-1.5">{resource.tag}</Badge>
-                  <ExternalLink className="h-3 w-3 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
-                </div>
-                <h4 className="text-sm font-medium mb-1">{resource.title}</h4>
-                <p className="text-xs text-muted-foreground leading-relaxed">{resource.description}</p>
-              </a>
-            ))}
-          </div>
-        </div>
-
-        {/* 2. How to Configure Email Inboxes */}
-        <div>
-          <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-            <Settings className="h-4 w-4 text-amber-500" />
-            2. How to Configure Email Inboxes
-          </h4>
-          <p className="text-xs text-muted-foreground mb-3">Set up sending domains, DNS records, and mailboxes with Porkbun, Namecheap & Cloudflare.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              {
-                title: "Domain & DNS Setup",
-                description: "Configure SPF, DKIM & DMARC records for cold email deliverability.",
-                href: "https://instantly.ai/blog/email-dns-setup",
-                tag: "DNS",
-              },
-              {
-                title: "Porkbun Inbox Setup",
-                description: "Buy domains and set up forwarding mailboxes on Porkbun for outbound sending.",
-                href: "https://instantly.ai/blog/cold-email-infrastructure",
-                tag: "Porkbun",
-              },
-              {
-                title: "Namecheap Configuration",
-                description: "Configure Namecheap domains with private email and proper DNS records.",
-                href: "https://instantly.ai/blog/cold-email-infrastructure",
-                tag: "Namecheap",
-              },
-              {
-                title: "Cloudflare DNS Management",
-                description: "Use Cloudflare as your DNS provider for fast propagation and easy record management.",
-                href: "https://instantly.ai/blog/email-dns-setup",
-                tag: "Cloudflare",
-              },
-              {
-                title: "Email Warmup Best Practices",
-                description: "How to properly warm up sending accounts and maintain sender reputation.",
-                href: "https://instantly.ai/blog/email-warm-up",
-                tag: "Warmup",
-              },
-              {
-                title: "Inbox Rotation & Sending Limits",
-                description: "Scale outreach safely with proper inbox rotation and daily sending limits.",
-                href: "https://instantly.ai/blog/email-sending-limits",
-                tag: "Scaling",
-              },
-            ].map((resource) => (
-              <a
-                key={resource.title}
-                href={resource.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group block rounded-lg border border-border/50 bg-card/50 p-3 hover:border-border hover:bg-accent/50 transition-colors"
-              >
-                <div className="flex items-start justify-between mb-1.5">
-                  <Badge variant="secondary" className="text-[10px] h-5 px-1.5">{resource.tag}</Badge>
-                  <ExternalLink className="h-3 w-3 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
-                </div>
-                <h4 className="text-sm font-medium mb-1">{resource.title}</h4>
-                <p className="text-xs text-muted-foreground leading-relaxed">{resource.description}</p>
-              </a>
-            ))}
-          </div>
-        </div>
-
-        {/* 3. How to Integrate Clay and Smartlead/Instantly */}
-        <div>
-          <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-            <Activity className="h-4 w-4 text-green-500" />
-            3. How to Integrate Clay & Smartlead/Instantly
-          </h4>
-          <p className="text-xs text-muted-foreground mb-3">Connect your lead enrichment and sending tools to BlueReach.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {[
-              {
-                title: "Clay Lead Enrichment",
-                description: "Use Clay to enrich and score leads before importing them into your campaigns.",
-                href: "https://www.clay.com/university",
-                tag: "Clay",
-              },
-              {
-                title: "Smartlead Integration",
-                description: "Connect Smartlead campaigns, sync leads, and track variant-level A/B analytics.",
-                href: "https://help.smartlead.ai/",
-                tag: "Smartlead",
-              },
-              {
-                title: "Instantly Integration",
-                description: "Link Instantly campaigns, configure webhooks, and auto-sync lead status updates.",
-                href: "https://instantly.ai/blog/instantly-api",
-                tag: "Instantly",
-              },
-            ].map((resource) => (
-              <a
-                key={resource.title}
-                href={resource.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group block rounded-lg border border-border/50 bg-card/50 p-3 hover:border-border hover:bg-accent/50 transition-colors"
-              >
-                <div className="flex items-start justify-between mb-1.5">
-                  <Badge variant="secondary" className="text-[10px] h-5 px-1.5">{resource.tag}</Badge>
-                  <ExternalLink className="h-3 w-3 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
-                </div>
-                <h4 className="text-sm font-medium mb-1">{resource.title}</h4>
-                <p className="text-xs text-muted-foreground leading-relaxed">{resource.description}</p>
-              </a>
-            ))}
-          </div>
-        </div>
-
-        {/* 4. How to Use AI Campaign Features */}
-        <div>
-          <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-purple-500" />
-            4. How to Use AI Campaign Features
-          </h4>
-          <p className="text-xs text-muted-foreground mb-3">Leverage AI for personalization, copy generation, and campaign optimization.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {[
-              {
-                title: "AI Email Personalization",
-                description: "Generate custom opening lines and personalized copy using AI research signals.",
-                href: "https://www.clay.com/university/ai-personalized-emails",
-                tag: "AI Copy",
-              },
-              {
-                title: "A/B Variant Testing",
-                description: "Test multiple email variants per step and track which copy drives the best reply rate.",
-                href: "https://instantly.ai/blog/ab-testing-cold-email",
-                tag: "A/B Testing",
-              },
-              {
-                title: "Cold Email Copywriting",
-                description: "Writing emails that get replies — structure, personalization, and effective CTAs.",
-                href: "https://instantly.ai/blog/cold-email-template",
-                tag: "Copywriting",
-              },
-            ].map((resource) => (
-              <a
-                key={resource.title}
-                href={resource.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group block rounded-lg border border-border/50 bg-card/50 p-3 hover:border-border hover:bg-accent/50 transition-colors"
-              >
-                <div className="flex items-start justify-between mb-1.5">
-                  <Badge variant="secondary" className="text-[10px] h-5 px-1.5">{resource.tag}</Badge>
-                  <ExternalLink className="h-3 w-3 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
-                </div>
-                <h4 className="text-sm font-medium mb-1">{resource.title}</h4>
-                <p className="text-xs text-muted-foreground leading-relaxed">{resource.description}</p>
-              </a>
-            ))}
-          </div>
-        </div>
-
-        {/* 5. Email Outbound Experts */}
-        <div>
-          <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-            <Trophy className="h-4 w-4 text-yellow-500" />
-            5. Email Outbound Experts to Follow
-          </h4>
-          <p className="text-xs text-muted-foreground mb-3">Top creators and practitioners sharing the best cold email content.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              {
-                title: "Alex Berman",
-                description: "Agency cold email strategies, high-ticket outbound, and deal closing frameworks.",
-                href: "https://www.youtube.com/@AlexBerman",
-                tag: "YouTube",
-              },
-              {
-                title: "Patrick Dang",
-                description: "B2B sales, cold email sequences, and outreach strategies for SaaS and services.",
-                href: "https://www.youtube.com/@patrickdang",
-                tag: "YouTube",
-              },
-              {
-                title: "Iman Gadzhi",
-                description: "Agency scaling, cold outreach systems, and building high-volume lead generation.",
-                href: "https://www.youtube.com/@ImanGadzhi",
-                tag: "YouTube",
-              },
-              {
-                title: "Jason Wardrop",
-                description: "Cold email automation, GoHighLevel workflows, and agency lead gen.",
-                href: "https://www.youtube.com/@JasonWardrop",
-                tag: "YouTube",
-              },
-              {
-                title: "Instantly Blog",
-                description: "Official guides on deliverability, warmup, copywriting, and cold email infrastructure.",
-                href: "https://instantly.ai/blog",
-                tag: "Blog",
-              },
-              {
-                title: "Smartlead Academy",
-                description: "Tutorials on multi-channel outreach, inbox rotation, and Smartlead best practices.",
-                href: "https://help.smartlead.ai/",
-                tag: "Academy",
-              },
-              {
-                title: "Clay University",
-                description: "Lead enrichment playbooks, waterfall enrichment, and AI personalization at scale.",
-                href: "https://www.clay.com/university",
-                tag: "Academy",
-              },
-              {
-                title: "lemlist Blog",
-                description: "Cold outreach tactics, deliverability tips, and multi-channel campaign strategies.",
-                href: "https://blog.lemlist.com/",
-                tag: "Blog",
-              },
-            ].map((resource) => (
-              <a
-                key={resource.title}
-                href={resource.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group block rounded-lg border border-border/50 bg-card/50 p-3 hover:border-border hover:bg-accent/50 transition-colors"
-              >
-                <div className="flex items-start justify-between mb-1.5">
-                  <Badge variant="secondary" className="text-[10px] h-5 px-1.5">{resource.tag}</Badge>
-                  <ExternalLink className="h-3 w-3 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
-                </div>
-                <h4 className="text-sm font-medium mb-1">{resource.title}</h4>
-                <p className="text-xs text-muted-foreground leading-relaxed">{resource.description}</p>
-              </a>
-            ))}
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            {
+              title: "Getting Started with BlueReach",
+              description: "Create customers, link campaigns, sync leads, and manage your pipeline.",
+              href: "https://instantly.ai/blog/cold-email-strategy",
+              tag: "Onboarding",
+            },
+            {
+              title: "Lead Workflow & Pipeline",
+              description: "Track leads from contacted to replied to booked to won.",
+              href: "https://instantly.ai/blog/cold-email-lead-management",
+              tag: "Pipeline",
+            },
+            {
+              title: "DNS & Inbox Setup",
+              description: "SPF, DKIM, DMARC, warmup, and inbox rotation for deliverability.",
+              href: "https://instantly.ai/blog/email-dns-setup",
+              tag: "Infrastructure",
+            },
+            {
+              title: "Analytics & Reporting",
+              description: "Monitor reply rates, positive replies, and conversion metrics.",
+              href: "https://instantly.ai/blog/cold-email-analytics",
+              tag: "Analytics",
+            },
+          ].map((resource) => (
+            <a
+              key={resource.title}
+              href={resource.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group block rounded-lg border border-border/50 bg-card/50 p-3 hover:border-border hover:bg-accent/50 transition-colors"
+            >
+              <div className="flex items-start justify-between mb-1.5">
+                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">{resource.tag}</Badge>
+                <ExternalLink className="h-3 w-3 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
+              </div>
+              <h4 className="text-sm font-medium mb-1">{resource.title}</h4>
+              <p className="text-xs text-muted-foreground leading-relaxed">{resource.description}</p>
+            </a>
+          ))}
         </div>
       </div>
 
