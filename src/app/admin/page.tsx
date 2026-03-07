@@ -35,7 +35,6 @@ import {
   Sparkles,
   FileText,
   BookOpen,
-  ExternalLink,
 } from "lucide-react";
 
 interface OverviewStats {
@@ -356,42 +355,40 @@ export default function AdminCommandCenter() {
             {
               title: "Getting Started with BlueReach",
               description: "Create customers, link campaigns, sync leads, and manage your pipeline.",
-              href: "https://instantly.ai/blog/cold-email-strategy",
+              href: "/admin/guides/getting-started",
               tag: "Onboarding",
             },
             {
               title: "Lead Workflow & Pipeline",
               description: "Track leads from contacted to replied to booked to won.",
-              href: "https://instantly.ai/blog/cold-email-lead-management",
+              href: "/admin/guides/lead-workflow",
               tag: "Pipeline",
             },
             {
               title: "DNS & Inbox Setup",
               description: "SPF, DKIM, DMARC, warmup, and inbox rotation for deliverability.",
-              href: "https://instantly.ai/blog/email-dns-setup",
+              href: "/admin/guides/dns-inbox-setup",
               tag: "Infrastructure",
             },
             {
               title: "Analytics & Reporting",
               description: "Monitor reply rates, positive replies, and conversion metrics.",
-              href: "https://instantly.ai/blog/cold-email-analytics",
+              href: "/admin/guides/analytics-reporting",
               tag: "Analytics",
             },
           ].map((resource) => (
-            <a
+            <Link
               key={resource.title}
               href={resource.href}
-              target="_blank"
-              rel="noopener noreferrer"
               className="group block rounded-lg border border-border/50 bg-card/50 p-3 hover:border-border hover:bg-accent/50 transition-colors"
             >
               <div className="flex items-start justify-between mb-1.5">
                 <Badge variant="secondary" className="text-[10px] h-5 px-1.5">{resource.tag}</Badge>
-                <ExternalLink className="h-3 w-3 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
+                <BookOpen className="h-3 w-3 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
               </div>
               <h4 className="text-sm font-medium mb-1">{resource.title}</h4>
               <p className="text-xs text-muted-foreground leading-relaxed">{resource.description}</p>
-            </a>
+            </Link>
           ))}
         </div>
       </div>
