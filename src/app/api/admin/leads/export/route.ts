@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
 
     const exportType = searchParams.get("export") || "all";
     const clientFilter = searchParams.get("client");
+    const campaignFilter = searchParams.get("campaign");
     const statusFilter = searchParams.get("status");
     const positiveFilter = searchParams.get("positive") === "true";
 
@@ -62,6 +63,9 @@ export async function GET(request: NextRequest) {
         if (clientFilter && clientFilter !== "all") {
           query = query.eq("client_id", clientFilter);
         }
+        if (campaignFilter && campaignFilter !== "all") {
+          query = query.eq("campaign_id", campaignFilter);
+        }
         if (statusFilter && statusFilter !== "all") {
           query = query.eq("status", statusFilter);
         }
@@ -90,18 +94,32 @@ export async function GET(request: NextRequest) {
         break;
     }
 
-    // Execute query with ordering
-    const { data: leads, error } = await query.order("updated_at", { ascending: false });
+    // Execute query with pagination to avoid Supabase 1000-row limit
+    const pageSize = 1000;
+    let offset = 0;
+    let allLeads: Record<string, unknown>[] = [];
+    let hasMore = true;
 
-    if (error) {
-      console.error("Export query error:", error);
-      return NextResponse.json({ error: "Failed to fetch leads" }, { status: 500 });
+    while (hasMore) {
+      const { data: page, error: pageError } = await query
+        .order("updated_at", { ascending: false })
+        .range(offset, offset + pageSize - 1);
+
+      if (pageError) {
+        console.error("Export query error:", pageError);
+        return NextResponse.json({ error: "Failed to fetch leads" }, { status: 500 });
+      }
+
+      allLeads = allLeads.concat(page || []);
+      hasMore = (page?.length || 0) === pageSize;
+      offset += pageSize;
     }
+
+    const leads = allLeads;
 
     // Generate CSV with ALL fields
     const headers = [
       // Basic Info
-      "Lead ID",
       "Email",
       "First Name",
       "Last Name",
@@ -113,9 +131,14 @@ export async function GET(request: NextRequest) {
       "LinkedIn URL",
       // Personalization
       "Personalization",
-      // Status & Sales
+      // Status & Reply Info
       "Status",
+      "Has Replied",
       "Is Positive Reply",
+      "Replied At",
+      "Reply From Step",
+      "Reply From Variant",
+      // Sales
       "Deal Value",
       "Next Action",
       "Next Action Date",
@@ -124,15 +147,13 @@ export async function GET(request: NextRequest) {
       "Email Click Count",
       "Email Reply Count",
       "Last Contacted At",
-      // Instantly Integration
-      "Instantly Lead ID",
-      "Instantly Created At",
+      // Provider Info
+      "Provider",
+      "Provider Lead ID",
       // Notes
       "Notes",
       // Organization
-      "Client ID",
       "Client Name",
-      "Campaign ID",
       "Campaign Name",
       // Timestamps
       "Created At",
@@ -158,48 +179,52 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    const rows = (leads || []).map((lead) => {
-      const clientName = lead.campaigns?.clients?.name || lead.client_name || "";
-      const campaignName = lead.campaigns?.name || lead.campaign_name || "";
+    const rows = (leads || []).map((lead: Record<string, unknown>) => {
+      const campaigns = lead.campaigns as Record<string, unknown> | null;
+      const clients = campaigns?.clients as Record<string, unknown> | null;
+      const clientName = clients?.name || lead.client_name || "";
+      const campaignName = campaigns?.name || lead.campaign_name || "";
 
       return [
         // Basic Info
-        escapeCSV(lead.id),
-        escapeCSV(lead.email),
-        escapeCSV(lead.first_name),
-        escapeCSV(lead.last_name),
+        escapeCSV(lead.email as string),
+        escapeCSV(lead.first_name as string),
+        escapeCSV(lead.last_name as string),
         // Company Info
-        escapeCSV(lead.company_name),
-        escapeCSV(lead.company_domain),
+        escapeCSV(lead.company_name as string),
+        escapeCSV(lead.company_domain as string),
         // Contact Info
-        escapeCSV(lead.phone),
-        escapeCSV(lead.linkedin_url),
+        escapeCSV(lead.phone as string),
+        escapeCSV(lead.linkedin_url as string),
         // Personalization
-        escapeCSV(lead.personalization),
-        // Status & Sales
-        escapeCSV(lead.status),
+        escapeCSV(lead.personalization as string),
+        // Status & Reply Info
+        escapeCSV(lead.status as string),
+        escapeCSV(lead.has_replied ? "Yes" : "No"),
         escapeCSV(lead.is_positive_reply ? "Yes" : "No"),
-        escapeCSV(lead.deal_value),
-        escapeCSV(lead.next_action),
-        escapeCSV(lead.next_action_date),
+        escapeCSV(formatDate(lead.responded_at as string)),
+        escapeCSV(lead.reply_from_step as number),
+        escapeCSV(lead.reply_from_variant_label as string),
+        // Sales
+        escapeCSV(lead.deal_value as number),
+        escapeCSV(lead.next_action as string),
+        escapeCSV(lead.next_action_date as string),
         // Email Stats
-        escapeCSV(lead.email_open_count || 0),
-        escapeCSV(lead.email_click_count || 0),
-        escapeCSV(lead.email_reply_count || 0),
-        escapeCSV(formatDate(lead.last_contacted_at)),
-        // Instantly Integration
-        escapeCSV(lead.instantly_lead_id),
-        escapeCSV(formatDate(lead.instantly_created_at)),
+        escapeCSV((lead.email_open_count as number) || 0),
+        escapeCSV((lead.email_click_count as number) || 0),
+        escapeCSV((lead.email_reply_count as number) || 0),
+        escapeCSV(formatDate(lead.last_contacted_at as string)),
+        // Provider Info
+        escapeCSV(lead.provider_type as string),
+        escapeCSV((lead.provider_lead_id || lead.instantly_lead_id) as string),
         // Notes
-        escapeCSV(lead.notes),
+        escapeCSV(lead.notes as string),
         // Organization
-        escapeCSV(lead.client_id),
-        escapeCSV(clientName),
-        escapeCSV(lead.campaign_id),
-        escapeCSV(campaignName),
+        escapeCSV(clientName as string),
+        escapeCSV(campaignName as string),
         // Timestamps
-        escapeCSV(formatDate(lead.created_at)),
-        escapeCSV(formatDate(lead.updated_at)),
+        escapeCSV(formatDate(lead.created_at as string)),
+        escapeCSV(formatDate(lead.updated_at as string)),
       ].join(",");
     });
 

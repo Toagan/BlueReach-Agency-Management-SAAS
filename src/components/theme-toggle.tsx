@@ -14,7 +14,8 @@ export function ThemeToggle() {
     const savedTheme = localStorage.getItem("theme");
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-    if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
+    if (savedTheme === "dark" || (!savedTheme)) {
+      // Default to dark mode for new users (no saved preference)
       setIsDark(true);
       document.documentElement.classList.add("dark");
     }

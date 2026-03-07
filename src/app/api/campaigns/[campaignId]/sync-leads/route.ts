@@ -779,8 +779,8 @@ export async function POST(
             updatePayload.reply_from_variant = stats.replyFromVariant;
             updatePayload.reply_from_variant_label = stats.replyFromVariantLabel;
             variantsSynced++;
-          } else if (isPositive && stats.emailStats && stats.emailStats.length > 0) {
-            // For positive leads without reply_time, infer variant from their most recent sent email
+          } else if ((isPositive || stats.hasReplied) && stats.emailStats && stats.emailStats.length > 0) {
+            // For replied leads without reply_time in stats, infer variant from their most recent sent email
             // Sort by sent time descending and pick the first one (most recent)
             const sortedEmails = [...stats.emailStats].sort((a, b) => {
               if (!a.sentTime) return 1;
@@ -793,7 +793,7 @@ export async function POST(
               updatePayload.reply_from_variant = lastEmail.variantId;
               updatePayload.reply_from_variant_label = lastEmail.variantLabel;
               variantsSynced++;
-              console.log(`[SyncLeads] Inferred variant for positive lead ${email}: step=${lastEmail.sequenceNumber}, variant=${lastEmail.variantLabel || 'Unknown'}`);
+              console.log(`[SyncLeads] Inferred variant for replied lead ${email}: step=${lastEmail.sequenceNumber}, variant=${lastEmail.variantLabel || 'Unknown'}`);
             }
           }
 

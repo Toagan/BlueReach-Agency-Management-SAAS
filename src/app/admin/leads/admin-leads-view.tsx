@@ -60,6 +60,7 @@ interface LeadWithRelations extends Lead {
 interface AdminLeadsViewProps {
   leads: LeadWithRelations[];
   clients: Array<{ id: string; name: string }>;
+  campaigns: Array<{ id: string; name: string; client_id: string }>;
   totalCount: number;
   totalLeads: number;
   positiveCount: number;
@@ -68,6 +69,7 @@ interface AdminLeadsViewProps {
   pageSize: number;
   initialStatus?: string;
   initialClient?: string;
+  initialCampaign?: string;
   initialPositive?: boolean;
 }
 
@@ -85,6 +87,7 @@ const statusConfig: Record<LeadStatus, { label: string; color: string; icon?: st
 export function AdminLeadsView({
   leads,
   clients,
+  campaigns,
   totalCount,
   totalLeads,
   positiveCount,
@@ -93,9 +96,11 @@ export function AdminLeadsView({
   pageSize,
   initialStatus,
   initialClient,
+  initialCampaign,
   initialPositive,
 }: AdminLeadsViewProps) {
   const [selectedClient, setSelectedClient] = useState<string>(initialClient || "all");
+  const [selectedCampaign, setSelectedCampaign] = useState<string>(initialCampaign || "all");
   const [selectedStatus, setSelectedStatus] = useState<string>(initialStatus || "all");
   const [showPositiveOnly, setShowPositiveOnly] = useState<boolean>(initialPositive || false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -107,17 +112,24 @@ export function AdminLeadsView({
   const supabase = createClient();
 
   const totalPages = Math.ceil(totalCount / pageSize);
-  const hasActiveFilters = selectedClient !== "all" || selectedStatus !== "all" || showPositiveOnly;
+  const hasActiveFilters = selectedClient !== "all" || selectedCampaign !== "all" || selectedStatus !== "all" || showPositiveOnly;
 
-  const updateFilters = (updates: { client?: string; status?: string; positive?: boolean; page?: number }) => {
+  // Filter campaigns by selected client
+  const filteredCampaigns = selectedClient !== "all"
+    ? campaigns.filter(c => c.client_id === selectedClient)
+    : campaigns;
+
+  const updateFilters = (updates: { client?: string; campaign?: string; status?: string; positive?: boolean; page?: number }) => {
     const params = new URLSearchParams();
 
     const newClient = updates.client !== undefined ? updates.client : selectedClient;
+    const newCampaign = updates.campaign !== undefined ? updates.campaign : selectedCampaign;
     const newStatus = updates.status !== undefined ? updates.status : selectedStatus;
     const newPositive = updates.positive !== undefined ? updates.positive : showPositiveOnly;
     const newPage = updates.page !== undefined ? updates.page : 1;
 
     if (newClient && newClient !== "all") params.set("client", newClient);
+    if (newCampaign && newCampaign !== "all") params.set("campaign", newCampaign);
     if (newStatus && newStatus !== "all") params.set("status", newStatus);
     if (newPositive) params.set("positive", "true");
     if (newPage > 1) params.set("page", String(newPage));
@@ -151,6 +163,7 @@ export function AdminLeadsView({
       params.set("export", type);
       if (type === "current") {
         if (selectedClient !== "all") params.set("client", selectedClient);
+        if (selectedCampaign !== "all") params.set("campaign", selectedCampaign);
         if (selectedStatus !== "all") params.set("status", selectedStatus);
         if (showPositiveOnly) params.set("positive", "true");
       }
@@ -205,6 +218,7 @@ export function AdminLeadsView({
 
   const clearFilters = () => {
     setSelectedClient("all");
+    setSelectedCampaign("all");
     setSelectedStatus("all");
     setShowPositiveOnly(false);
     setSearchQuery("");
@@ -298,7 +312,8 @@ export function AdminLeadsView({
             value={selectedClient}
             onValueChange={(value) => {
               setSelectedClient(value);
-              updateFilters({ client: value });
+              setSelectedCampaign("all");
+              updateFilters({ client: value, campaign: "all" });
             }}
           >
             <SelectTrigger className="w-[160px] h-9">
@@ -309,6 +324,26 @@ export function AdminLeadsView({
               {clients.map((client) => (
                 <SelectItem key={client.id} value={client.id}>
                   {client.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={selectedCampaign}
+            onValueChange={(value) => {
+              setSelectedCampaign(value);
+              updateFilters({ campaign: value });
+            }}
+          >
+            <SelectTrigger className="w-[200px] h-9">
+              <SelectValue placeholder="All Campaigns" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Campaigns</SelectItem>
+              {filteredCampaigns.map((campaign) => (
+                <SelectItem key={campaign.id} value={campaign.id}>
+                  {campaign.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -381,6 +416,10 @@ export function AdminLeadsView({
             <DropdownMenuItem onClick={() => handleExport("replied")}>
               <span className="flex-1">All Replies</span>
               <span className="text-muted-foreground text-xs">{repliedCount.toLocaleString()}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleExport("no_response")}>
+              <span className="flex-1">No Response</span>
+              <span className="text-muted-foreground text-xs">Contacted, no reply</span>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleExport("all")}>
               <span className="flex-1">All Leads</span>

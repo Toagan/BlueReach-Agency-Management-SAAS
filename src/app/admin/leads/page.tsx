@@ -9,6 +9,7 @@ interface PageProps {
     status?: string;
     positive?: string;
     client?: string;
+    campaign?: string;
     page?: string;
   }>;
 }
@@ -80,6 +81,7 @@ export default async function AdminLeadsPage({ searchParams }: PageProps) {
         <AdminLeadsView
           leads={[]}
           clients={[]}
+          campaigns={[]}
           totalCount={0}
           totalLeads={0}
           positiveCount={0}
@@ -88,11 +90,19 @@ export default async function AdminLeadsPage({ searchParams }: PageProps) {
           pageSize={PAGE_SIZE}
           initialStatus={params.status}
           initialClient={params.client}
+          initialCampaign={params.campaign}
           initialPositive={params.positive === "true"}
         />
       </div>
     );
   }
+
+  // Get campaigns for filter dropdown
+  const { data: ownerCampaigns } = await serviceSupabase
+    .from("campaigns")
+    .select("id, name, client_id")
+    .in("client_id", clientIds)
+    .order("name");
 
   // Build query scoped to owner's clients
   let query = serviceSupabase
@@ -103,6 +113,10 @@ export default async function AdminLeadsPage({ searchParams }: PageProps) {
   // Apply filters
   if (params.client && params.client !== "all") {
     query = query.eq("client_id", params.client);
+  }
+
+  if (params.campaign && params.campaign !== "all") {
+    query = query.eq("campaign_id", params.campaign);
   }
 
   if (params.status && params.status !== "all") {
@@ -148,6 +162,7 @@ export default async function AdminLeadsPage({ searchParams }: PageProps) {
       <AdminLeadsView
         leads={leads || []}
         clients={ownerClients || []}
+        campaigns={ownerCampaigns || []}
         totalCount={count || 0}
         totalLeads={totalLeads || 0}
         positiveCount={positiveCount || 0}
@@ -156,6 +171,7 @@ export default async function AdminLeadsPage({ searchParams }: PageProps) {
         pageSize={PAGE_SIZE}
         initialStatus={params.status}
         initialClient={params.client}
+        initialCampaign={params.campaign}
         initialPositive={params.positive === "true"}
       />
     </div>
