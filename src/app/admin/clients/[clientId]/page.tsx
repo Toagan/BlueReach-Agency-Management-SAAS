@@ -47,9 +47,19 @@ import {
   Edit2,
   X,
   Rocket,
+  Search,
+  ArrowUpDown,
+  Filter,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface CampaignAnalytics {
   emails_sent: number;
@@ -198,6 +208,9 @@ export default function ClientDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [deletingCampaignId, setDeletingCampaignId] = useState<string | null>(null);
+  const [campaignStatusFilter, setCampaignStatusFilter] = useState<string>("all");
+  const [campaignSortBy, setCampaignSortBy] = useState<string>("name");
+  const [campaignSearch, setCampaignSearch] = useState("");
   const [positiveLeads, setPositiveLeads] = useState<Lead[]>([]);
   const [showWorkflow, setShowWorkflow] = useState(true);
   const [workflowFilter, setWorkflowFilter] = useState<"responded" | "meetings" | "won" | "lost" | null>(null);
@@ -547,6 +560,73 @@ export default function ClientDashboardPage() {
       setDeletingCampaignId(null);
     }
   };
+
+  // Filtered and sorted campaigns
+  const filteredCampaigns = useMemo(() => {
+    let result = [...campaigns];
+
+    // Search filter
+    if (campaignSearch) {
+      const q = campaignSearch.toLowerCase();
+      result = result.filter(c => c.name.toLowerCase().includes(q));
+    }
+
+    // Status filter
+    if (campaignStatusFilter !== "all") {
+      result = result.filter(c => {
+        const analytics = c.analytics;
+        const progress = analytics && analytics.leads_count > 0
+          ? (Math.min(analytics.contacted_count, analytics.leads_count) / analytics.leads_count) * 100
+          : 0;
+        const isCompleted = progress >= 99 && !c.is_active;
+
+        switch (campaignStatusFilter) {
+          case "active": return c.is_active;
+          case "completed": return isCompleted;
+          case "paused": return !c.is_active && !isCompleted;
+          default: return true;
+        }
+      });
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      const aAnalytics = a.analytics;
+      const bAnalytics = b.analytics;
+      switch (campaignSortBy) {
+        case "reply_rate": {
+          const aRate = aAnalytics?.reply_rate || 0;
+          const bRate = bAnalytics?.reply_rate || 0;
+          return bRate - aRate;
+        }
+        case "positive": {
+          const aPos = aAnalytics?.total_opportunities || 0;
+          const bPos = bAnalytics?.total_opportunities || 0;
+          return bPos - aPos;
+        }
+        case "emails_sent": {
+          const aSent = aAnalytics?.emails_sent || 0;
+          const bSent = bAnalytics?.emails_sent || 0;
+          return bSent - aSent;
+        }
+        case "bounce_rate": {
+          const aBounce = aAnalytics?.bounce_rate || 0;
+          const bBounce = bAnalytics?.bounce_rate || 0;
+          return aBounce - bBounce; // Lower bounce = better = first
+        }
+        case "leads": {
+          const aLeads = aAnalytics?.leads_count || 0;
+          const bLeads = bAnalytics?.leads_count || 0;
+          return bLeads - aLeads;
+        }
+        case "name":
+        default:
+          return a.name.localeCompare(b.name);
+      }
+    });
+
+    return result;
+  }, [campaigns, campaignStatusFilter, campaignSortBy, campaignSearch]);
 
   const fetchClientData = useCallback(async (force = false) => {
     if (hasFetched.current && !force) return;
@@ -1722,17 +1802,96 @@ export default function ClientDashboardPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {campaigns.map((campaign) => (
-                <CampaignCard
-                  key={campaign.id}
-                  campaign={campaign}
-                  clientId={clientId}
-                  onDelete={() => handleDeleteCampaign(campaign.id, campaign.name)}
-                  isDeleting={deletingCampaignId === campaign.id}
-                  isAdmin={isAdmin === true}
-                  onSyncComplete={() => fetchClientData(true)}
-                />
-              ))}
+              {/* Filter Bar */}
+              <div className="flex flex-col sm:flex-row gap-3 pb-2">
+                <div className="relative flex-1 max-w-xs">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search campaigns..."
+                    value={campaignSearch}
+                    onChange={(e) => setCampaignSearch(e.target.value)}
+                    className="pl-9 h-9"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={campaignStatusFilter} onValueChange={setCampaignStatusFilter}>
+                    <SelectTrigger className="w-[130px] h-9">
+                      <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="paused">Paused</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={campaignSortBy} onValueChange={setCampaignSortBy}>
+                    <SelectTrigger className="w-[150px] h-9">
+                      <ArrowUpDown className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name">Sort: Name</SelectItem>
+                      <SelectItem value="reply_rate">Sort: Reply Rate</SelectItem>
+                      <SelectItem value="positive">Sort: Positive Replies</SelectItem>
+                      <SelectItem value="emails_sent">Sort: Emails Sent</SelectItem>
+                      <SelectItem value="bounce_rate">Sort: Bounce Rate</SelectItem>
+                      <SelectItem value="leads">Sort: Lead Count</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {(campaignStatusFilter !== "all" || campaignSearch || campaignSortBy !== "name") && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setCampaignStatusFilter("all");
+                      setCampaignSortBy("name");
+                      setCampaignSearch("");
+                    }}
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Clear
+                  </Button>
+                )}
+              </div>
+
+              {/* Campaign count */}
+              <p className="text-xs text-muted-foreground">
+                Showing {filteredCampaigns.length} of {campaigns.length} campaign{campaigns.length !== 1 ? "s" : ""}
+              </p>
+
+              {filteredCampaigns.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No campaigns match your filters</p>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    onClick={() => {
+                      setCampaignStatusFilter("all");
+                      setCampaignSortBy("name");
+                      setCampaignSearch("");
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                </div>
+              ) : (
+                filteredCampaigns.map((campaign) => (
+                  <CampaignCard
+                    key={campaign.id}
+                    campaign={campaign}
+                    clientId={clientId}
+                    onDelete={() => handleDeleteCampaign(campaign.id, campaign.name)}
+                    isDeleting={deletingCampaignId === campaign.id}
+                    isAdmin={isAdmin === true}
+                    onSyncComplete={() => fetchClientData(true)}
+                  />
+                ))
+              )}
             </div>
           )}
         </CardContent>
