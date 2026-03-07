@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users, Bell, BarChart3, Send, Zap, Link2, Unlink, Hash } from "lucide-react";
+import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users, Bell, BarChart3, Send, Zap, Link2, Unlink, Hash, Plus, MapPin, CalendarDays } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -55,6 +55,17 @@ interface PendingInvitation {
   expires_at: string;
 }
 
+interface VerticalRun {
+  id: string;
+  client_id: string;
+  vertical: string;
+  date_started: string;
+  geography: string | null;
+  lead_count: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
 interface NotificationUser {
   id: string;
   email: string;
@@ -88,6 +99,11 @@ export default function ClientSettingsPage() {
   const [acv, setAcv] = useState("");
   const [tcv, setTcv] = useState("");
   const [verticals, setVerticals] = useState("");
+  const [verticalRuns, setVerticalRuns] = useState<VerticalRun[]>([]);
+  const [selectedVertical, setSelectedVertical] = useState<string | null>(null);
+  const [newRun, setNewRun] = useState({ date_started: "", geography: "", lead_count: "", notes: "" });
+  const [savingRun, setSavingRun] = useState(false);
+  const [deletingRunId, setDeletingRunId] = useState<string | null>(null);
   const [tam, setTam] = useState("");
   const [targetDailyEmails, setTargetDailyEmails] = useState("");
 
@@ -705,6 +721,7 @@ export default function ClientSettingsPage() {
     fetchHubspotSettings();
     fetchSlackSettings();
     fetchClientCampaigns();
+    fetchVerticalRuns();
 
     // Check if current user is admin
     const checkRole = async () => {
@@ -849,6 +866,56 @@ export default function ClientSettingsPage() {
       setError("Failed to load client");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchVerticalRuns = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/clients/${clientId}/vertical-runs`);
+      if (res.ok) {
+        const data = await res.json();
+        setVerticalRuns(data.vertical_runs || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch vertical runs:", err);
+    }
+  }, [clientId]);
+
+  const addVerticalRun = async () => {
+    if (!selectedVertical || !newRun.date_started) return;
+    setSavingRun(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/vertical-runs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vertical: selectedVertical,
+          date_started: newRun.date_started,
+          geography: newRun.geography || null,
+          lead_count: newRun.lead_count || null,
+          notes: newRun.notes || null,
+        }),
+      });
+      if (res.ok) {
+        setNewRun({ date_started: "", geography: "", lead_count: "", notes: "" });
+        await fetchVerticalRuns();
+      }
+    } catch (err) {
+      console.error("Failed to add vertical run:", err);
+    } finally {
+      setSavingRun(false);
+    }
+  };
+
+  const deleteVerticalRun = async (runId: string) => {
+    setDeletingRunId(runId);
+    try {
+      await fetch(`/api/clients/${clientId}/vertical-runs?id=${runId}`, { method: "DELETE" });
+      await fetchVerticalRuns();
+    } catch (err) {
+      console.error("Failed to delete vertical run:", err);
+    } finally {
+      setDeletingRunId(null);
     }
   };
 
@@ -1191,6 +1258,145 @@ export default function ClientSettingsPage() {
             />
             <p className="text-xs text-muted-foreground">Comma-separated list of industries</p>
           </div>
+
+          {/* Vertical Run History */}
+          {verticals && verticals.trim().length > 0 && (
+            <div className="space-y-3 pt-2">
+              <Label>Campaign Run History</Label>
+              <p className="text-xs text-muted-foreground -mt-1">Click a vertical to add or view past campaign runs</p>
+              <div className="flex flex-wrap gap-2">
+                {verticals.split(",").map(v => v.trim()).filter(v => v.length > 0).map((vertical) => {
+                  const runs = verticalRuns.filter(r => r.vertical === vertical);
+                  const isSelected = selectedVertical === vertical;
+                  return (
+                    <button
+                      key={vertical}
+                      onClick={() => setSelectedVertical(isSelected ? null : vertical)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors border ${
+                        isSelected
+                          ? "bg-blue-500/20 border-blue-500/40 text-blue-700 dark:text-blue-300"
+                          : runs.length > 0
+                          ? "bg-slate-200 dark:bg-slate-600 border-slate-300 dark:border-slate-500 text-slate-800 dark:text-slate-200"
+                          : "bg-secondary border-transparent text-secondary-foreground hover:bg-secondary/80"
+                      }`}
+                    >
+                      {vertical}
+                      {runs.length > 0 && (
+                        <span className="bg-slate-400/30 dark:bg-slate-500/40 text-[10px] px-1.5 py-0.5 rounded-full">
+                          {runs.length}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Selected vertical detail panel */}
+              {selectedVertical && (
+                <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold">{selectedVertical} — Run History</h4>
+                    <button onClick={() => setSelectedVertical(null)} className="text-muted-foreground hover:text-foreground">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {/* Existing runs */}
+                  {verticalRuns.filter(r => r.vertical === selectedVertical).length > 0 ? (
+                    <div className="space-y-2">
+                      {verticalRuns
+                        .filter(r => r.vertical === selectedVertical)
+                        .map((run) => (
+                          <div key={run.id} className="flex items-start justify-between bg-background rounded-md border px-3 py-2.5 text-sm">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-3">
+                                <span className="flex items-center gap-1 font-medium">
+                                  <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                                  {new Date(run.date_started).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                                </span>
+                                {run.geography && (
+                                  <span className="flex items-center gap-1 text-muted-foreground">
+                                    <MapPin className="h-3.5 w-3.5" />
+                                    {run.geography}
+                                  </span>
+                                )}
+                                {run.lead_count && (
+                                  <span className="text-muted-foreground">{run.lead_count.toLocaleString()} leads</span>
+                                )}
+                              </div>
+                              {run.notes && (
+                                <p className="text-xs text-muted-foreground mt-1">{run.notes}</p>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => deleteVerticalRun(run.id)}
+                              disabled={deletingRunId === run.id}
+                              className="text-muted-foreground hover:text-red-500 transition-colors ml-2 mt-0.5"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">No runs recorded yet for this vertical.</p>
+                  )}
+
+                  {/* Add new run form */}
+                  <div className="border-t pt-3 space-y-3">
+                    <p className="text-xs font-medium text-muted-foreground">Add New Run</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Date Started *</Label>
+                        <Input
+                          type="date"
+                          value={newRun.date_started}
+                          onChange={(e) => setNewRun(prev => ({ ...prev, date_started: e.target.value }))}
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Geography</Label>
+                        <Input
+                          value={newRun.geography}
+                          onChange={(e) => setNewRun(prev => ({ ...prev, geography: e.target.value }))}
+                          placeholder="e.g., Bayern, DE"
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Lead Count</Label>
+                        <Input
+                          type="number"
+                          value={newRun.lead_count}
+                          onChange={(e) => setNewRun(prev => ({ ...prev, lead_count: e.target.value }))}
+                          placeholder="e.g., 5000"
+                          className="text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Notes</Label>
+                      <Input
+                        value={newRun.notes}
+                        onChange={(e) => setNewRun(prev => ({ ...prev, notes: e.target.value }))}
+                        placeholder="e.g., Targeted Heizungsbauer in Bayern region"
+                        className="text-sm"
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={addVerticalRun}
+                      disabled={!newRun.date_started || savingRun}
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      {savingRun ? "Adding..." : "Add Run"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

@@ -54,6 +54,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -133,6 +138,17 @@ interface Lead {
   campaign_name: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface VerticalRun {
+  id: string;
+  client_id: string;
+  vertical: string;
+  date_started: string;
+  geography: string | null;
+  lead_count: number | null;
+  notes: string | null;
+  created_at: string;
 }
 
 interface LeadEmail {
@@ -219,6 +235,9 @@ export default function ClientDashboardPage() {
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [notesInput, setNotesInput] = useState("");
   const [highlightLeadId, setHighlightLeadId] = useState<string | null>(null);
+
+  // Vertical runs state
+  const [verticalRuns, setVerticalRuns] = useState<VerticalRun[]>([]);
 
   // Collapsible sections state
   const [showOffer, setShowOffer] = useState(false);
@@ -635,10 +654,11 @@ export default function ClientDashboardPage() {
     setError(null);
 
     try {
-      // Fetch client details and campaigns from local DB (fast)
-      const [clientRes, campaignsRes] = await Promise.all([
+      // Fetch client details, campaigns, and vertical runs from local DB (fast)
+      const [clientRes, campaignsRes, verticalRunsRes] = await Promise.all([
         fetch(`/api/clients/${clientId}`),
         fetch(`/api/clients/${clientId}/campaigns`), // Uses local Supabase data by default
+        fetch(`/api/clients/${clientId}/vertical-runs`),
       ]);
 
       if (!clientRes.ok) {
@@ -647,9 +667,11 @@ export default function ClientDashboardPage() {
 
       const clientData = await clientRes.json();
       const campaignsData = await campaignsRes.json();
+      const verticalRunsData = verticalRunsRes.ok ? await verticalRunsRes.json() : { vertical_runs: [] };
 
       setClient(clientData.client);
       setCampaigns(campaignsData.campaigns || []);
+      setVerticalRuns(verticalRunsData.vertical_runs || []);
       // Set client-wide stats
       if (campaignsData.clientStats) {
         setClientStats(campaignsData.clientStats);
@@ -986,11 +1008,67 @@ export default function ClientDashboardPage() {
                     <div className="flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                       <div className="flex flex-wrap gap-1">
-                        {client.verticals.map((vertical, index) => (
-                          <Badge key={index} variant="secondary" className="text-xs">
-                            {vertical}
-                          </Badge>
-                        ))}
+                        {client.verticals.map((vertical, index) => {
+                          const runs = verticalRuns.filter(r => r.vertical === vertical);
+                          const hasRuns = runs.length > 0;
+                          const hasActiveCampaign = campaigns.some(
+                            c => c.is_active && c.name.toLowerCase().includes(vertical.toLowerCase())
+                          );
+
+                          const badge = (
+                            <Badge
+                              key={index}
+                              variant="secondary"
+                              className={`text-xs transition-colors ${
+                                hasActiveCampaign
+                                  ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
+                                  : hasRuns
+                                  ? "bg-slate-300 dark:bg-slate-600 text-slate-800 dark:text-slate-200"
+                                  : ""
+                              }`}
+                            >
+                              {vertical}
+                            </Badge>
+                          );
+
+                          if (!hasRuns) return badge;
+
+                          return (
+                            <HoverCard key={index} openDelay={200} closeDelay={100}>
+                              <HoverCardTrigger asChild>
+                                {badge}
+                              </HoverCardTrigger>
+                              <HoverCardContent className="w-72 p-0" align="start">
+                                <div className="px-4 py-3 border-b">
+                                  <p className="text-sm font-semibold">{vertical}</p>
+                                  <p className="text-xs text-muted-foreground">{runs.length} campaign run{runs.length !== 1 ? "s" : ""}</p>
+                                </div>
+                                <div className="max-h-48 overflow-y-auto">
+                                  {runs.map((run) => (
+                                    <div key={run.id} className="px-4 py-2.5 border-b last:border-b-0 text-xs">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <span className="font-medium">
+                                          {new Date(run.date_started).toLocaleDateString("en-GB", {
+                                            day: "numeric", month: "short", year: "numeric"
+                                          })}
+                                        </span>
+                                        {run.lead_count && (
+                                          <span className="text-muted-foreground">{run.lead_count.toLocaleString()} leads</span>
+                                        )}
+                                      </div>
+                                      {run.geography && (
+                                        <p className="text-muted-foreground">{run.geography}</p>
+                                      )}
+                                      {run.notes && (
+                                        <p className="text-muted-foreground mt-1 italic">{run.notes}</p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </HoverCardContent>
+                            </HoverCard>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
