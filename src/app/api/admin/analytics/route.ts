@@ -125,18 +125,18 @@ export async function GET(request: NextRequest) {
 
       if (dailyError) {
         console.error("Error fetching daily analytics:", dailyError);
-        // Fall back to leads count
+        // Fall back to leads table with appropriate date fields
         let leadsQuery = supabase.from("leads").select("*", { count: "exact", head: true })
           .gte("created_at", dateRange.startDate.toISOString())
           .lte("created_at", dateRange.endDate.toISOString());
         let repliesQuery = supabase.from("leads").select("*", { count: "exact", head: true })
           .eq("has_replied", true)
-          .gte("created_at", dateRange.startDate.toISOString())
-          .lte("created_at", dateRange.endDate.toISOString());
+          .gte("responded_at", dateRange.startDate.toISOString())
+          .lte("responded_at", dateRange.endDate.toISOString());
         let positiveQuery = supabase.from("leads").select("*", { count: "exact", head: true })
           .eq("is_positive_reply", true)
-          .gte("created_at", dateRange.startDate.toISOString())
-          .lte("created_at", dateRange.endDate.toISOString());
+          .gte("updated_at", dateRange.startDate.toISOString())
+          .lte("updated_at", dateRange.endDate.toISOString());
 
         leadsQuery = leadsQuery.in("campaign_id", ownerCampaignIds);
         repliesQuery = repliesQuery.in("campaign_id", ownerCampaignIds);
@@ -156,19 +156,55 @@ export async function GET(request: NextRequest) {
         opportunities = dailyStats.reduce((sum, d) => sum + (d.positive_replies || 0), 0);
         leadsContacted = dailyStats.reduce((sum, d) => sum + (d.leads_contacted || 0), 0);
         dataSource = "daily_snapshots";
+
+        // Daily snapshots from webhooks may only have positive_replies populated
+        // (Smartlead campaigns skip the daily cron). Supplement with leads table data.
+        if (emailsSent === 0 || replies === 0) {
+          const startIso = dateRange.startDate.toISOString();
+          const endIso = dateRange.endDate.toISOString();
+
+          const [leadsRes, repliesRes, sentRes] = await Promise.all([
+            // Leads created in period
+            supabase.from("leads").select("*", { count: "exact", head: true })
+              .in("campaign_id", ownerCampaignIds)
+              .gte("created_at", startIso).lte("created_at", endIso),
+            // Leads that replied in period
+            supabase.from("leads").select("*", { count: "exact", head: true })
+              .in("campaign_id", ownerCampaignIds)
+              .eq("has_replied", true)
+              .gte("responded_at", startIso).lte("responded_at", endIso),
+            // Outbound emails sent in period
+            supabase.from("lead_emails").select("*", { count: "exact", head: true })
+              .in("campaign_id", ownerCampaignIds)
+              .eq("direction", "outbound")
+              .gte("sent_at", startIso).lte("sent_at", endIso),
+          ]);
+
+          if (emailsSent === 0) {
+            emailsSent = sentRes.count || 0;
+            leadsContacted = leadsRes.count || emailsSent;
+          }
+          if (replies === 0) {
+            replies = repliesRes.count || 0;
+          }
+          dataSource = "daily_snapshots_supplemented";
+        }
       } else {
-        // No daily data - fall back to leads count
+        // No daily data - fall back to leads table with appropriate date fields
+        // leads_contacted: leads first contacted in this period
         let leadsQuery = supabase.from("leads").select("*", { count: "exact", head: true })
           .gte("created_at", dateRange.startDate.toISOString())
           .lte("created_at", dateRange.endDate.toISOString());
+        // replies: leads that replied in this period (use responded_at, fall back to updated_at)
         let repliesQuery = supabase.from("leads").select("*", { count: "exact", head: true })
           .eq("has_replied", true)
-          .gte("created_at", dateRange.startDate.toISOString())
-          .lte("created_at", dateRange.endDate.toISOString());
+          .gte("responded_at", dateRange.startDate.toISOString())
+          .lte("responded_at", dateRange.endDate.toISOString());
+        // positive: leads marked positive in this period (use updated_at since is_positive_reply is set on update)
         let positiveQuery = supabase.from("leads").select("*", { count: "exact", head: true })
           .eq("is_positive_reply", true)
-          .gte("created_at", dateRange.startDate.toISOString())
-          .lte("created_at", dateRange.endDate.toISOString());
+          .gte("updated_at", dateRange.startDate.toISOString())
+          .lte("updated_at", dateRange.endDate.toISOString());
 
         leadsQuery = leadsQuery.in("campaign_id", ownerCampaignIds);
         repliesQuery = repliesQuery.in("campaign_id", ownerCampaignIds);
