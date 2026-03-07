@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Key, Check, RefreshCw, Eye, EyeOff, Upload, ArrowLeft, Image as ImageIcon, Building2, Palette, Mail, Globe } from "lucide-react";
+import { Settings, Key, Check, RefreshCw, Eye, EyeOff, Upload, ArrowLeft, Image as ImageIcon, Building2, Palette, Mail, Globe, Trash2 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -53,6 +53,7 @@ export default function SettingsPage() {
   const [loadingAgencies, setLoadingAgencies] = useState(true);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [viewingAs, setViewingAs] = useState<string | null>(null);
+  const [deletingAgency, setDeletingAgency] = useState<string | null>(null);
 
 
   const fetchSettings = async () => {
@@ -126,6 +127,39 @@ export default function SettingsPage() {
       console.error("Error fetching agencies:", error);
     } finally {
       setLoadingAgencies(false);
+    }
+  };
+
+  const handleDeleteAgency = async (agency: Agency) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${agency.name || agency.email}?\n\nThis will permanently delete:\n- Their profile and auth account\n- ${agency.clientCount} client(s) and all associated data\n- All campaigns, leads, and emails\n\nThis action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    // Double confirm for safety
+    const doubleConfirm = window.confirm(
+      `FINAL CONFIRMATION: Delete ${agency.name || agency.email} and ALL their data permanently?`
+    );
+    if (!doubleConfirm) return;
+
+    setDeletingAgency(agency.id);
+    try {
+      const res = await fetch("/api/admin/agencies", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agencyId: agency.id }),
+      });
+      if (res.ok) {
+        setAgencies((prev) => prev.filter((a) => a.id !== agency.id));
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to delete agency");
+      }
+    } catch (error) {
+      console.error("Error deleting agency:", error);
+      alert("Failed to delete agency");
+    } finally {
+      setDeletingAgency(null);
     }
   };
 
@@ -308,19 +342,34 @@ export default function SettingsPage() {
                         Joined {new Date(agency.createdAt).toLocaleDateString()}
                       </span>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewDashboard(agency.id)}
-                      disabled={viewingAs === agency.id}
-                    >
-                      {viewingAs === agency.id ? (
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Eye className="h-4 w-4 mr-2" />
-                      )}
-                      View Dashboard
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewDashboard(agency.id)}
+                        disabled={viewingAs === agency.id}
+                      >
+                        {viewingAs === agency.id ? (
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Eye className="h-4 w-4 mr-2" />
+                        )}
+                        View Dashboard
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteAgency(agency)}
+                        disabled={deletingAgency === agency.id}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950 border-red-200 dark:border-red-800"
+                      >
+                        {deletingAgency === agency.id ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
