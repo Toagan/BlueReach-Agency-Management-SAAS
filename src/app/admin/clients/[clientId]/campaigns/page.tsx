@@ -37,10 +37,10 @@ export default async function CampaignsPage({ params }: PageProps) {
       <div className="flex justify-between items-center">
         <div>
           <Link
-            href="/admin/clients"
+            href={`/admin/clients/${clientId}`}
             className="text-sm text-blue-600 hover:underline"
           >
-            &larr; Back to Clients
+            &larr; Back to {client.name}
           </Link>
           <h1 className="text-2xl font-bold mt-2">{client.name}</h1>
           <p className="text-gray-500">Manage campaigns for this client</p>
