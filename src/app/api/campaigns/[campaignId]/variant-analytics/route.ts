@@ -315,7 +315,7 @@ export async function GET(
     // Note: has_replied may include false positives from "completed" status
     const { data: leadStats, error: leadError } = await supabase
       .from("leads")
-      .select("reply_from_step, reply_from_variant, reply_from_variant_label, is_positive_reply, email_reply_count")
+      .select("id, reply_from_step, reply_from_variant, reply_from_variant_label, is_positive_reply, email_reply_count")
       .eq("campaign_id", campaignId)
       .or("email_reply_count.gt.0,is_positive_reply.eq.true");
 
@@ -323,24 +323,63 @@ export async function GET(
       console.error("[VariantAnalytics] Error fetching lead stats:", leadError);
     }
 
+    // For leads without reply_from_step, try to infer variant from their outbound emails
+    const untrackedLeadIds = (leadStats || [])
+      .filter((lead) => lead.reply_from_step === null)
+      .map((lead) => lead.id);
+
+    const outboundEmailMap = new Map<string, { step: number; variantId: number | null; variantLabel: string }>();
+
+    if (untrackedLeadIds.length > 0) {
+      // Fetch the most recent outbound email for each untracked lead
+      const { data: outboundEmails } = await supabase
+        .from("lead_emails")
+        .select("lead_id, sequence_step, sequence_variant, sequence_variant_label, sent_at")
+        .eq("campaign_id", campaignId)
+        .eq("direction", "outbound")
+        .in("lead_id", untrackedLeadIds)
+        .not("sequence_step", "is", null)
+        .order("sent_at", { ascending: false });
+
+      // Keep only the most recent outbound email per lead
+      for (const email of outboundEmails || []) {
+        if (!outboundEmailMap.has(email.lead_id)) {
+          outboundEmailMap.set(email.lead_id, {
+            step: email.sequence_step,
+            variantId: email.sequence_variant,
+            variantLabel: email.sequence_variant_label || "Unknown",
+          });
+        }
+      }
+    }
+
     // Count replies and positive replies per step/variant
-    // Also track untracked replies (those without reply_from_step)
+    // Also track untracked replies (those without reply_from_step and no outbound email match)
     let untrackedReplies = 0;
     let untrackedPositiveReplies = 0;
 
     (leadStats || []).forEach((lead) => {
-      if (lead.reply_from_step === null) {
-        // Track replies that couldn't be attributed to a specific variant
-        untrackedReplies++;
-        if (lead.is_positive_reply) {
-          untrackedPositiveReplies++;
+      let step = lead.reply_from_step;
+      let variant = lead.reply_from_variant_label || "Unknown";
+      let variantId = lead.reply_from_variant;
+
+      if (step === null) {
+        // Try to infer from outbound emails
+        const outbound = outboundEmailMap.get(lead.id);
+        if (outbound) {
+          step = outbound.step;
+          variantId = outbound.variantId;
+          variant = outbound.variantLabel;
+        } else {
+          // No outbound email found — truly untracked
+          untrackedReplies++;
+          if (lead.is_positive_reply) {
+            untrackedPositiveReplies++;
+          }
+          return;
         }
-        return;
       }
 
-      const step = lead.reply_from_step;
-      const variant = lead.reply_from_variant_label || "Unknown";
-      const variantId = lead.reply_from_variant;
       const key = `${step}-${variant}`;
 
       let stats = variantMap.get(key);
