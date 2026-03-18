@@ -109,7 +109,12 @@ export async function GET(request: Request, { params }: RouteParams) {
       // Use cached values from campaign sync
       // IMPORTANT: Use nullish coalescing (??) not OR (||) to preserve 0 values
       // If cached_emails_sent is 0, we should show 0, not fall back to leads_count
-      const emailsSent = campaign.cached_emails_sent ?? 0;
+      // Cap emails_sent to leads_count — provider APIs count multi-step sequence emails
+      // but we want to show unique leads contacted
+      const rawEmailsSent = campaign.cached_emails_sent ?? 0;
+      const emailsSent = localStats.leads_count > 0
+        ? Math.min(rawEmailsSent, localStats.leads_count)
+        : rawEmailsSent;
       const repliesCount = campaign.cached_reply_count ?? localStats.replied_count;
       const bounced = campaign.cached_emails_bounced ?? 0;
       const opened = campaign.cached_emails_opened ?? 0;

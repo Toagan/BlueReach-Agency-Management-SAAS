@@ -259,6 +259,18 @@ export async function GET(request: Request, { params }: RouteParams) {
       }
     }
 
+    // Cap emails_sent to leads_count — provider APIs count multi-step sequence emails
+    // but we want to show unique leads contacted
+    if (analytics.leads_count > 0 && analytics.emails_sent > analytics.leads_count) {
+      analytics.emails_sent = analytics.leads_count;
+      // Recalculate rates with corrected emails_sent
+      if (analytics.emails_sent > 0) {
+        analytics.reply_rate = analytics.emails_replied / analytics.emails_sent;
+        analytics.bounce_rate = analytics.emails_bounced / analytics.emails_sent;
+        analytics.open_rate = analytics.emails_opened / analytics.emails_sent;
+      }
+    }
+
     return NextResponse.json({
       campaign: updatedCampaign,
       analytics,
