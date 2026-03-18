@@ -440,21 +440,21 @@ export function AddCampaignDialog({ clientId }: AddCampaignDialogProps) {
                       </div>
                     ) : (
                       <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
-                        <SelectTrigger className="mt-1">
-                          <SelectValue placeholder="Choose a campaign..." />
+                        <SelectTrigger className="mt-1 w-full min-w-0">
+                          <SelectValue placeholder="Choose a campaign..." className="truncate" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="max-w-[calc(var(--radix-select-trigger-width))] overflow-hidden">
                           {availableCampaigns.map((campaign) => (
                             <SelectItem key={campaign.id} value={campaign.id}>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
                                 <span
-                                  className={`w-2 h-2 rounded-full ${
+                                  className={`w-2 h-2 rounded-full shrink-0 ${
                                     campaign.status === "active" ? "bg-green-500" : "bg-gray-400"
                                   }`}
                                 />
-                                {campaign.name}
+                                <span className="truncate">{campaign.name}</span>
                                 {campaign.leadsCount !== undefined && (
-                                  <span className="text-gray-400 text-xs">({campaign.leadsCount} leads)</span>
+                                  <span className="text-gray-400 text-xs shrink-0">({campaign.leadsCount} leads)</span>
                                 )}
                               </div>
                             </SelectItem>
