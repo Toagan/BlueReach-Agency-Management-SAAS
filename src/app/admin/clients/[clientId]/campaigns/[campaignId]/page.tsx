@@ -26,6 +26,8 @@ import {
   Code,
   FileDown,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Sparkles,
 } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
@@ -119,6 +121,10 @@ export default function CampaignDetailPage() {
   const [client, setClient] = useState<ClientData | null>(null);
   const [analytics, setAnalytics] = useState<CampaignAnalytics | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [leadsPage, setLeadsPage] = useState(1);
+  const [leadsTotalPages, setLeadsTotalPages] = useState(1);
+  const [leadsTotal, setLeadsTotal] = useState(0);
+  const [loadingLeads, setLoadingLeads] = useState(false);
   const [sequences, setSequences] = useState<CampaignSequence[]>([]);
   const copyReview = useCopyReview(campaignId);
   const [loading, setLoading] = useState(true);
@@ -385,6 +391,10 @@ export default function CampaignDetailPage() {
       setAnalytics(campaignData.analytics);
       setClient(clientData.client);
       setLeads(leadsData.leads || []);
+      if (leadsData.pagination) {
+        setLeadsTotalPages(leadsData.pagination.totalPages);
+        setLeadsTotal(leadsData.pagination.total);
+      }
       setSequences(sequencesData.sequences || []);
       setLastUpdated(new Date());
     } catch (err) {
@@ -393,6 +403,25 @@ export default function CampaignDetailPage() {
       setLoading(false);
     }
   }, [campaignId, clientId]);
+
+  // Fetch leads for a specific page
+  const fetchLeadsPage = async (page: number) => {
+    setLoadingLeads(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/leads?page=${page}&limit=50`);
+      const data = await res.json();
+      setLeads(data.leads || []);
+      setLeadsPage(page);
+      if (data.pagination) {
+        setLeadsTotalPages(data.pagination.totalPages);
+        setLeadsTotal(data.pagination.total);
+      }
+    } catch (err) {
+      console.error("Error fetching leads page:", err);
+    } finally {
+      setLoadingLeads(false);
+    }
+  };
 
   // Save campaign name
   const handleSaveName = async () => {
@@ -709,7 +738,7 @@ export default function CampaignDetailPage() {
   const positiveLeads = leads.filter(l => l.is_positive_reply);
   const repliedLeads = leads.filter(l => l.has_replied && !l.is_positive_reply);
   const noReplyLeads = leads.filter(l => !l.has_replied);
-  const recentLeads = leads.slice(0, 10);
+  const LEADS_PER_PAGE = 50;
 
   return (
     <div className="space-y-6">
@@ -1392,14 +1421,20 @@ export default function CampaignDetailPage() {
         </Card>
       )}
 
-      {/* Recent Leads */}
-      {recentLeads.length > 0 && (
+      {/* All Leads */}
+      {leads.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Recent Leads
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Leads
+                <span className="text-sm font-normal text-muted-foreground">
+                  ({leadsTotal.toLocaleString()} total)
+                </span>
+              </CardTitle>
+              {loadingLeads && <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -1414,7 +1449,7 @@ export default function CampaignDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {recentLeads.map((lead) => (
+                  {leads.map((lead) => (
                     <tr key={lead.id} className="border-b last:border-0">
                       <td className="py-2">{lead.email}</td>
                       <td className="py-2">
@@ -1437,6 +1472,38 @@ export default function CampaignDetailPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination */}
+            {leadsTotalPages > 1 && (
+              <div className="flex items-center justify-between pt-4 border-t mt-4">
+                <p className="text-sm text-muted-foreground">
+                  Showing {((leadsPage - 1) * LEADS_PER_PAGE) + 1}–{Math.min(leadsPage * LEADS_PER_PAGE, leadsTotal)} of {leadsTotal.toLocaleString()}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchLeadsPage(leadsPage - 1)}
+                    disabled={leadsPage <= 1 || loadingLeads}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground px-2">
+                    Page {leadsPage} of {leadsTotalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchLeadsPage(leadsPage + 1)}
+                    disabled={leadsPage >= leadsTotalPages || loadingLeads}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
