@@ -127,6 +127,9 @@ export default function ClientSettingsPage() {
   const [savingStatsSettings, setSavingStatsSettings] = useState(false);
   const [sendingTestReport, setSendingTestReport] = useState(false);
 
+  // CRM provider selection
+  const [selectedCrm, setSelectedCrm] = useState<string>("hubspot");
+
   // HubSpot settings
   const [hubspotEnabled, setHubspotEnabled] = useState(false);
   const [hubspotHasToken, setHubspotHasToken] = useState(false);
@@ -1946,6 +1949,70 @@ export default function ClientSettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* CRM Provider Selection */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { id: "hubspot", name: "HubSpot", icon: (
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18.164 7.93V5.084a2.198 2.198 0 001.267-1.984 2.21 2.21 0 00-4.42 0c0 .873.514 1.626 1.254 1.984v2.846c-.87.162-1.64.549-2.255 1.114l-7.12-5.548a2.206 2.206 0 00-4.678 1.004 2.2 2.2 0 001.947 2.185v5.63A2.2 2.2 0 002.212 14.5a2.21 2.21 0 004.42 0c0-.685-.321-1.3-.82-1.699v-5.63a2.19 2.19 0 00.82-3.099l7.12 5.548a3.631 3.631 0 00-.487 1.816 3.65 3.65 0 003.645 3.646 3.65 3.65 0 003.645-3.646 3.646 3.646 0 00-2.39-3.436z"/>
+                </svg>
+              )},
+              { id: "salesforce", name: "Salesforce", icon: (
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M10.006 5.415a4.195 4.195 0 013.045-1.306c1.56 0 2.954.9 3.69 2.205a4.69 4.69 0 011.988-.44c2.681 0 4.86 2.212 4.86 4.94 0 2.73-2.179 4.942-4.86 4.942a4.85 4.85 0 01-.96-.096 3.63 3.63 0 01-3.222 1.965 3.6 3.6 0 01-1.603-.373 4.23 4.23 0 01-3.9 2.588c-1.944 0-3.615-1.322-4.12-3.21a3.96 3.96 0 01-.67.058c-2.248 0-4.07-1.857-4.07-4.148 0-1.626.93-3.032 2.28-3.717A4.395 4.395 0 016.87 5.37a4.37 4.37 0 013.136 .045z"/>
+                </svg>
+              )},
+              { id: "close", name: "Close", icon: (
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M3 3h18v18H3V3zm2 2v14h14V5H5zm3.5 3.5l2.5 2.5 2.5-2.5L15 10l-2.5 2.5L15 15l-1.5 1.5L11 14l-2.5 2.5L7 15l2.5-2.5L7 10l1.5-1.5z"/>
+                </svg>
+              )},
+              { id: "pipedrive", name: "Pipedrive", icon: (
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 4a3 3 0 013 3v2a3 3 0 01-6 0V9a3 3 0 013-3zm0 12a1.5 1.5 0 01-1.5-1.5v-3a1.5 1.5 0 013 0v3A1.5 1.5 0 0112 18z"/>
+                </svg>
+              )},
+            ].map((crm) => (
+              <button
+                key={crm.id}
+                onClick={() => setSelectedCrm(crm.id)}
+                className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-colors ${
+                  selectedCrm === crm.id
+                    ? "border-primary bg-primary/5"
+                    : "border-transparent bg-muted/30 hover:bg-muted/50"
+                }`}
+              >
+                <div className={selectedCrm === crm.id ? "text-primary" : "text-muted-foreground"}>
+                  {crm.icon}
+                </div>
+                <span className={`text-xs font-medium ${selectedCrm === crm.id ? "text-primary" : "text-muted-foreground"}`}>
+                  {crm.name}
+                </span>
+                {crm.id !== "hubspot" && (
+                  <span className="text-[10px] text-muted-foreground/60">Coming soon</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Coming Soon Message for non-HubSpot CRMs */}
+          {selectedCrm !== "hubspot" && (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <div className="p-3 rounded-full bg-muted/50 mb-3">
+                <Zap className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <p className="text-sm font-medium">
+                {selectedCrm === "salesforce" ? "Salesforce" : selectedCrm === "close" ? "Close" : "Pipedrive"} integration coming soon
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                We&apos;re working on it. For now, you can use the HubSpot integration.
+              </p>
+            </div>
+          )}
+
+          {/* HubSpot Integration (only shown when HubSpot is selected) */}
+          {selectedCrm === "hubspot" && (
+          <>
           {loadingHubspot ? (
             <div className="flex items-center justify-center py-4">
               <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -2557,6 +2624,8 @@ export default function ClientSettingsPage() {
                 )}
               </div>
             </>
+          )}
+          </>
           )}
         </CardContent>
       </Card>}
