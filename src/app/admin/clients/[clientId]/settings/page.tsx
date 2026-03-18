@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users, Bell, BarChart3, Send, Zap, Link2, Unlink, Hash, Plus, MapPin, CalendarDays } from "lucide-react";
+import { ArrowLeft, Upload, Save, Check, AlertCircle, RefreshCw, Trash2, UserPlus, Mail, X, Users, Bell, BarChart3, Send, Zap, Link2, Unlink, Hash, Plus, MapPin, CalendarDays, Bot, BookOpen, Calendar } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -2629,6 +2629,80 @@ export default function ClientSettingsPage() {
           )}
         </CardContent>
       </Card>}
+
+      {/* Automated Positive Reply Management */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-5 w-5" />
+                Automated Positive Reply Management
+              </CardTitle>
+              <CardDescription>
+                Automatically respond to positive replies with an AI assistant tailored to this client
+              </CardDescription>
+            </div>
+            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+              Coming Soon
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              When a lead replies positively, an AI assistant will automatically craft a personalized follow-up response and guide them towards booking a meeting.
+            </p>
+
+            <div className="grid gap-3">
+              {/* Knowledge Base */}
+              <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/20">
+                <div className="p-2 rounded-md bg-muted">
+                  <BookOpen className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">Custom Knowledge Base</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Upload or write information about services, pricing, FAQs, and tone of voice so the AI responds accurately on behalf of this client.
+                  </p>
+                </div>
+              </div>
+
+              {/* Meeting Link */}
+              <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/20">
+                <div className="p-2 rounded-md bg-muted">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">Meeting Booking Link</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Provide a Calendly, Cal.com, or custom scheduling link that the AI will share when a lead is ready to book a call.
+                  </p>
+                </div>
+              </div>
+
+              {/* AI Response */}
+              <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/20">
+                <div className="p-2 rounded-md bg-muted">
+                  <Bot className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">AI-Powered Responses</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    The assistant reads the full email thread, crafts a contextual reply, and follows up until a meeting is booked or the lead disengages.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {isAdmin && (
+              <p className="text-xs text-muted-foreground pt-2 border-t">
+                This feature will be configurable by the agency owner. Clients will be able to view the status and knowledge base but not edit it.
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Save Button */}
       {isAdmin && (
