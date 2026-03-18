@@ -22,11 +22,11 @@ export async function GET(request: Request, { params }: RouteParams) {
   const ownerId = await getClientOwnerId(clientId);
 
   try {
-    // Get admin users (always can receive notifications)
+    // Get the workspace admin (client owner) only
     const { data: adminProfiles } = await supabase
       .from("profiles")
       .select("id, email, full_name, role")
-      .eq("role", "admin");
+      .eq("id", ownerId!);
 
     // Get users linked to this specific client with their client-specific role
     const { data: clientUsers } = await supabase
@@ -144,12 +144,10 @@ export async function POST(request: Request, { params }: RouteParams) {
         enabledUserIds = [];
       }
     } else {
-      // If no setting exists yet, start with all admins
-      const { data: adminProfiles } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("role", "admin");
-      enabledUserIds = adminProfiles?.map((p) => p.id) || [];
+      // If no setting exists yet, start with the client owner only
+      if (ownerId) {
+        enabledUserIds = [ownerId];
+      }
     }
 
     // Update the list
