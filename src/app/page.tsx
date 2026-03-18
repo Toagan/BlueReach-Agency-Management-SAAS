@@ -429,21 +429,24 @@ export default async function Home() {
                   author: "Marcus Chen",
                   role: "Founder",
                   company: "Pipeline Pros",
-                  image: "/testimonial-1.jpg",
+                  initials: "MC",
+                  gradient: "from-blue-500 to-indigo-600",
                 },
                 {
                   quote: "The Slack + HubSpot automation alone saved us. Every positive reply used to mean 10 minutes of manual CRM entry. Now it happens before I even open the notification.",
                   author: "Jessica Walters",
                   role: "CEO",
                   company: "Outbound Studio",
-                  image: "/testimonial-2.jpg",
+                  initials: "JW",
+                  gradient: "from-emerald-500 to-teal-600",
                 },
                 {
                   quote: "Our clients kept asking 'how's the campaign going?' Now they just log in. Churn dropped, upsells went up, and I stopped dreading Friday report day.",
                   author: "Daniel Okafor",
                   role: "Agency Owner",
                   company: "RevenueFlow Agency",
-                  image: "/testimonial-3.jpg",
+                  initials: "DO",
+                  gradient: "from-violet-500 to-purple-600",
                 },
               ].map((testimonial, i) => (
                 <article key={i} className="p-6 sm:p-8 rounded-2xl bg-white/[0.02] border border-white/5">
@@ -456,7 +459,7 @@ export default async function Home() {
                   </div>
                   <p className="text-zinc-300 leading-relaxed mb-6">&ldquo;{testimonial.quote}&rdquo;</p>
                   <div className="flex items-center gap-3">
-                    <Image src={testimonial.image} alt={testimonial.author} width={40} height={40} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                    <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${testimonial.gradient} flex items-center justify-center text-white font-semibold text-sm shrink-0`}>{testimonial.initials}</div>
                     <div>
                       <p className="font-semibold text-white">{testimonial.author}</p>
                       <p className="text-sm text-zinc-500">{testimonial.role}, {testimonial.company}</p>

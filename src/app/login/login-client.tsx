@@ -220,7 +220,7 @@ export function LoginClient() {
                   &ldquo;We went from 8 clients to 23 in four months without adding headcount. Before Blue Reach, scaling meant hiring another ops person just to handle reporting. Now it runs itself.&rdquo;
                 </p>
                 <div className="flex items-center gap-3">
-                  <Image src="/testimonial-1.jpg" alt="Marcus Chen" width={48} height={48} className="w-12 h-12 rounded-full object-cover" />
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm shrink-0">MC</div>
                   <div>
                     <p className="font-semibold text-white">Marcus Chen</p>
                     <p className="text-sm text-zinc-500">Founder, Pipeline Pros</p>
