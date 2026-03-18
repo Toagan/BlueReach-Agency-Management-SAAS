@@ -29,20 +29,23 @@ export async function GET() {
       throw profilesError;
     }
 
-    // Get client counts for each agency owner
+    // Get client counts and join dates for each agency owner
     const agencies = await Promise.all(
       (profiles || []).map(async (profile) => {
-        const { count } = await supabase
-          .from("clients")
-          .select("*", { count: "exact", head: true })
-          .eq("owner_id", profile.id);
+        const [{ count }, { data: authUser }] = await Promise.all([
+          supabase
+            .from("clients")
+            .select("*", { count: "exact", head: true })
+            .eq("owner_id", profile.id),
+          supabase.auth.admin.getUserById(profile.id),
+        ]);
 
         return {
           id: profile.id,
           email: profile.email,
           name: profile.full_name,
           clientCount: count || 0,
-          createdAt: null,
+          createdAt: authUser?.user?.created_at || null,
         };
       })
     );

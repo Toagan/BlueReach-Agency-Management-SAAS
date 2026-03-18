@@ -339,7 +339,7 @@ export default function SettingsPage() {
                         {agency.clientCount} {agency.clientCount === 1 ? "client" : "clients"}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
-                        Joined {new Date(agency.createdAt).toLocaleDateString()}
+                        {agency.createdAt ? `Joined ${new Date(agency.createdAt).toLocaleDateString()}` : ""}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
