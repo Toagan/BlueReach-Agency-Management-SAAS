@@ -207,6 +207,16 @@ export interface SendPositiveReplyNotificationParams {
 
 function stripHtmlToPlainText(html: string): string {
   return html
+    // Remove style/head/script blocks entirely (including content)
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    // Remove XML/VML conditional comments (Outlook)
+    .replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, "")
+    .replace(/<!\[if[\s\S]*?<!\[endif\]>/gi, "")
+    // Remove XML namespace declarations
+    .replace(/<xml[\s\S]*?<\/xml>/gi, "")
+    .replace(/<o:p[\s\S]*?<\/o:p>/gi, "")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>/gi, "\n\n")
     .replace(/<\/div>/gi, "\n")
@@ -217,6 +227,9 @@ function stripHtmlToPlainText(html: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    // Clean up VML/CSS artifacts that may remain
+    .replace(/[a-z]\\?:\*\s*\{[^}]*\}/gi, "")
+    .replace(/\.shape\s*\{[^}]*\}/gi, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
@@ -276,6 +289,10 @@ function extractOwnContent(email: EmailThreadMessage): string {
     }
     // Outlook separator
     if (/^_{5,}$/.test(line)) {
+      return lines.slice(0, i).join("\n").replace(/\n{2,}$/g, "").trim();
+    }
+    // Outlook "From:" / "De:" header block (multi-language)
+    if (/^(From|De|Von|Da|Van|Fra|Från|Od):\s+.+/i.test(line) && i + 1 < lines.length && /^(Sent|Enviada em|Gesendet|Inviato|Verzonden|Sendt|Skickat|Wysłano):\s+/i.test(lines[i + 1].trim())) {
       return lines.slice(0, i).join("\n").replace(/\n{2,}$/g, "").trim();
     }
     // Block of > quoted lines (at least 2 consecutive)
