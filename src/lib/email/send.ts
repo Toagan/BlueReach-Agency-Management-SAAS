@@ -249,9 +249,22 @@ function getReplySubject(params: ComposeUrlParams): string {
   return `Re: ${subject}`;
 }
 
+function cleanPlainText(text: string): string {
+  return text
+    // Remove VML/CSS artifact lines (e.g. "v\:* {behavior:url(#default#VML);}")
+    .replace(/^[a-z\\]+:\*\s*\{[^}]*\}\s*$/gm, "")
+    .replace(/^\.[a-z]+\s*\{[^}]*\}\s*$/gm, "")
+    // Remove leftover XML namespace declarations
+    .replace(/^<\/?[ovw]:[^>]*>\s*$/gm, "")
+    // Collapse excessive blank lines
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function getMessageBody(email: EmailThreadMessage): string {
-  return email.body_text
+  const raw = email.body_text
     || (email.body_html ? stripHtmlToPlainText(email.body_html) : "");
+  return cleanPlainText(raw);
 }
 
 /**
