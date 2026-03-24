@@ -173,8 +173,25 @@ export async function GET(
       }
     }
 
+    // 5.5. Fetch sample leads with real data for filled-in examples
+    const { data: sampleLeads } = await supabase
+      .from("leads")
+      .select("first_name, last_name, company_name, company_domain, personalization, metadata")
+      .eq("campaign_id", campaignId)
+      .not("first_name", "is", null)
+      .not("first_name", "eq", "")
+      .limit(50);
+
+    // Pick 2 diverse samples (one with company, one without if possible)
+    const samplesWithCompany = (sampleLeads || []).filter(l => l.company_name);
+    const samplesWithoutCompany = (sampleLeads || []).filter(l => !l.company_name);
+    const selectedSamples = [
+      ...(samplesWithCompany.length > 0 ? [samplesWithCompany[0]] : []),
+      ...(samplesWithoutCompany.length > 0 ? [samplesWithoutCompany[0]] : samplesWithCompany.length > 1 ? [samplesWithCompany[1]] : []),
+    ].slice(0, 2);
+
     // 6. Generate the skill file content
-    const skillContent = generateSkillFile(campaign, client, sequences, performanceData, bestPerStep);
+    const skillContent = generateSkillFile(campaign, client, sequences, performanceData, bestPerStep, selectedSamples);
 
     // 7. Return as downloadable file
     const filename = `${campaign.name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-ab-optimizer.md`;
@@ -192,6 +209,15 @@ export async function GET(
       { status: 500 }
     );
   }
+}
+
+interface SampleLead {
+  first_name: string | null;
+  last_name: string | null;
+  company_name: string | null;
+  company_domain: string | null;
+  personalization: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 function generateSkillFile(
@@ -215,7 +241,8 @@ function generateSkillFile(
   },
   sequences: SequenceData[],
   performanceData: VariantPerformance[],
-  bestPerStep: Map<number, VariantPerformance>
+  bestPerStep: Map<number, VariantPerformance>,
+  sampleLeads: SampleLead[] = []
 ): string {
   // Group sequences by step
   const stepGroups = new Map<number, typeof sequences>();
@@ -306,6 +333,73 @@ ${client.notes ? `**Notes:** ${client.notes}` : ""}
       content += `\n**Variant ${variant.variant}${isBest ? " - TOP PERFORMER" : ""}**\n`;
       content += `Subject: ${variant.subject || "(No subject)"}\n`;
       content += `\n${stripHtml(variant.body_html) || variant.body_text || "(No body)"}\n`;
+    }
+  }
+
+  // Add filled-in examples using real lead data
+  if (sampleLeads.length > 0 && sequences.length > 0) {
+    content += `
+---
+
+## Example Emails (Variables Filled In)
+
+Here's how the top-performing copy looks when sent to real leads:
+`;
+
+    // Use the best performing variant, or first variant if no performance data
+    const bestVariantSeq = bestPerStep.size > 0
+      ? sequences.find(s => {
+          const best = bestPerStep.get(s.step_number);
+          return best && s.variant === best.variant;
+        })
+      : null;
+    const exampleSeq = bestVariantSeq || sequences[0];
+
+    if (exampleSeq) {
+      for (let i = 0; i < sampleLeads.length; i++) {
+        const lead = sampleLeads[i];
+        const firstName = lead.first_name || "Sehr geehrte Damen und Herren";
+        const companyName = lead.company_name || "";
+        const metadata = lead.metadata || {};
+
+        // Fill in the template variables
+        let filledSubject = exampleSeq.subject || "";
+        let filledBody = stripHtml(exampleSeq.body_html) || exampleSeq.body_text || "";
+
+        // Replace common variable patterns
+        const replacements: [RegExp, string][] = [
+          [/\{\{first_name\}\}/gi, firstName],
+          [/\{\{firstName\}\}/gi, firstName],
+          [/\{\{last_name\}\}/gi, lead.last_name || ""],
+          [/\{\{lastName\}\}/gi, lead.last_name || ""],
+          [/\{\{company_name\}\}/gi, companyName],
+          [/\{\{companyName\}\}/gi, companyName],
+          [/\{\{company\}\}/gi, companyName],
+          [/\{\{1st line\}\}/gi, lead.personalization || ""],
+          [/\{\{website\}\}/gi, lead.company_domain || ""],
+        ];
+
+        // Also replace any custom metadata variables
+        if (metadata && typeof metadata === "object") {
+          for (const [key, value] of Object.entries(metadata)) {
+            if (typeof value === "string") {
+              replacements.push([new RegExp(`\\{\\{${key}\\}\\}`, "gi"), value]);
+            }
+          }
+        }
+
+        for (const [pattern, replacement] of replacements) {
+          filledSubject = filledSubject.replace(pattern, replacement);
+          filledBody = filledBody.replace(pattern, replacement);
+        }
+
+        content += `
+### Example ${i + 1}${companyName ? ` (${companyName})` : ""}
+**Subject:** ${filledSubject}
+
+${filledBody}
+`;
+      }
     }
   }
 
