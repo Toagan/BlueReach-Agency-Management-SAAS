@@ -182,13 +182,22 @@ export async function GET(
       .not("first_name", "eq", "")
       .limit(50);
 
-    // Pick 2 diverse samples (one with company, one without if possible)
-    const samplesWithCompany = (sampleLeads || []).filter(l => l.company_name);
-    const samplesWithoutCompany = (sampleLeads || []).filter(l => !l.company_name);
-    const selectedSamples = [
-      ...(samplesWithCompany.length > 0 ? [samplesWithCompany[0]] : []),
-      ...(samplesWithoutCompany.length > 0 ? [samplesWithoutCompany[0]] : samplesWithCompany.length > 1 ? [samplesWithCompany[1]] : []),
-    ].slice(0, 2);
+    // Pick 2 samples that have the most custom variables filled in
+    const scoredLeads = (sampleLeads || []).map(l => {
+      const meta = (l.metadata || {}) as Record<string, unknown>;
+      const rawData = (meta.rawData || {}) as Record<string, unknown>;
+      const customFields = (meta.customFields || rawData.custom_fields || {}) as Record<string, string>;
+      // Score by number of non-empty custom fields + location + company
+      let score = 0;
+      if (l.company_name) score += 1;
+      if (rawData.location) score += 2;
+      for (const val of Object.values(customFields)) {
+        if (val) score += 2;
+      }
+      return { lead: l, score };
+    }).sort((a, b) => b.score - a.score);
+
+    const selectedSamples = scoredLeads.slice(0, 2).map(s => s.lead);
 
     // 6. Generate the skill file content
     const skillContent = generateSkillFile(campaign, client, sequences, performanceData, bestPerStep, selectedSamples);
@@ -358,43 +367,61 @@ Here's how the top-performing copy looks when sent to real leads:
     if (exampleSeq) {
       for (let i = 0; i < sampleLeads.length; i++) {
         const lead = sampleLeads[i];
-        const firstName = lead.first_name || "Sehr geehrte Damen und Herren";
-        const companyName = lead.company_name || "";
-        const metadata = lead.metadata || {};
+        const metadata = (lead.metadata || {}) as Record<string, unknown>;
+        const rawData = (metadata.rawData || {}) as Record<string, unknown>;
+        const customFields = (metadata.customFields || rawData.custom_fields || {}) as Record<string, string>;
+
+        // Build a flat lookup of all available variable values
+        // Priority: customFields > rawData > lead fields
+        const varLookup: Record<string, string> = {};
+
+        // Add standard lead fields
+        if (lead.first_name) varLookup["first_name"] = lead.first_name;
+        if (lead.first_name) varLookup["firstname"] = lead.first_name;
+        if (lead.last_name) varLookup["last_name"] = lead.last_name;
+        if (lead.last_name) varLookup["lastname"] = lead.last_name;
+        if (lead.company_name) varLookup["company_name"] = lead.company_name;
+        if (lead.company_name) varLookup["companyname"] = lead.company_name;
+        if (lead.company_name) varLookup["company"] = lead.company_name;
+        if (lead.company_domain) varLookup["website"] = lead.company_domain;
+        if (lead.personalization) varLookup["1st line"] = lead.personalization;
+
+        // Add rawData fields (location, website, etc.)
+        for (const [key, value] of Object.entries(rawData)) {
+          if (typeof value === "string" && value && !key.startsWith("custom_") && key !== "custom_fields") {
+            varLookup[key.toLowerCase()] = value;
+          }
+          // Also add custom_ prefixed fields without the prefix
+          if (typeof value === "string" && value && key.startsWith("custom_")) {
+            varLookup[key.replace(/^custom_/i, "").toLowerCase()] = value;
+          }
+        }
+
+        // Add explicit custom fields (highest priority, overwrites above)
+        for (const [key, value] of Object.entries(customFields)) {
+          if (value) {
+            varLookup[key.toLowerCase()] = value;
+          }
+        }
 
         // Fill in the template variables
         let filledSubject = exampleSeq.subject || "";
         let filledBody = stripHtml(exampleSeq.body_html) || exampleSeq.body_text || "";
 
-        // Replace common variable patterns
-        const replacements: [RegExp, string][] = [
-          [/\{\{first_name\}\}/gi, firstName],
-          [/\{\{firstName\}\}/gi, firstName],
-          [/\{\{last_name\}\}/gi, lead.last_name || ""],
-          [/\{\{lastName\}\}/gi, lead.last_name || ""],
-          [/\{\{company_name\}\}/gi, companyName],
-          [/\{\{companyName\}\}/gi, companyName],
-          [/\{\{company\}\}/gi, companyName],
-          [/\{\{1st line\}\}/gi, lead.personalization || ""],
-          [/\{\{website\}\}/gi, lead.company_domain || ""],
-        ];
+        // Replace all {{variable}} patterns using the lookup
+        const replaceVars = (text: string): string => {
+          return text.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
+            const normalized = varName.trim().toLowerCase();
+            return varLookup[normalized] || match; // Keep original if no value found
+          });
+        };
 
-        // Also replace any custom metadata variables
-        if (metadata && typeof metadata === "object") {
-          for (const [key, value] of Object.entries(metadata)) {
-            if (typeof value === "string") {
-              replacements.push([new RegExp(`\\{\\{${key}\\}\\}`, "gi"), value]);
-            }
-          }
-        }
+        filledSubject = replaceVars(filledSubject);
+        filledBody = replaceVars(filledBody);
 
-        for (const [pattern, replacement] of replacements) {
-          filledSubject = filledSubject.replace(pattern, replacement);
-          filledBody = filledBody.replace(pattern, replacement);
-        }
-
+        const displayCompany = lead.company_name || "";
         content += `
-### Example ${i + 1}${companyName ? ` (${companyName})` : ""}
+### Example ${i + 1}${displayCompany ? ` (${displayCompany})` : ""}
 **Subject:** ${filledSubject}
 
 ${filledBody}
@@ -403,15 +430,25 @@ ${filledBody}
     }
   }
 
+  // Extract actual variable names from templates
+  const templateVars = new Set<string>();
+  for (const seq of sequences) {
+    const text = (seq.subject || "") + " " + (stripHtml(seq.body_html) || seq.body_text || "");
+    const matches = text.matchAll(/\{\{([^}]+)\}\}/g);
+    for (const match of matches) {
+      templateVars.add(match[1].trim());
+    }
+  }
+
   // Instruction to ask clarifying questions first
   content += `
 ---
 
 ## Available Personalization Variables
-- {{firstName}} - Lead's first name
-- {{lastName}} - Lead's last name
-- {{companyName}} - Lead's company
-- {{1st line}} - Custom personalization/icebreaker
+${templateVars.size > 0
+    ? Array.from(templateVars).map(v => `- {{${v}}}`).join("\n")
+    : "- {{firstName}} - Lead's first name\n- {{lastName}} - Lead's last name\n- {{companyName}} - Lead's company\n- {{1st line}} - Custom personalization/icebreaker"
+  }
 
 ---
 
