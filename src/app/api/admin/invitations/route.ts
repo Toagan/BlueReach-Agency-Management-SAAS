@@ -92,7 +92,7 @@ export async function POST(request: Request) {
     }
 
     const baseUrl = await getServerUrl();
-    const loginUrl = `${baseUrl}/login`;
+    const loginUrl = `${baseUrl}/login?invite=${token}`;
 
     // Check if user already exists in our system (has a profile)
     // If so, link them directly and mark invitation as accepted
