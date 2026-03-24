@@ -126,14 +126,19 @@ export async function GET(request: NextRequest) {
     // For date-filtered periods, fall back to lead_emails table
     let emailsSentPromise: PromiseLike<number>;
     if (!startIso) {
-      // All time: sum cached_emails_sent from campaigns (this is the accurate count from providers)
+      // All time: sum cached_emails_sent from campaigns, capped to leads count per campaign
+      // Provider APIs count multi-step sequence emails, so we cap to unique leads contacted
       emailsSentPromise = supabase
         .from("campaigns")
-        .select("cached_emails_sent")
+        .select("cached_emails_sent, cached_leads_count")
         .in("id", ownerCampaignIds)
         .then(({ data }) => {
-          return (data || []).reduce((sum: number, c: { cached_emails_sent: number | null }) =>
-            sum + (c.cached_emails_sent || 0), 0);
+          return (data || []).reduce((sum: number, c: { cached_emails_sent: number | null; cached_leads_count: number | null }) => {
+            const sent = c.cached_emails_sent || 0;
+            const leads = c.cached_leads_count || 0;
+            // Cap emails_sent to leads count if leads data is available
+            return sum + (leads > 0 ? Math.min(sent, leads) : sent);
+          }, 0);
         });
     } else {
       // Date-filtered: count from lead_emails (only partially populated, but best we have for date ranges)
