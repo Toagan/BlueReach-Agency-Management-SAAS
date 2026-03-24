@@ -728,6 +728,96 @@ export async function POST(
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 4.5: Backfill variant info on outbound lead_emails using campaign_sequences
+    // Match outbound emails missing variant data to sequence variants by subject/body
+    // ═══════════════════════════════════════════════════════════════════════════
+    try {
+      // Get campaign sequences (variant templates with subjects/bodies)
+      const { data: sequences } = await supabase
+        .from("campaign_sequences")
+        .select("step_number, variant, subject, body_text")
+        .eq("campaign_id", campaignId);
+
+      if (sequences && sequences.length > 0) {
+        // Get outbound emails without variant info
+        const { count: missingVariantCount } = await supabase
+          .from("lead_emails")
+          .select("*", { count: "exact", head: true })
+          .eq("campaign_id", campaignId)
+          .eq("direction", "outbound")
+          .is("sequence_variant_label", null);
+
+        if (missingVariantCount && missingVariantCount > 0) {
+          console.log(`[SyncLeads] Backfilling variant info for ${missingVariantCount} outbound emails using ${sequences.length} sequence templates`);
+
+          let variantsBackfilled = 0;
+
+          // For each sequence variant, update matching outbound emails by subject
+          for (const seq of sequences) {
+            if (!seq.subject) continue;
+
+            // Match outbound emails by subject (case-insensitive partial match)
+            // Use the subject from the sequence template
+            const { count: updated } = await supabase
+              .from("lead_emails")
+              .update({
+                sequence_step: seq.step_number || 1,
+                sequence_variant_label: seq.variant,
+              })
+              .eq("campaign_id", campaignId)
+              .eq("direction", "outbound")
+              .is("sequence_variant_label", null)
+              .ilike("subject", `%${seq.subject.replace(/[%_]/g, "\\$&")}%`)
+              .select("id", { count: "exact", head: true });
+
+            if (updated && updated > 0) {
+              variantsBackfilled += updated;
+            }
+          }
+
+          // For any remaining unmatched outbound emails, try matching by body content
+          if (variantsBackfilled < missingVariantCount) {
+            for (const seq of sequences) {
+              if (!seq.body_text) continue;
+              // Use first 50 chars of body as a fingerprint
+              const bodySnippet = seq.body_text.trim().substring(0, 50).replace(/[%_]/g, "\\$&");
+              if (bodySnippet.length < 10) continue;
+
+              const { count: updated } = await supabase
+                .from("lead_emails")
+                .update({
+                  sequence_step: seq.step_number || 1,
+                  sequence_variant_label: seq.variant,
+                })
+                .eq("campaign_id", campaignId)
+                .eq("direction", "outbound")
+                .is("sequence_variant_label", null)
+                .or(`body_text.ilike.%${bodySnippet}%,body_html.ilike.%${bodySnippet}%`)
+                .select("id", { count: "exact", head: true });
+
+              if (updated && updated > 0) {
+                variantsBackfilled += updated;
+              }
+            }
+          }
+
+          // Default remaining unmatched to step 1
+          const { count: stillMissing } = await supabase
+            .from("lead_emails")
+            .update({ sequence_step: 1 })
+            .eq("campaign_id", campaignId)
+            .eq("direction", "outbound")
+            .is("sequence_step", null)
+            .select("id", { count: "exact", head: true });
+
+          console.log(`[SyncLeads] Variant backfill: ${variantsBackfilled} matched by template, ${stillMissing || 0} defaulted to step 1`);
+        }
+      }
+    } catch (variantBackfillError) {
+      console.error(`[SyncLeads] Error backfilling variant info:`, variantBackfillError);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // STEP 5: Sync positive leads from Smartlead statistics (category-based)
     // The basic leads endpoint doesn't return category, so we fetch from statistics
     // Also sync variant tracking info for which email triggered replies
@@ -875,6 +965,83 @@ export async function POST(
       } catch (statsError) {
         console.error(`[SyncLeads] Error syncing positive leads from statistics:`, statsError);
       }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 5.5: Backfill reply_from_step on replied leads from their outbound lead_emails
+    // Catches leads that Step 5 missed (not in provider statistics)
+    // ═══════════════════════════════════════════════════════════════════════════
+    try {
+      const { data: untrackedReplies } = await supabase
+        .from("leads")
+        .select("id")
+        .eq("campaign_id", campaignId)
+        .is("reply_from_step", null)
+        .or("has_replied.eq.true,is_positive_reply.eq.true");
+
+      if (untrackedReplies && untrackedReplies.length > 0) {
+        console.log(`[SyncLeads] Backfilling reply_from_step for ${untrackedReplies.length} untracked replied leads`);
+        const untrackedIds = untrackedReplies.map(l => l.id);
+        let backfilledFromEmail = 0;
+        let backfilledDefault = 0;
+
+        // Fetch outbound emails with variant data for these leads
+        const { data: outboundEmails } = await supabase
+          .from("lead_emails")
+          .select("lead_id, sequence_step, sequence_variant, sequence_variant_label, sent_at")
+          .eq("campaign_id", campaignId)
+          .eq("direction", "outbound")
+          .in("lead_id", untrackedIds)
+          .not("sequence_step", "is", null)
+          .order("sent_at", { ascending: false });
+
+        // Build map: lead_id -> most recent outbound with variant data
+        const outboundMap = new Map<string, { step: number; variant: number | null; label: string | null }>();
+        for (const e of outboundEmails || []) {
+          if (!outboundMap.has(e.lead_id)) {
+            outboundMap.set(e.lead_id, {
+              step: e.sequence_step,
+              variant: e.sequence_variant,
+              label: e.sequence_variant_label,
+            });
+          }
+        }
+
+        // Update leads in batches
+        const batchSize = 100;
+        for (let i = 0; i < untrackedIds.length; i += batchSize) {
+          const batch = untrackedIds.slice(i, i + batchSize);
+          const withVariant = batch.filter(id => outboundMap.has(id));
+          const withoutVariant = batch.filter(id => !outboundMap.has(id));
+
+          // Update leads with matched variant data
+          for (const id of withVariant) {
+            const info = outboundMap.get(id)!;
+            await supabase
+              .from("leads")
+              .update({
+                reply_from_step: info.step,
+                reply_from_variant: info.variant,
+                reply_from_variant_label: info.label,
+              })
+              .eq("id", id);
+            backfilledFromEmail++;
+          }
+
+          // Default remaining to step 1
+          if (withoutVariant.length > 0) {
+            await supabase
+              .from("leads")
+              .update({ reply_from_step: 1 })
+              .in("id", withoutVariant);
+            backfilledDefault += withoutVariant.length;
+          }
+        }
+
+        console.log(`[SyncLeads] Reply backfill: ${backfilledFromEmail} from outbound emails, ${backfilledDefault} defaulted to step 1`);
+      }
+    } catch (replyBackfillError) {
+      console.error(`[SyncLeads] Error backfilling reply_from_step:`, replyBackfillError);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
