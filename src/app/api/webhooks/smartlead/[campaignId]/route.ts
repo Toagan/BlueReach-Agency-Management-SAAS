@@ -403,8 +403,13 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     // Handle email opens
     if (isEmailOpened && existingLead) {
-      const currentOpenCount = existingLead.email_open_count || 0;
-      updateData.email_open_count = currentOpenCount + 1;
+      // Atomically increment lead's email_open_count (separate from updateData to avoid race conditions)
+      supabase.rpc("increment_lead_counter", {
+        lead_uuid: existingLead.id,
+        counter_name: "email_open_count",
+      }).then(({ error }) => {
+        if (error) console.error("[SmartLead Webhook] Failed to increment lead email_open_count:", error);
+      });
       if (existingLead.status === "contacted" || existingLead.status === "new") {
         updateData.status = "opened";
       }
@@ -418,8 +423,13 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     // Handle link clicks
     if (isLinkClicked && existingLead) {
-      const currentClickCount = existingLead.email_click_count || 0;
-      updateData.email_click_count = currentClickCount + 1;
+      // Atomically increment lead's email_click_count (separate from updateData to avoid race conditions)
+      supabase.rpc("increment_lead_counter", {
+        lead_uuid: existingLead.id,
+        counter_name: "email_click_count",
+      }).then(({ error }) => {
+        if (error) console.error("[SmartLead Webhook] Failed to increment lead email_click_count:", error);
+      });
       if (
         existingLead.status === "contacted" ||
         existingLead.status === "opened" ||

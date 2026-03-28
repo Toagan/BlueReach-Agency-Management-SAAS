@@ -468,15 +468,24 @@ export async function getAnalyticsByClient(
     return [];
   }
 
-  // Fetch analytics for each client
+  // Fetch analytics for all clients in parallel (batched to avoid connection pool exhaustion)
+  const clientList = clients || [];
   const results: ClientAnalyticsSummary[] = [];
+  const BATCH_SIZE = 10;
 
-  for (const client of clients || []) {
-    try {
-      const analytics = await getClientAnalytics(supabase, client.id, dateRange);
-      results.push(analytics);
-    } catch (error) {
-      console.error(`[Analytics] Error fetching analytics for client ${client.id}:`, error);
+  for (let i = 0; i < clientList.length; i += BATCH_SIZE) {
+    const batch = clientList.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.allSettled(
+      batch.map((client) => getClientAnalytics(supabase, client.id, dateRange))
+    );
+
+    for (let j = 0; j < batchResults.length; j++) {
+      const result = batchResults[j];
+      if (result.status === "fulfilled") {
+        results.push(result.value);
+      } else {
+        console.error(`[Analytics] Error fetching analytics for client ${batch[j].id}:`, result.reason);
+      }
     }
   }
 

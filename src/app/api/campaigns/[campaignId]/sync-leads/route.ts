@@ -435,6 +435,24 @@ export async function POST(
 
         console.log(`[SyncLeads] Found ${positiveLeads.length} leads from positive leads endpoint`);
 
+        // Bulk-fetch all campaign leads for O(1) lookups instead of N+1 queries
+        const { data: allCampaignLeads } = await supabase
+          .from("leads")
+          .select("id, email, instantly_lead_id, provider_lead_id, reply_from_step")
+          .eq("campaign_id", campaignId);
+
+        const leadsByInstantlyId = new Map<string, (typeof allCampaignLeads)[0]>();
+        const leadsByEmail = new Map<string, (typeof allCampaignLeads)[0]>();
+        for (const cl of allCampaignLeads || []) {
+          if (cl.instantly_lead_id) {
+            leadsByInstantlyId.set(cl.instantly_lead_id, cl);
+          }
+          if (cl.email) {
+            leadsByEmail.set(cl.email.toLowerCase(), cl);
+          }
+        }
+        console.log(`[SyncLeads] Built lookup maps: ${leadsByInstantlyId.size} by ID, ${leadsByEmail.size} by email`);
+
         for (const lead of positiveLeads) {
           try {
             // Skip leads without valid email
@@ -460,43 +478,24 @@ export async function POST(
               continue;
             }
 
-            // MATCHING STRATEGY: ID-first with email fallback
+            // MATCHING STRATEGY: ID-first with email fallback (using in-memory maps)
             let matchedLeadId: string | null = null;
             let needsIdBackfill = false;
+            let existingReplyFromStep: number | null = null;
 
             // Step 1: Try matching by provider lead ID
-            let existingReplyFromStep: number | null = null;
-            if (providerLeadId) {
-              const { data: idMatch, error: idMatchError } = await supabase
-                .from("leads")
-                .select("id, instantly_lead_id, reply_from_step")
-                .eq("campaign_id", campaignId)
-                .eq("instantly_lead_id", providerLeadId)
-                .maybeSingle();
-
-              if (idMatchError) {
-                console.warn(`[SyncLeads] Error matching by ID for ${emailLower}:`, idMatchError);
-              } else if (idMatch) {
-                matchedLeadId = idMatch.id;
-                existingReplyFromStep = idMatch.reply_from_step;
-              }
+            const idMatch = providerLeadId ? leadsByInstantlyId.get(providerLeadId) : undefined;
+            if (idMatch) {
+              matchedLeadId = idMatch.id;
+              existingReplyFromStep = idMatch.reply_from_step;
             }
 
             // Step 2: Fall back to email matching if no ID match
             if (!matchedLeadId) {
-              const { data: emailMatch, error: emailMatchError } = await supabase
-                .from("leads")
-                .select("id, instantly_lead_id, reply_from_step")
-                .eq("campaign_id", campaignId)
-                .ilike("email", emailLower)
-                .maybeSingle();
-
-              if (emailMatchError) {
-                console.warn(`[SyncLeads] Error matching by email for ${emailLower}:`, emailMatchError);
-              } else if (emailMatch) {
+              const emailMatch = leadsByEmail.get(emailLower);
+              if (emailMatch) {
                 matchedLeadId = emailMatch.id;
                 existingReplyFromStep = emailMatch.reply_from_step;
-                // Check if we need to backfill the ID
                 if (providerLeadId && !emailMatch.instantly_lead_id) {
                   needsIdBackfill = true;
                 }

@@ -428,9 +428,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     if (isEmailOpened && existingLead) {
-      // Increment lead's email_open_count
-      const currentOpenCount = existingLead.email_open_count || 0;
-      updateData.email_open_count = currentOpenCount + 1;
+      // Atomically increment lead's email_open_count (separate from updateData to avoid race conditions)
+      supabase.rpc("increment_lead_counter", {
+        lead_uuid: existingLead.id,
+        counter_name: "email_open_count",
+      }).then(({ error }) => {
+        if (error) console.error("[Webhook] Failed to increment lead email_open_count:", error);
+      });
       // Update status to "opened" if still in contacted state
       if (existingLead.status === "contacted" || existingLead.status === "new") {
         updateData.status = "opened";
@@ -444,9 +448,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     if (isLinkClicked && existingLead) {
-      // Increment lead's email_click_count
-      const currentClickCount = existingLead.email_click_count || 0;
-      updateData.email_click_count = currentClickCount + 1;
+      // Atomically increment lead's email_click_count (separate from updateData to avoid race conditions)
+      supabase.rpc("increment_lead_counter", {
+        lead_uuid: existingLead.id,
+        counter_name: "email_click_count",
+      }).then(({ error }) => {
+        if (error) console.error("[Webhook] Failed to increment lead email_click_count:", error);
+      });
       // Update status to "clicked" if not already replied
       if (existingLead.status === "contacted" || existingLead.status === "opened" || existingLead.status === "new") {
         updateData.status = "clicked";
