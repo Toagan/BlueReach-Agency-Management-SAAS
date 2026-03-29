@@ -71,11 +71,16 @@ BlueReach is a multi-tenant agency management platform designed for cold email o
 
 #### Campaign Details (`/admin/clients/[clientId]/campaigns/[campaignId]`)
 - Detailed campaign statistics with variant-level analytics
+- A/B test performance breakdown per step and variant (sent, replies, positive replies, rates)
+- Variant reply attribution: inferred from outbound email data when webhooks don't provide it
 - List of positive replies with contact info
+- Paginated leads table (50 per page with previous/next navigation)
 - Email thread viewer per lead
-- Campaign sequence viewer (multi-step, A/B/C variants)
-- Campaign progress visualization
+- Campaign sequence viewer (multi-step, A/B/C+ variants with copy review workflow)
+- Campaign progress visualization (leads contacted / total)
+- AI Skill Generator: exports campaign data, performance stats, and filled-in email examples as a markdown prompt for AI-assisted A/B test copy optimization
 - Campaign diagnostics
+- Export leads to CSV
 
 #### Lead Management (`/admin/leads`)
 - View all leads across all clients (132,000+ supported)
@@ -147,10 +152,21 @@ BlueReach is a multi-tenant agency management platform designed for cold email o
 - "Manage Billing" button → Stripe customer portal
 - Trial and past-due banners in admin layout
 
+#### Client Settings (`/admin/clients/[clientId]/settings`)
+- Client logo upload and branding
+- Client Intelligence: product/service description, ICP, ACV/TCV, verticals, TAM, daily send volume
+- Team Access: invite client users by email with role assignment, manage pending invitations
+- Positive Reply Notifications: scoped to workspace admin + client team members only (not all platform users)
+- Stats Reports: automated periodic performance reports to notification recipients
+- Slack Notifications: webhook integration for positive replies and stats reports
+- CRM Integration: provider selector (HubSpot active; Salesforce, Close, Pipedrive coming soon)
+  - HubSpot: private app token, sync contacts/deals, pipeline/stage selection, contact property mapping, backfill, test sync
+- Automated Positive Reply Management (Coming Soon): AI auto-responder with custom knowledge base, meeting booking link, and contextual follow-up
+
 ### Client Portal (`/admin/clients/[clientId]` with client role)
 
 - OAuth login via Google or Microsoft
-- Context-aware login page (recognizes invitation tokens)
+- Context-aware login page (recognizes invitation tokens, shows tailored messaging)
 - View all campaigns assigned to their account
 - Lead statistics: contacted, replied, positive replies, meetings, deals
 - Lead workflow management (respond, schedule meetings, close deals)
@@ -161,13 +177,13 @@ BlueReach is a multi-tenant agency management platform designed for cold email o
 
 - **OAuth**: Google and Microsoft sign-in via Supabase Auth
 - **Role-Based Access**: Platform Admin → Admin → Client (Owner/Manager/Member/Viewer)
-- **Client Invitations**: Admin invites client users by email; auto-linked on first login
+- **Client Invitations**: Admin invites client users by email with invite token in URL; auto-linked on first login via `/auth/accept-invite`
 - **Middleware Protection**: All `/admin/*` routes protected; client users restricted to their linked client pages
 - **Context-Aware Login**: Agency owners see social proof + free trial CTA; invited clients see a tailored "Your dashboard is ready" view
 
 ### Marketing Pages
 
-- **Landing Page** (`/`): Hero with CSS dashboard mockup, stats bar, problem/solution cards, "See it in Action" showcase, 7-feature grid, 6 testimonials with professional headshot photos, and CTA
+- **Landing Page** (`/`): Hero with CSS dashboard mockup, stats bar, problem/solution cards, "See it in Action" showcase, 7-feature grid, testimonials with gradient initial avatars, and CTA
 - **Features Page** (`/features`): Detailed breakdown of client portals, analytics, and lead management with mock UI visuals
 - **Pricing Page** (`/pricing`): 3-tier plan comparison (Starter $49, Growth $99, Agency $249), feature comparison table, FAQ section
 - **Plan Selection** (`/choose-plan`): Post-signup plan selection with 14-day free trial on all plans
@@ -313,7 +329,7 @@ Complete data isolation between agency owners
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20+
 - npm or yarn
 - Supabase account (with Google and/or Microsoft OAuth configured)
 - Stripe account (for billing — optional in development)
@@ -545,7 +561,10 @@ All leads with denormalized data for preservation.
 | `email_open_count` | integer | Number of email opens |
 | `email_click_count` | integer | Number of link clicks |
 | `email_reply_count` | integer | Number of replies |
-| `metadata` | jsonb | Additional provider-specific data |
+| `reply_from_step` | integer | Which sequence step triggered the reply |
+| `reply_from_variant` | integer | Provider variant ID that triggered the reply |
+| `reply_from_variant_label` | text | Variant label (A, B, C, etc.) that triggered the reply |
+| `metadata` | jsonb | Additional provider-specific data (rawData, customFields) |
 | `created_at` | timestamptz | Creation timestamp |
 | `updated_at` | timestamptz | Last update timestamp |
 
@@ -579,6 +598,8 @@ Email thread for each lead (outbound and inbound messages).
 | `body_text` | text | Plain text body |
 | `body_html` | text | HTML body |
 | `sequence_step` | integer | Which sequence step this is |
+| `sequence_variant` | integer | Provider variant ID |
+| `sequence_variant_label` | text | Variant label (A, B, C, etc.) |
 | `sent_at` | timestamptz | When the email was sent |
 | `opened_at` | timestamptz | When the email was opened |
 | `replied_at` | timestamptz | When a reply was received |
@@ -761,6 +782,10 @@ Run these in order in the Supabase SQL Editor:
 | `supabase/migrations/20260304_add_stripe_billing.sql` | Stripe subscriptions table, stripe_customer_id on profiles |
 | `supabase/migrations/20260304_add_multi_tenancy.sql` | owner_id on clients/settings, is_platform_admin on profiles |
 | `supabase/migrations/20260305_add_owner_scoping.sql` | owner_id on subscriptions, lead_sources, email_accounts |
+| `supabase/migrations/20260305_fix_rls_recursion.sql` | Fix RLS policy recursion issues |
+| `supabase/migrations/20260306_fix_clients_rls_leak.sql` | Fix clients table RLS data leak |
+| `supabase/migrations/20260307_copy_reviews.sql` | Copy review workflow tables |
+| `supabase/migrations/20260328_add_atomic_lead_counter.sql` | `increment_lead_counter` RPC for atomic open/click/reply counting |
 
 ---
 
@@ -894,8 +919,16 @@ GET    /api/clients/[clientId]/tool-links               # Get external tool link
 
 #### HubSpot Integration (per client)
 ```
-POST   /api/clients/[clientId]/hubspot                  # Sync leads to HubSpot
-POST   /api/clients/[clientId]/test-hubspot             # Test HubSpot connection
+GET    /api/clients/[clientId]/hubspot-settings          # Get HubSpot settings (token, pipelines, sync options)
+POST   /api/clients/[clientId]/hubspot-settings          # Update HubSpot settings, connect/disconnect, send setup email
+POST   /api/clients/[clientId]/hubspot-backfill          # Backfill historical positive replies to HubSpot
+POST   /api/clients/[clientId]/test-hubspot              # Test HubSpot connection with sample contact
+```
+
+#### Slack Integration (per client)
+```
+GET    /api/clients/[clientId]/slack-settings             # Get Slack webhook URL
+POST   /api/clients/[clientId]/slack-settings             # Update Slack webhook URL
 ```
 
 ### Lead Workflow APIs
@@ -918,14 +951,14 @@ PATCH  /api/leads/[leadId]/workflow    # Update lead workflow status
 
 ```
 GET    /api/campaigns/[id]/details            # Campaign details with stats
-GET    /api/campaigns/[id]/leads              # Campaign leads
+GET    /api/campaigns/[id]/leads?page=1&limit=50  # Campaign leads (paginated)
 GET    /api/campaigns/[id]/variant-analytics  # A/B/C variant performance
 GET    /api/campaigns/[id]/export-leads       # Export campaign leads
 GET    /api/campaigns/[id]/diagnose           # Campaign diagnostics
 POST   /api/campaigns/[id]/sync-leads         # Sync leads from provider
 POST   /api/campaigns/[id]/sync-emails        # Sync email threads
 POST   /api/campaigns/[id]/recalculate        # Recalculate campaign stats
-POST   /api/campaigns/[id]/generate-skill     # Generate campaign skill report
+GET    /api/campaigns/[id]/generate-skill     # Download AI skill file (.md) with campaign data, A/B performance, and filled-in email examples
 DELETE /api/campaigns/[id]                    # Delete campaign
 ```
 
@@ -1002,10 +1035,13 @@ POST   /api/admin/infrastructure/history       # Create daily snapshot
 **Sync Process:**
 1. Fetch campaigns from Instantly API
 2. Create/update local campaign records in Supabase
-3. Sync leads for each campaign
-4. Sync email threads for leads
-5. Sync analytics (sent, opened, replied counts)
-6. Webhooks handle real-time updates going forward
+3. Sync leads for each campaign (bulk-fetched into memory maps for O(1) matching)
+4. Sync email threads for leads with replies
+5. Backfill variant info on outbound emails by matching subjects against campaign sequence templates
+6. Sync positive leads from provider statistics with variant tracking
+7. Backfill `reply_from_step` on replied leads from their outbound email data
+8. Update cached analytics counts from local DB state
+9. Webhooks handle real-time updates going forward
 
 ### Smartlead
 
@@ -1086,10 +1122,10 @@ Configure in Instantly to send events to this URL for each campaign.
 | `lead_interested` | Set `is_positive_reply = true`, send notification email |
 | `lead_not_interested` | Set `is_positive_reply = false` |
 | `email_sent` | Increment `emails_sent` counter |
-| `email_opened` | Increment open count |
+| `email_opened` | Atomic increment of lead open count via `increment_lead_counter` RPC |
 | `email_replied` | Update `has_replied`, `replied_at` |
 | `lead_created` | Create new lead record |
-| `link_clicked` | Increment click count |
+| `link_clicked` | Atomic increment of lead click count via `increment_lead_counter` RPC |
 | `meeting_booked` | Update lead status to `booked` |
 | `lead_won` | Update lead status to `won` |
 | `lead_lost` | Update lead status to `lost` |
@@ -1664,11 +1700,36 @@ src/
 ├── supabase-analytics.sql      # Migration 5: Analytics views + functions
 ├── supabase-add-icp.sql        # Migration 6: ICP fields
 └── supabase/migrations/        # Numbered migrations
+    ├── 20260221_add_webhook_idempotency_and_sync_lock.sql
     ├── 20260303_add_reply_tokens.sql
     ├── 20260304_add_stripe_billing.sql
     ├── 20260304_add_multi_tenancy.sql
-    └── 20260305_add_owner_scoping.sql
+    ├── 20260305_add_owner_scoping.sql
+    ├── 20260305_fix_rls_recursion.sql
+    ├── 20260306_fix_clients_rls_leak.sql
+    ├── 20260307_copy_reviews.sql
+    └── 20260328_add_atomic_lead_counter.sql
 ```
+
+---
+
+## Performance Optimizations
+
+### Database Query Efficiency
+- **Bulk lead matching**: Sync operations load all campaign leads into in-memory Maps for O(1) lookups, eliminating N+1 query patterns
+- **Parallel analytics**: Client analytics are fetched in parallel batches of 10 using `Promise.allSettled`, reducing admin dashboard load time by 3-5x
+- **Atomic counters**: Lead open/click/reply counts use PostgreSQL `increment_lead_counter` RPC function to prevent lost events under concurrent webhooks
+- **Campaign counter capping**: `emails_sent` is capped to `leads_count` per campaign to prevent multi-step sequence inflation
+
+### Data Accuracy
+- **Variant tracking backfill**: During sync, outbound emails are matched to sequence variants by subject/body, and replied leads without variant data are inferred from their outbound email history
+- **Idempotent webhooks**: Webhook handlers use `webhook_logs` with idempotency keys and unique constraint handling to prevent duplicate processing
+- **Email thread cleanup**: VML/CSS artifacts from Outlook emails are stripped from both HTML and plain text bodies before building reply compose URLs
+
+### Caching Strategy
+- **Campaign analytics**: Cached in `cached_emails_sent`, `cached_reply_count`, etc. on the campaigns table, refreshed on sync and webhook events
+- **Variant analytics**: Cached for 24 hours in `cached_variant_stats` column, with force-refresh option
+- **DNS health**: Cached in `domain_health` table with `last_checked_at` timestamps
 
 ---
 
